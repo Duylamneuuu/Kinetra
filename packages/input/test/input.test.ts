@@ -29,3 +29,26 @@ test("bindings can be remapped without changing gameplay action IDs",()=>{
   assert.equal(router.value("jump",{keys:new Set(["Space"]),gamepadButtons:[],gamepadAxes:[]}),0);
   assert.equal(router.value("jump",{keys:new Set(["KeyJ"]),gamepadButtons:[],gamepadAxes:[]}),1);
 });
+
+test("semantic action injection and step lifecycle",()=>{
+  const router=new InputRouter();
+  assert.equal(router.hasAction("player.moveRight"),true);
+  assert.equal(router.isActionPressed("player.moveRight"),false);
+
+  router.setSemanticAction("player.moveRight","press",1);
+  assert.equal(router.isActionPressed("player.moveRight"),true);
+  assert.equal(router.getActionValue("player.moveRight"),1);
+
+  router.endStep();
+  assert.equal(router.isActionPressed("player.moveRight"),false);
+  assert.equal(router.getActionValue("player.moveRight"),0);
+
+  router.setSemanticAction("player.jump","hold",1);
+  assert.equal(router.isActionPressed("player.jump"),true);
+  router.endStep();
+  assert.equal(router.isActionPressed("player.jump"),true);
+
+  router.setSemanticAction("player.jump","release");
+  assert.equal(router.isActionPressed("player.jump"),false);
+});
+

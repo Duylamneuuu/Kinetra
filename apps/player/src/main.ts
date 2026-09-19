@@ -55,8 +55,15 @@ async function handleRuntimeCommand(request: {
       const assets = isRecord(params.assets)
         ? (params.assets as Record<string, string>)
         : undefined;
+      const stepped =
+        typeof params.stepped === "boolean"
+          ? params.stepped
+          : params.mode === "realtime"
+            ? false
+            : true;
       const result = await runtime.start(project, sceneId, projectRevision, {
         ...(assets !== undefined ? { assets } : {}),
+        stepped,
       });
       statusElement.textContent =
         `agent runtime · scene ${sceneId} · revision ${projectRevision}`;
@@ -149,7 +156,7 @@ async function handleRuntimeCommand(request: {
     }
 
     case "runtime.stop":
-      runtime.stop();
+      await runtime.stop();
       statusElement.textContent = "agent runtime · stopped";
       return { stopped: true };
 

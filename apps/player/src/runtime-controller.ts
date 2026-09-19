@@ -8,6 +8,18 @@ import {
 } from "@kinetra/physics-rapier";
 import { RecastNavMesh } from "@kinetra/navigation-recast";
 import { ThreeSceneRuntime, type AssetResolver } from "@kinetra/renderer-three";
+import {
+  ScriptHost,
+  ScriptRegistry,
+  PlayerControllerScript,
+  type GameScript,
+  type GameScriptContext,
+  type ScriptLifecycleState,
+} from "@kinetra/core";
+import {
+  InputRouter,
+  DEFAULT_PLAYER_INPUT_MAP,
+} from "@kinetra/input";
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
@@ -53,6 +65,14 @@ export interface PlayerRuntimeModelState {
   error?: string;
 }
 
+export interface PlayerRuntimeGameplayState {
+  scriptId: string;
+  lifecycleState: ScriptLifecycleState;
+  updateCount: number;
+  state?: Record<string, unknown>;
+  error?: string;
+}
+
 export interface PlayerRuntimeEntityState {
   entityId: string;
   name: string;
@@ -62,6 +82,7 @@ export interface PlayerRuntimeEntityState {
   rotation: [number, number, number];
   scale: [number, number, number];
   model?: PlayerRuntimeModelState;
+  gameplay?: PlayerRuntimeGameplayState;
 }
 
 export interface PlayerRuntimeNavigationState {
@@ -121,6 +142,11 @@ export class PlayerRuntimeController {
   #navigationState: PlayerRuntimeNavigationState = { hasNavMesh: false };
   #assetResolver: AssetResolver;
   #assetRegistry = new Map<string, Uint8Array>();
+  #scripts: ScriptHost = new ScriptHost();
+  #scriptRegistry: ScriptRegistry = new ScriptRegistry();
+  #inputRouter: InputRouter = new InputRouter(DEFAULT_PLAYER_INPUT_MAP);
+  #unresolvedScripts = new Map<string, { scriptId: string; error: string }>();
+  #stepped = false;
   #camera: THREE.Camera;
   #projectRevision: number | undefined;
   #logs: PlayerRuntimeLog[] = [];
@@ -134,6 +160,8 @@ export class PlayerRuntimeController {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+    this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
+
     this.#assetResolver = {
       resolve: (assetId: string) => {
         return this.#assetRegistry.get(assetId);
@@ -143,6 +171,13 @@ export class PlayerRuntimeController {
     this.#camera = this.#createFallbackCamera();
     window.addEventListener("resize", () => this.resize());
     this.resize();
+  }
+
+  registerScript(
+    scriptId: string,
+    factory: (context: GameScriptContext) => GameScript,
+  ): void {
+    this.#scriptRegistry.register(scriptId, factory);
   }
 
   registerAsset(assetId: string, data: Uint8Array | string): void {
@@ -158,10 +193,11 @@ export class PlayerRuntimeController {
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
-    options?: { assets?: Record<string, string> },
+    options?: { assets?: Record<string, string>; stepped?: boolean },
   ): Promise<PlayerRuntimeQueryResult> {
     assertValidProject(project);
-    this.stop();
+    await this.stop();
+    this.#stepped = options?.stepped ?? false;
 
     if (options?.assets) {
       for (const [assetId, base64] of Object.entries(options.assets)) {
@@ -204,6 +240,76 @@ export class PlayerRuntimeController {
       console.error("Physics initialization error:", error);
     }
 
+    // Initialize scripts for entities with Script component
+    for (const entity of scene.entities) {
+      const scriptComp =
+        typeof entity.components.Script === "object" && entity.components.Script !== null
+          ? (entity.components.Script as Record<string, unknown>)
+          : undefined;
+
+      if (scriptComp && typeof scriptComp.scriptId === "string") {
+        const scriptId = scriptComp.scriptId;
+        const factory = this.#scriptRegistry.resolve(scriptId);
+        if (!factory) {
+          const error = `Script "${scriptId}" could not be resolved`;
+          this.#unresolvedScripts.set(entity.id, { scriptId, error });
+          this.#log("error", "script.resolveFailed", {
+            entityId: entity.id,
+            scriptId,
+            error,
+          });
+        } else {
+          const entityId = entity.id;
+          const script = factory({
+            entityId,
+            sceneId,
+          });
+          this.#scripts.register({
+            id: entityId,
+            scriptId,
+            context: {
+              entityId,
+              sceneId,
+              input: {
+                getAction: (actionId: string) => this.#inputRouter.getActionValue(actionId),
+                isPressed: (actionId: string) => this.#inputRouter.isActionPressed(actionId),
+              },
+              transform: {
+                getPosition: () => {
+                  const obj = this.#runtime?.getObject(entityId);
+                  return obj ? [obj.position.x, obj.position.y, obj.position.z] : [0, 0, 0];
+                },
+                setPosition: (pos: [number, number, number]) => {
+                  const obj = this.#runtime?.getObject(entityId);
+                  if (obj) {
+                    obj.position.set(pos[0], pos[1], pos[2]);
+                  }
+                },
+                translate: (delta: [number, number, number]) => {
+                  const obj = this.#runtime?.getObject(entityId);
+                  if (obj) {
+                    obj.position.x += delta[0];
+                    obj.position.y += delta[1];
+                    obj.position.z += delta[2];
+                  }
+                },
+              },
+              log: (level, category, data) => {
+                this.#log(level, category, data);
+              },
+            },
+            script,
+          });
+        }
+      }
+    }
+
+    try {
+      await this.#scripts.startAll();
+    } catch (error) {
+      console.error("Script initialization error:", error);
+    }
+
     this.#camera =
       [...this.#runtime.objects().values()].find(
         (object): object is THREE.PerspectiveCamera =>
@@ -217,7 +323,12 @@ export class PlayerRuntimeController {
     return this.query();
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
+    await this.#scripts.destroyAll();
+    this.#scripts = new ScriptHost();
+    this.#unresolvedScripts.clear();
+    this.#inputRouter.clearSemanticActions();
+
     if (this.#physics) {
       this.#physics.dispose();
       this.#physics = undefined;
@@ -435,6 +546,26 @@ export class PlayerRuntimeController {
           : undefined;
 
       const modelMeta = this.#runtime.getModelMetadata(entityId);
+      const executionState = this.#scripts.getExecutionState(entityId);
+      const unresolved = this.#unresolvedScripts.get(entityId);
+
+      let gameplay: PlayerRuntimeGameplayState | undefined;
+      if (executionState) {
+        gameplay = {
+          scriptId: executionState.scriptId ?? "unknown",
+          lifecycleState: executionState.lifecycleState,
+          updateCount: executionState.updateCount,
+          ...(executionState.state !== undefined ? { state: executionState.state } : {}),
+          ...(executionState.error !== undefined ? { error: executionState.error } : {}),
+        };
+      } else if (unresolved) {
+        gameplay = {
+          scriptId: unresolved.scriptId,
+          lifecycleState: "error",
+          updateCount: 0,
+          error: unresolved.error,
+        };
+      }
 
       entities.push({
         entityId,
@@ -458,6 +589,7 @@ export class PlayerRuntimeController {
               },
             }
           : {}),
+        ...(gameplay ? { gameplay } : {}),
       });
     }
 
@@ -479,17 +611,20 @@ export class PlayerRuntimeController {
       throw new Error("Runtime is not running");
     }
 
+    const rawValue = event.value;
+    const magnitude =
+      typeof rawValue === "number"
+        ? rawValue
+        : Array.isArray(rawValue) && typeof rawValue[0] === "number"
+          ? rawValue[0]
+          : 1;
+
+    this.#inputRouter.setSemanticAction(event.action, event.phase, magnitude);
+
     let displacementActual: number | undefined;
 
     if (this.#physics) {
       const characterIds = this.#physics.characterIds();
-      const rawValue = event.value;
-      const magnitude =
-        typeof rawValue === "number"
-          ? rawValue
-          : Array.isArray(rawValue) && typeof rawValue[0] === "number"
-            ? rawValue[0]
-            : 1;
 
       let desired = { x: 0, y: 0, z: 0 };
       if (
@@ -540,14 +675,17 @@ export class PlayerRuntimeController {
   }
 
   step(steps = 1, fixedDeltaSeconds = 1 / 60): void {
-    if (this.#physics) {
-      for (let i = 0; i < steps; i++) {
+    this.#stepped = true;
+    for (let s = 0; s < steps; s++) {
+      this.#scripts.update(fixedDeltaSeconds);
+      if (this.#physics) {
         this.#physics.step(fixedDeltaSeconds);
+        this.#syncTransformsFromPhysics();
       }
-      this.#syncTransformsFromPhysics();
-    }
-    if (this.#runtime) {
-      this.#runtime.updateAnimation(steps * fixedDeltaSeconds);
+      if (this.#runtime) {
+        this.#runtime.updateAnimation(fixedDeltaSeconds);
+      }
+      this.#inputRouter.endStep();
     }
     this.renderOnce();
   }
@@ -580,12 +718,16 @@ export class PlayerRuntimeController {
   }
 
   frame(deltaSeconds = 1 / 60): void {
-    if (this.#physics) {
-      this.#physics.advance(deltaSeconds);
-      this.#syncTransformsFromPhysics();
-    }
-    if (this.#runtime) {
-      this.#runtime.updateAnimation(deltaSeconds);
+    if (!this.#stepped) {
+      this.#scripts.update(deltaSeconds);
+      if (this.#physics) {
+        this.#physics.advance(deltaSeconds);
+        this.#syncTransformsFromPhysics();
+      }
+      if (this.#runtime) {
+        this.#runtime.updateAnimation(deltaSeconds);
+      }
+      this.#inputRouter.endStep();
     }
     this.renderOnce();
   }
