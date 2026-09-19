@@ -156,3 +156,79 @@ test("transaction failures are atomic and undo restores prior state", () => {
   assert.equal(bus.revision, 2);
   assert.equal(bus.queryEntities().total, 0);
 });
+
+test("rejects malformed untrusted command JSON before mutation", () => {
+  const bus = new CommandBus(project());
+
+  assert.throws(
+    () =>
+      bus.executeUnknown({
+        requestId: "malformed",
+        command: "entity.create",
+        payload: {
+          sceneId,
+          entity: {
+            id: rootId,
+            name: "Root",
+            components: { Transform: { position: [Number.NaN, 0, 0] } },
+          },
+        },
+      }),
+    (error: unknown) => error instanceof CommandError && error.code === "INVALID_COMMAND",
+  );
+
+  assert.equal(bus.revision, 0);
+  assert.equal(bus.queryEntities().total, 0);
+});
+
+test("reparent and cascade delete obey hierarchy rules", () => {
+  const bus = new CommandBus(project());
+
+  bus.executeTransaction([
+    {
+      requestId: "root",
+      command: "entity.create",
+      payload: { sceneId, entity: { id: rootId, name: "Root", components: {} } },
+    },
+    {
+      requestId: "child",
+      command: "entity.create",
+      payload: { sceneId, entity: { id: childId, name: "Child", components: {} } },
+    },
+  ]);
+
+  bus.execute({
+    requestId: "reparent",
+    command: "entity.reparent",
+    expectedProjectRevision: 1,
+    payload: { entityId: childId, parentId: rootId },
+  });
+
+  assert.equal(
+    bus.queryEntities({ ids: [childId] }).items[0]?.entity.parentId,
+    rootId,
+  );
+
+  assert.throws(
+    () =>
+      bus.execute({
+        requestId: "delete-parent",
+        command: "entity.delete",
+        expectedProjectRevision: 2,
+        payload: { entityId: rootId },
+      }),
+    (error: unknown) => error instanceof CommandError && error.code === "CHILDREN_EXIST",
+  );
+
+  assert.equal(bus.revision, 2);
+
+  const deleted = bus.execute({
+    requestId: "delete-subtree",
+    command: "entity.delete",
+    expectedProjectRevision: 2,
+    payload: { entityId: rootId, cascade: true },
+  });
+
+  assert.equal(deleted.changes.filter((change) => change.kind === "deleted").length, 2);
+  assert.equal(bus.queryEntities().total, 0);
+});

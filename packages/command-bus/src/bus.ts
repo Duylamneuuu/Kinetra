@@ -9,6 +9,7 @@ import {
 } from "@kinetra/project-model";
 
 import { CommandError } from "./errors.js";
+import { parseEngineCommand } from "./validation.js";
 import type {
   ChangeRecord,
   CommandBusSnapshot,
@@ -249,6 +250,10 @@ export class CommandBus {
       revision: this.#revision,
       project: cloneProject(this.#project),
     };
+  }
+
+  executeUnknown(input: unknown): CommandResult {
+    return this.execute(parseEngineCommand(input));
   }
 
   execute(command: EngineCommand): CommandResult {

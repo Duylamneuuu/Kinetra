@@ -13,7 +13,8 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "check": "pnpm check:foundation && pnpm build && pnpm typecheck && pnpm test"
+    "check": "pnpm check:foundation && pnpm check:licenses && pnpm build && pnpm typecheck && pnpm test",
+    "check:licenses": "node scripts/check-licenses.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
