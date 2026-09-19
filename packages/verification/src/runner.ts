@@ -1,0 +1,147 @@
+import { createHash } from "node:crypto";
+import type {
+  AcceptanceManifest,
+  AcceptanceReport,
+  AcceptanceStep,
+  RuntimeLog,
+  RuntimeProbe,
+  StepResult,
+} from "./types.js";
+
+function getPath(root:unknown,path:string):unknown{
+  if(path.trim()==="") return root;
+  let value:unknown=root;
+  for(const segment of path.split(".")){
+    if(typeof value!=="object"||value===null){
+      throw new Error(`Cannot read "${path}": "${segment}" traverses non-object data`);
+    }
+    value=(value as Record<string,unknown>)[segment];
+  }
+  return value;
+}
+
+function stableEqual(a:unknown,b:unknown):boolean{
+  return JSON.stringify(a)===JSON.stringify(b);
+}
+
+function severity(level:RuntimeLog["level"]):number{
+  return{debug:0,info:1,warning:2,error:3}[level];
+}
+
+async function executeStep(
+  probe:RuntimeProbe,
+  step:AcceptanceStep,
+  seed:number,
+):Promise<string|undefined>{
+  switch(step.type){
+    case "runtime.start":
+      await probe.start(step.sceneId,seed);
+      return;
+    case "runtime.stop":
+      await probe.stop();
+      return;
+    case "input":
+      await probe.input({
+        action:step.action,
+        phase:step.phase,
+        ...(step.value!==undefined?{value:step.value}:{}),
+        ...(step.durationMs!==undefined?{durationMs:step.durationMs}:{}),
+      });
+      return;
+    case "wait":
+      if(step.milliseconds<0) throw new Error("wait milliseconds must be >= 0");
+      await probe.wait(step.milliseconds);
+      return;
+    case "assert.equal":{
+      const snapshot=await probe.snapshot();
+      const actual=getPath(snapshot,step.path);
+      if(!stableEqual(actual,step.expected)){
+        throw new Error(
+          `Expected ${step.path} = ${JSON.stringify(step.expected)}, got ${JSON.stringify(actual)}`,
+        );
+      }
+      return;
+    }
+    case "assert.near":{
+      const actual=getPath(await probe.snapshot(),step.path);
+      if(typeof actual!=="number"){
+        throw new Error(`Expected numeric value at ${step.path}`);
+      }
+      if(Math.abs(actual-step.expected)>step.tolerance){
+        throw new Error(
+          `Expected ${step.path} near ${step.expected} ± ${step.tolerance}, got ${actual}`,
+        );
+      }
+      return;
+    }
+    case "assert.logAbsent":{
+      const minimum=severity(step.minimumLevel);
+      const offending=(await probe.logs()).find(log=>
+        severity(log.level)>=minimum &&
+        (step.messageIncludes===undefined||log.message.includes(step.messageIncludes))
+      );
+      if(offending){
+        throw new Error(`Unexpected ${offending.level} log: ${offending.message}`);
+      }
+      return;
+    }
+    case "assert.metricMax":{
+      const value=(await probe.metrics())[step.metric];
+      if(value===undefined) throw new Error(`Metric "${step.metric}" is unavailable`);
+      if(value>step.max) throw new Error(`Metric "${step.metric}" = ${value} exceeds max ${step.max}`);
+      return;
+    }
+    case "assert.metricMin":{
+      const value=(await probe.metrics())[step.metric];
+      if(value===undefined) throw new Error(`Metric "${step.metric}" is unavailable`);
+      if(value<step.min) throw new Error(`Metric "${step.metric}" = ${value} is below min ${step.min}`);
+      return;
+    }
+    case "assert.screenshotSha256":{
+      const actual=createHash("sha256").update(await probe.captureFrame()).digest("hex");
+      if(actual!==step.sha256){
+        throw new Error(`Screenshot hash mismatch: expected ${step.sha256}, got ${actual}`);
+      }
+      return;
+    }
+  }
+}
+
+export class AcceptanceRunner {
+  constructor(private readonly probe:RuntimeProbe){}
+
+  async run(manifest:AcceptanceManifest):Promise<AcceptanceReport>{
+    if(manifest.schemaVersion!==1) throw new Error("Unsupported acceptance manifest schema");
+    const started=new Date();
+    const steps:StepResult[]=[];
+
+    for(let index=0;index<manifest.steps.length;index++){
+      const step=manifest.steps[index]!;
+      const before=performance.now();
+      try{
+        await executeStep(this.probe,step,manifest.seed);
+        steps.push({
+          index,type:step.type,passed:true,
+          durationMs:performance.now()-before,
+        });
+      }catch(error){
+        steps.push({
+          index,type:step.type,passed:false,
+          durationMs:performance.now()-before,
+          message:error instanceof Error?error.message:String(error),
+        });
+        break;
+      }
+    }
+
+    const finished=new Date();
+    return{
+      suite:manifest.suite,
+      target:manifest.target,
+      passed:steps.length===manifest.steps.length&&steps.every(step=>step.passed),
+      startedAt:started.toISOString(),
+      finishedAt:finished.toISOString(),
+      steps,
+    };
+  }
+}
