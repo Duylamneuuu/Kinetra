@@ -1,3 +1,5 @@
 # @kinetra/asset-pipeline
 
-Asset IDs, recipes, validation, hashes/cache, thumbnails, dependency tracking and glTF-Transform optimization.
+Deterministic asset identity, import recipes, hashes/cache keys, dependency invalidation and structured validation.
+
+This package intentionally does **not** require Blender to run its unit tests. Blender execution is isolated behind `@kinetra/blender-bridge`; CI can verify the deterministic pipeline core before a DCC environment is attached.
