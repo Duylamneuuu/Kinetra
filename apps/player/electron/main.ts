@@ -7,7 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const smokeTest = process.argv.includes("--smoke-test");
-const runtimeBridgeMode = process.argv.includes("--runtime-bridge-stdio");
+const runtimeBridgeMode =
+  process.env.KINETRA_RUNTIME_BRIDGE_STDIO === "1" ||
+  process.argv.includes("--runtime-bridge-stdio");
 
 interface BridgeRequest {
   id: string;
@@ -311,5 +313,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  app.quit();
+  if (!runtimeBridgeMode) {
+    app.quit();
+  }
 });
