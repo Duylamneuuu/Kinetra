@@ -1,3 +1,6 @@
+import {
+  parseProject,
+} from "@kinetra/project-model";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -11,15 +14,19 @@ async function boot(): Promise<void> {
   }
 
   if (!window.kinetraEditor) {
-    throw new Error("Kinetra editor preload bridge is unavailable");
+    throw new Error(
+      "Kinetra editor preload bridge is unavailable",
+    );
   }
 
-  const loaded = await window.kinetraEditor.loadProject();
+  const loaded =
+    await window.kinetraEditor.loadProjectText();
+  const project = parseProject(loaded.text);
 
   createRoot(root).render(
     <StrictMode>
       <App
-        project={loaded.project}
+        project={project}
         projectPath={loaded.path}
         writable={loaded.writable}
       />
