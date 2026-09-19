@@ -88,6 +88,9 @@ test(
   async () => {
     const host = new ElectronRuntimeHost({
       requestTimeoutMs: 30_000,
+      ...(process.env.KINETRA_RUNTIME_EXECUTABLE
+        ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
+        : {}),
     });
 
     try {
