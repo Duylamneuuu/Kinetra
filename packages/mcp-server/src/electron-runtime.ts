@@ -33,6 +33,7 @@ interface PendingRequest {
 export interface ElectronRuntimeHostOptions {
   electronExecutable?: string;
   playerEntry?: string;
+  runtimeExecutable?: string;
   requestTimeoutMs?: number;
 }
 
@@ -62,6 +63,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class ElectronRuntimeHost implements RuntimeHost {
   readonly electronExecutable: string;
   readonly playerEntry: string;
+  readonly runtimeExecutable: string | undefined;
   readonly requestTimeoutMs: number;
 
   #child: ChildProcessWithoutNullStreams | undefined;
@@ -81,6 +83,10 @@ export class ElectronRuntimeHost implements RuntimeHost {
       options.playerEntry ??
       process.env.KINETRA_PLAYER_ENTRY ??
       defaultPlayerEntry();
+
+    this.runtimeExecutable =
+      options.runtimeExecutable ??
+      process.env.KINETRA_RUNTIME_EXECUTABLE;
 
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
   }
@@ -168,9 +174,15 @@ export class ElectronRuntimeHost implements RuntimeHost {
     };
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
+    const executable =
+      this.runtimeExecutable ?? this.electronExecutable;
+    const args = this.runtimeExecutable
+      ? ["--runtime-bridge-stdio"]
+      : [this.playerEntry, "--runtime-bridge-stdio"];
+
     const child = spawn(
-      this.electronExecutable,
-      [this.playerEntry, "--runtime-bridge-stdio"],
+      executable,
+      args,
       {
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
