@@ -100,11 +100,20 @@ function navigationFixtureProject(): ProjectDocument {
   };
 }
 
+function createTestHost(): ElectronRuntimeHost {
+  return new ElectronRuntimeHost({
+    requestTimeoutMs: 30_000,
+    ...(process.env.KINETRA_RUNTIME_EXECUTABLE
+      ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
+      : {}),
+  });
+}
+
 test(
   "real Electron runtime executes deterministic Recast navigation queries, pathfinding, serialization round-trip, and constrained failure",
-  { timeout: 60_000 },
+  { skip: process.platform !== "win32", timeout: 60_000 },
   async () => {
-    const host = new ElectronRuntimeHost({ requestTimeoutMs: 15_000 });
+    const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
       host,
       project: navigationFixtureProject,
@@ -229,9 +238,9 @@ test(
 
 test(
   "serialized NavMesh can be reloaded in real Electron runtime and produce equivalent pathfinding behavior",
-  { timeout: 60_000 },
+  { skip: process.platform !== "win32", timeout: 60_000 },
   async () => {
-    const host = new ElectronRuntimeHost({ requestTimeoutMs: 15_000 });
+    const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
       host,
       project: navigationFixtureProject,
@@ -306,9 +315,9 @@ test(
 
 test(
   "clean teardown releases navigation resources and leaves zero orphan Electron processes",
-  { timeout: 30_000 },
+  { skip: process.platform !== "win32", timeout: 30_000 },
   async () => {
-    const host = new ElectronRuntimeHost({ requestTimeoutMs: 15_000 });
+    const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
       host,
       project: navigationFixtureProject,
