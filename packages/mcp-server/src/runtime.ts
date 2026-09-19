@@ -18,8 +18,6 @@ export interface RuntimeEntityState {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
-  model?: Record<string, unknown>;
-  gameplay?: Record<string, unknown>;
 }
 
 export interface RuntimeQuery {
