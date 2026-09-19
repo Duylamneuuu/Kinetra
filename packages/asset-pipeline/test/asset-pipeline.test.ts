@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Document, NodeIO } from "@gltf-transform/core";
 import {
   AssetDatabase,
   importFingerprint,
@@ -64,4 +65,24 @@ test("GLB header validation rejects malformed files and accepts v2 header", () =
   assert.deepEqual(inspectGlb(bytes),{magic:0x46546c67,version:2,length:12});
   bytes[0]=0;
   assert.throws(()=>inspectGlb(bytes),/magic/i);
+});
+
+
+test("normalizes a generated GLB through glTF-Transform", async () => {
+  const { normalizeGlb } = await import("../src/index.js");
+  const document = new Document();
+  const buffer = document.createBuffer();
+  const scene = document.createScene("Main");
+  const node = document.createNode("UnusedNode");
+  scene.addChild(node);
+
+  const io = new NodeIO();
+  const input = await io.writeBinary(document);
+  const result = await normalizeGlb(input);
+
+  assert.ok(result.bytes.byteLength > 12);
+  assert.equal(result.beforeBytes, input.byteLength);
+  assert.equal(inspectGlb(result.bytes).version, 2);
+  assert.ok(result.afterBytes > 0);
+  void buffer;
 });
