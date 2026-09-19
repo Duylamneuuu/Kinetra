@@ -340,10 +340,42 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "runtime.captureFrame",
     {
       description:
-        "Capture the connected runtime frame. The local scene-graph host returns an explicit unavailable result plus structured fallback state until the Electron bridge lands.",
+        "Capture the connected runtime frame. Electron runtime returns a real PNG; local runtime returns explicit fallback state.",
       inputSchema: z.object({}),
     },
-    async () => safe(() => service.captureRuntimeFrame()),
+    async () => {
+      try {
+        const frame = await service.captureRuntimeFrame();
+
+        if (frame.available && frame.base64 && frame.mimeType) {
+          return {
+            content: [
+              {
+                type: "image" as const,
+                data: frame.base64,
+                mimeType: frame.mimeType,
+              },
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    available: true,
+                    mimeType: frame.mimeType,
+                    bytesApprox: Math.floor((frame.base64.length * 3) / 4),
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        return success(frame);
+      } catch (error) {
+        return failure(error);
+      }
+    },
   );
 
   return server;

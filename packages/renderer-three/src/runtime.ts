@@ -41,7 +41,54 @@ function makeObject(entity: EntityDefinition): THREE.Object3D {
     }
   }
 
+  const primitive = makePrimitive(entity);
+  if (primitive) {
+    return primitive;
+  }
+
   return new THREE.Group();
+}
+
+function makePrimitive(entity: EntityDefinition): THREE.Object3D | null {
+  const primitive = asObject(entity.components.Primitive);
+  if (!primitive) {
+    return null;
+  }
+
+  const kind = stringValue(primitive.kind, "box");
+  const color = new THREE.Color(stringValue(primitive.color, "#d9e6ff"));
+  const roughness = numberValue(primitive.roughness, 0.5);
+  const metalness = numberValue(primitive.metalness, 0.1);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness,
+    metalness,
+  });
+
+  let geometry: THREE.BufferGeometry;
+  switch (kind) {
+    case "box": {
+      const size = vec3Value(primitive.size, [1, 1, 1]);
+      geometry = new THREE.BoxGeometry(size[0], size[1], size[2]);
+      break;
+    }
+    case "sphere": {
+      const radius = numberValue(primitive.radius, 0.5);
+      const segments = Math.max(8, Math.floor(numberValue(primitive.segments, 24)));
+      geometry = new THREE.SphereGeometry(radius, segments, segments);
+      break;
+    }
+    case "plane": {
+      const width = numberValue(primitive.width, 10);
+      const height = numberValue(primitive.height, 10);
+      geometry = new THREE.PlaneGeometry(width, height);
+      break;
+    }
+    default:
+      throw new Error(`Unsupported Primitive.kind "${kind}" for entity "${entity.id}"`);
+  }
+
+  return new THREE.Mesh(geometry, material);
 }
 
 function applyTransform(object: THREE.Object3D, entity: EntityDefinition): void {
@@ -70,6 +117,21 @@ function decorateObject(object: THREE.Object3D, entity: EntityDefinition): void 
       object.userData.kinetraModel = { assetId };
     }
   }
+}
+
+function disposeObjectResources(object: THREE.Object3D): void {
+  object.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry?.dispose();
+      if (Array.isArray(child.material)) {
+        for (const mat of child.material) {
+          mat.dispose();
+        }
+      } else {
+        child.material?.dispose();
+      }
+    }
+  });
 }
 
 export class ThreeSceneRuntime {
@@ -133,6 +195,7 @@ export class ThreeSceneRuntime {
     }
 
     for (const object of this.#objects.values()) {
+      disposeObjectResources(object);
       object.removeFromParent();
     }
 

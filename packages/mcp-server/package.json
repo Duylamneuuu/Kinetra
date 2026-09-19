@@ -14,7 +14,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/service.test.js"
+    "test": "node --test dist/test/service.test.js dist/test/electron-runtime.test.js"
+  },
+  "devDependencies": {
+    "electron": "38.0.0"
   },
   "dependencies": {
     "@kinetra/command-bus": "workspace:*",
