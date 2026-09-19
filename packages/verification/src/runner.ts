@@ -58,6 +58,43 @@ async function executeStep(
         await probe.wait(ms);
       }
       return;
+    case "navigation.bake":
+      if (typeof probe.bakeNavigation === "function") {
+        await probe.bakeNavigation({
+          ...(step.positions !== undefined ? { positions: step.positions } : {}),
+          ...(step.indices !== undefined ? { indices: step.indices } : {}),
+          ...(step.config !== undefined ? { config: step.config } : {}),
+        });
+      }
+      return;
+    case "navigation.load":
+      if (typeof probe.loadNavigation === "function") {
+        await probe.loadNavigation({
+          dataBase64: step.dataBase64,
+        });
+      }
+      return;
+    case "navigation.closestPoint":
+      if (typeof probe.closestPointNavigation === "function") {
+        await probe.closestPointNavigation({
+          position: step.position,
+          ...(step.halfExtents !== undefined
+            ? { halfExtents: step.halfExtents }
+            : {}),
+        });
+      }
+      return;
+    case "navigation.computePath":
+      if (typeof probe.computePathNavigation === "function") {
+        await probe.computePathNavigation({
+          start: step.start,
+          end: step.end,
+          ...(step.halfExtents !== undefined
+            ? { halfExtents: step.halfExtents }
+            : {}),
+        });
+      }
+      return;
     case "input":
       await probe.input({
         action:step.action,

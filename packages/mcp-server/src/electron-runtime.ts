@@ -147,6 +147,39 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
   }
 
+  async bakeNavigation(params: {
+    positions?: number[];
+    indices?: number[];
+    config?: Record<string, unknown>;
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.bake", params);
+  }
+
+  async loadNavigation(params: {
+    dataBase64: string;
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.load", params);
+  }
+
+  async closestPointNavigation(params: {
+    position: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.closestPoint", params);
+  }
+
+  async computePathNavigation(params: {
+    start: [number, number, number];
+    end: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.computePath", params);
+  }
+
   async captureFrame(): Promise<RuntimeFrameCapture> {
     await this.#ensureProcess();
     return this.#request<RuntimeFrameCapture>("runtime.captureFrame", {});

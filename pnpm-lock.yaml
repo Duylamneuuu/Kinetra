@@ -17,6 +17,9 @@ importers:
 
   apps/player:
     dependencies:
+      '@kinetra/navigation-recast':
+        specifier: workspace:*
+        version: link:../../packages/navigation-recast
       '@kinetra/physics-rapier':
         specifier: workspace:*
         version: link:../../packages/physics-rapier

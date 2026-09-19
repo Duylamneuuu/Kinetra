@@ -216,6 +216,10 @@ async function handleBridgeRequest(
     case "runtime.injectInput":
     case "runtime.readLogs":
     case "runtime.step":
+    case "navigation.bake":
+    case "navigation.load":
+    case "navigation.closestPoint":
+    case "navigation.computePath":
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {

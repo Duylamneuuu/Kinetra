@@ -91,6 +91,41 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     }
   }
 
+  async bakeNavigation(params: {
+    positions?: number[];
+    indices?: number[];
+    config?: Record<string, unknown>;
+  }): Promise<void> {
+    if (typeof this.#host.bakeNavigation === "function") {
+      await this.#host.bakeNavigation(params);
+    }
+  }
+
+  async loadNavigation(params: { dataBase64: string }): Promise<void> {
+    if (typeof this.#host.loadNavigation === "function") {
+      await this.#host.loadNavigation(params);
+    }
+  }
+
+  async closestPointNavigation(params: {
+    position: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<void> {
+    if (typeof this.#host.closestPointNavigation === "function") {
+      await this.#host.closestPointNavigation(params);
+    }
+  }
+
+  async computePathNavigation(params: {
+    start: [number, number, number];
+    end: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<void> {
+    if (typeof this.#host.computePathNavigation === "function") {
+      await this.#host.computePathNavigation(params);
+    }
+  }
+
   async snapshot(): Promise<RuntimeSnapshot> {
     const query = await this.#host.query();
     const byEntityId: Record<string, unknown> = {};
@@ -113,6 +148,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         entities: query.entities,
         byEntityId,
         byName,
+        ...(query.navigation ? { navigation: query.navigation } : {}),
       },
     };
   }

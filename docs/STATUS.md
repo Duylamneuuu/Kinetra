@@ -123,7 +123,7 @@ Still missing:
 - physics materials / dynamic friction/restitution overrides;
 - compound colliders and trimeshes.
 
-### Navigation (P7 Slice 2)
+### Navigation (P7 Slice 2 & 2B)
 
 What has meaningful proof:
 - isolated, deterministic Recast Navigation integration via `@recast-navigation/core` and `@recast-navigation/generators` in `@kinetra/navigation-recast`;
@@ -131,12 +131,14 @@ What has meaningful proof:
 - Solo NavMesh baking from synthetic vertices and triangle indices;
 - closest point query with configurable half-extents (resolving the historical vertical search extent failure on elevated coordinates);
 - waypoint path calculation between start/end points with complete status reporting;
-- deterministic binary NavMesh serialization (`toBytes`) and deserialization (`fromBytes`) round-trip.
+- deterministic binary NavMesh serialization (`toBytes`) and deserialization (`fromBytes`) round-trip;
+- full real Electron player runtime integration (`PlayerRuntimeController` navigation adapter, named pipe bridge, and renderer IPC);
+- structured, Kinetra-owned runtime navigation state queryable without exposing raw Recast/Detour handles;
+- complete AcceptanceRunner verification in live Electron (`real-navigation.test.ts`), covering baking, elevated closest-point, pathfinding, serialization reload equivalence, deliberate out-of-bounds/constrained failure, real PNG capture, and clean teardown leaving zero orphan processes.
 
 Still missing:
 - crowd agent steering / crowd simulation;
-- dynamic obstacle avoidance / tile cache;
-- automated player steering integration in runtime bridge.
+- dynamic obstacle avoidance / tile cache.
 
 ## Open implementation references
 

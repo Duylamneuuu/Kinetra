@@ -66,6 +66,60 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
     }
 
+    case "navigation.bake": {
+      const positions = Array.isArray(params.positions)
+        ? (params.positions as number[])
+        : undefined;
+      const indices = Array.isArray(params.indices)
+        ? (params.indices as number[])
+        : undefined;
+      const config = isRecord(params.config) ? params.config : undefined;
+      await runtime.bakeNavigation({
+        ...(positions !== undefined ? { positions } : {}),
+        ...(indices !== undefined ? { indices } : {}),
+        ...(config !== undefined ? { config } : {}),
+      });
+      return runtime.query();
+    }
+
+    case "navigation.load": {
+      const dataBase64 = requireString(params.dataBase64, "dataBase64");
+      await runtime.loadNavigation(dataBase64);
+      return runtime.query();
+    }
+
+    case "navigation.closestPoint": {
+      if (!Array.isArray(params.position) || params.position.length !== 3) {
+        throw new TypeError(
+          "navigation.closestPoint requires [x, y, z] position",
+        );
+      }
+      const position = params.position as [number, number, number];
+      const halfExtents =
+        Array.isArray(params.halfExtents) && params.halfExtents.length === 3
+          ? (params.halfExtents as [number, number, number])
+          : undefined;
+      runtime.closestPoint(position, halfExtents);
+      return runtime.query();
+    }
+
+    case "navigation.computePath": {
+      if (!Array.isArray(params.start) || params.start.length !== 3) {
+        throw new TypeError("navigation.computePath requires [x, y, z] start");
+      }
+      if (!Array.isArray(params.end) || params.end.length !== 3) {
+        throw new TypeError("navigation.computePath requires [x, y, z] end");
+      }
+      const start = params.start as [number, number, number];
+      const end = params.end as [number, number, number];
+      const halfExtents =
+        Array.isArray(params.halfExtents) && params.halfExtents.length === 3
+          ? (params.halfExtents as [number, number, number])
+          : undefined;
+      runtime.computePath(start, end, halfExtents);
+      return runtime.query();
+    }
+
     case "runtime.stop":
       runtime.stop();
       statusElement.textContent = "agent runtime · stopped";
