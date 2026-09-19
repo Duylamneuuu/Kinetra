@@ -312,7 +312,7 @@ export class ElectronRuntimeHost
       executable,
       args,
       {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
         env: electronEnv,
       },
