@@ -1,0 +1,37 @@
+name: Windows player package
+
+on:
+  pull_request:
+    paths:
+      - "apps/player/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "scripts/**"
+      - ".kinetra/**"
+      - ".github/workflows/windows-player.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-and-launch:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm check
+      - run: pnpm --filter @kinetra/player package:win
+      - run: pnpm --filter @kinetra/player smoke:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kinetra-windows-spike
+          path: apps/player/release/KinetraGame-win32-x64
+          if-no-files-found: error

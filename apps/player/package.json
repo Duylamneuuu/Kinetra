@@ -1,0 +1,25 @@
+{
+  "name": "@kinetra/player",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build:web": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "assemble": "node scripts/assemble.mjs",
+    "build": "pnpm build:web && pnpm build:electron && pnpm assemble",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "package:win": "pnpm build && node scripts/package-win.mjs",
+    "smoke:win": "node scripts/smoke-win.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "@types/three": "0.180.0",
+    "electron": "38.0.0",
+    "vite": "^7.1.0"
+  }
+}
