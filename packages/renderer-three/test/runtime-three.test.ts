@@ -128,3 +128,62 @@ test("dispose tears down runtime projection deterministically", () => {
   runtime.dispose();
   assert.equal(runtime.scene.children.length, 0);
 });
+
+test("loads GLTF model via AssetResolver and exposes metadata with proper disposal", async () => {
+  const { createSyntheticGlb } = await import("@kinetra/asset-pipeline");
+  const glbBytes = await createSyntheticGlb({
+    meshName: "HeroMesh",
+    nodeName: "HeroNode",
+    materialName: "HeroMat",
+    size: [1, 2, 3],
+  });
+
+  const resolver = {
+    resolve(assetId: string) {
+      if (assetId === "asset_hero") {
+        return glbBytes;
+      }
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  const metadata = runtime.getModelMetadata(rootId);
+  assert.ok(metadata);
+  assert.equal(metadata.assetId, "asset_hero");
+  assert.equal(metadata.loaded, true);
+  assert.equal(metadata.meshCount, 1);
+  assert.ok(metadata.nodeCount >= 1);
+  assert.ok(metadata.bounds);
+  assert.deepEqual(metadata.bounds.size, [1, 2, 3]);
+
+  const root = runtime.getObject(rootId)!;
+  const child = root.children.find((c) => c.name === "Root:Model");
+  assert.ok(child);
+
+  runtime.dispose();
+  assert.equal(runtime.disposed, true);
+  assert.equal(runtime.models().size, 0);
+});
+
+test("handles unresolvable assetId with structured error metadata", async () => {
+  const resolver = {
+    resolve() {
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  const metadata = runtime.getModelMetadata(rootId);
+  assert.ok(metadata);
+  assert.equal(metadata.loaded, false);
+  assert.ok(metadata.error?.includes("asset_hero"));
+
+  runtime.dispose();
+});

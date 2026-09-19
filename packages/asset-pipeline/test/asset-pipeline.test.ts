@@ -86,3 +86,19 @@ test("normalizes a generated GLB through glTF-Transform", async () => {
   assert.ok(result.afterBytes > 0);
   void buffer;
 });
+
+test("creates deterministic synthetic GLB with valid v2 header and non-empty payload", async () => {
+  const { createSyntheticGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticGlb({
+    meshName: "CustomMesh",
+    nodeName: "CustomNode",
+    materialName: "CustomMat",
+    size: [2, 3, 4],
+  });
+
+  assert.ok(bytes.byteLength > 100);
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.version, 2);
+  assert.equal(header.length, bytes.byteLength);
+});

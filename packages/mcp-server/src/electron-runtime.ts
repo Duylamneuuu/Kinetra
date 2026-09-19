@@ -112,13 +112,20 @@ export class ElectronRuntimeHost implements RuntimeHost {
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
+    assets?: Record<string, string>,
   ): Promise<void> {
     await this.#ensureProcess();
     await this.#request("runtime.start", {
       project,
       sceneId,
       projectRevision,
+      ...(assets !== undefined ? { assets } : {}),
     });
+  }
+
+  async registerAsset(assetId: string, dataBase64: string): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("asset.register", { assetId, dataBase64 });
   }
 
   async stop(): Promise<void> {

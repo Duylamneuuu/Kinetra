@@ -4,7 +4,9 @@ import type {
   SceneDefinition,
 } from "@kinetra/project-model";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import type { AssetResolver, ModelMetadata } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 
 function makeObject(entity: EntityDefinition): THREE.Object3D {
@@ -119,16 +121,26 @@ function decorateObject(object: THREE.Object3D, entity: EntityDefinition): void 
   }
 }
 
+function disposeMaterial(material: THREE.Material | undefined): void {
+  if (!material) return;
+  for (const value of Object.values(material)) {
+    if (value instanceof THREE.Texture) {
+      value.dispose();
+    }
+  }
+  material.dispose();
+}
+
 function disposeObjectResources(object: THREE.Object3D): void {
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
       child.geometry?.dispose();
       if (Array.isArray(child.material)) {
         for (const mat of child.material) {
-          mat.dispose();
+          disposeMaterial(mat);
         }
       } else {
-        child.material?.dispose();
+        disposeMaterial(child.material);
       }
     }
   });
@@ -138,6 +150,7 @@ export class ThreeSceneRuntime {
   readonly scene = new THREE.Scene();
   readonly sceneId: string;
   #objects = new Map<string, THREE.Object3D>();
+  #models = new Map<string, ModelMetadata>();
   #disposed = false;
 
   private constructor(sceneDefinition: SceneDefinition) {
@@ -149,6 +162,16 @@ export class ThreeSceneRuntime {
       applyTransform(object, entity);
       decorateObject(object, entity);
       this.#objects.set(entity.id, object);
+
+      const modelComp = asObject(entity.components.Model);
+      if (modelComp && typeof modelComp.assetId === "string") {
+        this.#models.set(entity.id, {
+          assetId: modelComp.assetId,
+          loaded: false,
+          meshCount: 0,
+          nodeCount: 0,
+        });
+      }
     }
 
     for (const entity of sceneDefinition.entities) {
@@ -177,6 +200,18 @@ export class ThreeSceneRuntime {
     return new ThreeSceneRuntime(scene);
   }
 
+  static async instantiateAsync(
+    project: ProjectDocument,
+    sceneId: string,
+    options: { assetResolver?: AssetResolver } = {},
+  ): Promise<ThreeSceneRuntime> {
+    const runtime = ThreeSceneRuntime.instantiate(project, sceneId);
+    if (options.assetResolver) {
+      await runtime.loadModels(options.assetResolver);
+    }
+    return runtime;
+  }
+
   get disposed(): boolean {
     return this.#disposed;
   }
@@ -187,6 +222,112 @@ export class ThreeSceneRuntime {
 
   objects(): ReadonlyMap<string, THREE.Object3D> {
     return this.#objects;
+  }
+
+  getModelMetadata(entityId: string): ModelMetadata | undefined {
+    return this.#models.get(entityId);
+  }
+
+  models(): ReadonlyMap<string, ModelMetadata> {
+    return this.#models;
+  }
+
+  async loadModels(resolver: AssetResolver): Promise<Map<string, ModelMetadata>> {
+    if (this.#disposed) {
+      throw new Error("Cannot load models into a disposed ThreeSceneRuntime");
+    }
+
+    const loader = new GLTFLoader();
+
+    for (const [entityId, metadata] of this.#models) {
+      const object = this.#objects.get(entityId);
+      if (!object) {
+        continue;
+      }
+
+      try {
+        const resolved = await resolver.resolve(metadata.assetId);
+        if (!resolved) {
+          metadata.loaded = false;
+          metadata.error = `Asset "${metadata.assetId}" could not be resolved`;
+          continue;
+        }
+
+        let arrayBuffer: ArrayBuffer;
+        if (resolved instanceof Uint8Array) {
+          const copy = new Uint8Array(resolved.byteLength);
+          copy.set(resolved);
+          arrayBuffer = copy.buffer;
+        } else if (resolved instanceof ArrayBuffer) {
+          arrayBuffer = resolved;
+        } else if (typeof resolved === "string") {
+          if (resolved.startsWith("data:")) {
+            const base64Index = resolved.indexOf("base64,");
+            if (base64Index !== -1) {
+              const raw = atob(resolved.slice(base64Index + 7));
+              const bytes = new Uint8Array(raw.length);
+              for (let i = 0; i < raw.length; i++) {
+                bytes[i] = raw.charCodeAt(i);
+              }
+              arrayBuffer = bytes.buffer;
+            } else {
+              const gltf = await loader.loadAsync(resolved);
+              this.#attachModel(object, gltf.scene, metadata);
+              continue;
+            }
+          } else {
+            const gltf = await loader.loadAsync(resolved);
+            this.#attachModel(object, gltf.scene, metadata);
+            continue;
+          }
+        } else {
+          metadata.loaded = false;
+          metadata.error = `Unsupported asset resolution type for "${metadata.assetId}"`;
+          continue;
+        }
+
+        const gltf = await loader.parseAsync(arrayBuffer, "");
+        this.#attachModel(object, gltf.scene, metadata);
+      } catch (error) {
+        metadata.loaded = false;
+        metadata.error = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    return this.#models;
+  }
+
+  #attachModel(
+    object: THREE.Object3D,
+    modelScene: THREE.Group,
+    metadata: ModelMetadata,
+  ): void {
+    let meshCount = 0;
+    let nodeCount = 0;
+
+    modelScene.traverse((node) => {
+      nodeCount++;
+      if (node instanceof THREE.Mesh) {
+        meshCount++;
+      }
+    });
+
+    const box = new THREE.Box3().setFromObject(modelScene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+
+    metadata.loaded = true;
+    metadata.meshCount = meshCount;
+    metadata.nodeCount = nodeCount;
+    metadata.bounds = {
+      min: [box.min.x, box.min.y, box.min.z],
+      max: [box.max.x, box.max.y, box.max.z],
+      size: [size.x, size.y, size.z],
+    };
+    delete metadata.error;
+
+    modelScene.name = `${object.name}:Model`;
+    object.add(modelScene);
   }
 
   dispose(): void {
@@ -201,6 +342,7 @@ export class ThreeSceneRuntime {
 
     this.scene.clear();
     this.#objects.clear();
+    this.#models.clear();
     this.#disposed = true;
   }
 }

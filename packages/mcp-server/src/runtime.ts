@@ -47,13 +47,19 @@ export interface RuntimeFrameCapture {
 }
 
 export interface RuntimeHost {
-  start(project: ProjectDocument, sceneId: string, projectRevision: number): Promise<void>;
+  start(
+    project: ProjectDocument,
+    sceneId: string,
+    projectRevision: number,
+    assets?: Record<string, string>,
+  ): Promise<void>;
   stop(): Promise<void>;
   query(query?: RuntimeQuery): Promise<RuntimeQueryResult>;
   injectInput(event: RuntimeInputEvent): Promise<void>;
   captureFrame(): Promise<RuntimeFrameCapture>;
   readLogs(sinceSequence?: number): Promise<RuntimeLogEntry[]>;
   step?(steps?: number, deltaSeconds?: number): Promise<RuntimeQueryResult>;
+  registerAsset?(assetId: string, dataBase64: string): Promise<void>;
 }
 
 export class LocalRuntimeHost implements RuntimeHost {

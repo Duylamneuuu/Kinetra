@@ -18,6 +18,7 @@
     "three": "^0.180.0"
   },
   "devDependencies": {
+    "@kinetra/asset-pipeline": "workspace:*",
     "@types/three": "^0.180.0"
   }
 }

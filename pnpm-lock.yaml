@@ -129,6 +129,9 @@ importers:
         specifier: ^0.180.0
         version: 0.180.0
     devDependencies:
+      '@kinetra/asset-pipeline':
+        specifier: workspace:*
+        version: link:../asset-pipeline
       '@types/three':
         specifier: ^0.180.0
         version: 0.180.0
@@ -141,6 +144,9 @@ importers:
         specifier: workspace:*
         version: link:../project-model
     devDependencies:
+      '@kinetra/asset-pipeline':
+        specifier: workspace:*
+        version: link:../asset-pipeline
       '@kinetra/mcp-server':
         specifier: workspace:*
         version: link:../mcp-server

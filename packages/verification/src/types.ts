@@ -24,9 +24,15 @@ export interface RuntimeMetrics {
 }
 
 export interface RuntimeProbeHost {
-  start(project: ProjectDocument, sceneId: string, projectRevision: number): Promise<void>;
+  start(
+    project: ProjectDocument,
+    sceneId: string,
+    projectRevision: number,
+    assets?: Record<string, string>,
+  ): Promise<void>;
   stop(): Promise<void>;
   close?(): Promise<void>;
+  registerAsset?(assetId: string, dataBase64: string): Promise<void>;
   query(query?: { entityIds?: string[] }): Promise<{
     running: boolean;
     sceneId?: string;
@@ -39,6 +45,18 @@ export interface RuntimeProbeHost {
       position: [number, number, number];
       rotation: [number, number, number];
       scale: [number, number, number];
+      model?: {
+        assetId: string;
+        loaded: boolean;
+        meshCount: number;
+        nodeCount: number;
+        bounds?: {
+          min: [number, number, number];
+          max: [number, number, number];
+          size: [number, number, number];
+        };
+        error?: string;
+      };
     }>;
     navigation?: Record<string, unknown>;
   }>;
@@ -99,6 +117,7 @@ export interface RuntimeProbe {
     position: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void>;
+  registerAsset?(assetId: string, dataBase64: string): Promise<void>;
   computePathNavigation?(params: {
     start: [number, number, number];
     end: [number, number, number];
@@ -107,9 +126,10 @@ export interface RuntimeProbe {
 }
 
 export type AcceptanceStep =
-  | {type:"runtime.start";sceneId:string}
-  | {type:"runtime.stop"}
-  | {type:"runtime.step";steps?:number;deltaSeconds?:number}
+  | { type: "runtime.start"; sceneId: string; assets?: Record<string, string> }
+  | { type: "runtime.stop" }
+  | { type: "runtime.step"; steps?: number; deltaSeconds?: number }
+  | { type: "asset.register"; assetId: string; dataBase64: string }
   | {
       type: "navigation.bake";
       positions?: number[];
