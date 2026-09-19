@@ -1,27 +1,29 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { ProjectDocument } from "@kinetra/project-model";
-
 const editorApi = {
-  loadProject(): Promise<{
+  loadProjectText(): Promise<{
     path: string | null;
     writable: boolean;
-    project: ProjectDocument;
+    text: string;
   }> {
-    return ipcRenderer.invoke("kinetra:editor:load-project");
+    return ipcRenderer.invoke(
+      "kinetra:editor:load-project-text",
+    );
   },
 
-  saveProject(
-    project: ProjectDocument,
+  saveProjectText(
+    text: string,
   ): Promise<{ saved: boolean; path: string | null }> {
     return ipcRenderer.invoke(
-      "kinetra:editor:save-project",
-      project,
+      "kinetra:editor:save-project-text",
+      text,
     );
   },
 
   getProjectPath(): Promise<string | null> {
-    return ipcRenderer.invoke("kinetra:editor:project-path");
+    return ipcRenderer.invoke(
+      "kinetra:editor:project-path",
+    );
   },
 };
 
