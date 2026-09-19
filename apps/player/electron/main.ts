@@ -216,6 +216,7 @@ async function handleBridgeRequest(
     case "runtime.injectInput":
     case "runtime.readLogs":
     case "runtime.step":
+    case "asset.register":
     case "navigation.bake":
     case "navigation.load":
     case "navigation.closestPoint":

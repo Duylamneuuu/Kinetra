@@ -52,10 +52,22 @@ async function handleRuntimeCommand(request: {
       const project = params.project as ProjectDocument;
       const sceneId = requireString(params.sceneId, "sceneId");
       const projectRevision = requireRevision(params.projectRevision);
-      const result = await runtime.start(project, sceneId, projectRevision);
+      const assets = isRecord(params.assets)
+        ? (params.assets as Record<string, string>)
+        : undefined;
+      const result = await runtime.start(project, sceneId, projectRevision, {
+        ...(assets !== undefined ? { assets } : {}),
+      });
       statusElement.textContent =
         `agent runtime · scene ${sceneId} · revision ${projectRevision}`;
       return result;
+    }
+
+    case "asset.register": {
+      const assetId = requireString(params.assetId, "assetId");
+      const dataBase64 = requireString(params.dataBase64, "dataBase64");
+      runtime.registerAsset(assetId, dataBase64);
+      return { registered: true, assetId };
     }
 
     case "runtime.step": {

@@ -9,12 +9,13 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/verification.test.js dist/test/real-runtime.test.js dist/test/real-physics.test.js dist/test/real-navigation.test.js"
+    "test":"node --test dist/test/verification.test.js dist/test/real-runtime.test.js dist/test/real-physics.test.js dist/test/real-navigation.test.js dist/test/real-model.test.js"
   },
   "dependencies":{
     "@kinetra/project-model":"workspace:*"
   },
   "devDependencies":{
+    "@kinetra/asset-pipeline":"workspace:*",
     "@kinetra/mcp-server":"workspace:*"
   }
 }

@@ -45,7 +45,17 @@ async function executeStep(
 ):Promise<string|undefined>{
   switch(step.type){
     case "runtime.start":
-      await probe.start(step.sceneId,seed);
+      if (step.assets && typeof probe.registerAsset === "function") {
+        for (const [assetId, dataBase64] of Object.entries(step.assets)) {
+          await probe.registerAsset(assetId, dataBase64);
+        }
+      }
+      await probe.start(step.sceneId, seed);
+      return;
+    case "asset.register":
+      if (typeof probe.registerAsset === "function") {
+        await probe.registerAsset(step.assetId, step.dataBase64);
+      }
       return;
     case "runtime.stop":
       await probe.stop();

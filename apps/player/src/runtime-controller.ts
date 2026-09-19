@@ -7,7 +7,7 @@ import {
   RapierPhysicsWorld,
 } from "@kinetra/physics-rapier";
 import { RecastNavMesh } from "@kinetra/navigation-recast";
-import { ThreeSceneRuntime } from "@kinetra/renderer-three";
+import { ThreeSceneRuntime, type AssetResolver } from "@kinetra/renderer-three";
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
@@ -23,6 +23,19 @@ export interface PlayerRuntimeQuery {
   entityIds?: string[];
 }
 
+export interface PlayerRuntimeModelState {
+  assetId: string;
+  loaded: boolean;
+  meshCount: number;
+  nodeCount: number;
+  bounds?: {
+    min: [number, number, number];
+    max: [number, number, number];
+    size: [number, number, number];
+  };
+  error?: string;
+}
+
 export interface PlayerRuntimeEntityState {
   entityId: string;
   name: string;
@@ -31,6 +44,7 @@ export interface PlayerRuntimeEntityState {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
+  model?: PlayerRuntimeModelState;
 }
 
 export interface PlayerRuntimeNavigationState {
@@ -88,6 +102,8 @@ export class PlayerRuntimeController {
   #physics: RapierPhysicsWorld | undefined;
   #navMesh: RecastNavMesh | undefined;
   #navigationState: PlayerRuntimeNavigationState = { hasNavMesh: false };
+  #assetResolver: AssetResolver;
+  #assetRegistry = new Map<string, Uint8Array>();
   #camera: THREE.Camera;
   #projectRevision: number | undefined;
   #logs: PlayerRuntimeLog[] = [];
@@ -101,18 +117,40 @@ export class PlayerRuntimeController {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+    this.#assetResolver = {
+      resolve: (assetId: string) => {
+        return this.#assetRegistry.get(assetId);
+      },
+    };
+
     this.#camera = this.#createFallbackCamera();
     window.addEventListener("resize", () => this.resize());
     this.resize();
+  }
+
+  registerAsset(assetId: string, data: Uint8Array | string): void {
+    const bytes = typeof data === "string" ? base64ToUint8Array(data) : data;
+    this.#assetRegistry.set(assetId, bytes);
+    this.#log("debug", "asset.registered", {
+      assetId,
+      byteLength: bytes.byteLength,
+    });
   }
 
   async start(
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
+    options?: { assets?: Record<string, string> },
   ): Promise<PlayerRuntimeQueryResult> {
     assertValidProject(project);
     this.stop();
+
+    if (options?.assets) {
+      for (const [assetId, base64] of Object.entries(options.assets)) {
+        this.registerAsset(assetId, base64);
+      }
+    }
 
     const scene = project.scenes.find((candidate) => candidate.id === sceneId);
     if (!scene) {
@@ -122,6 +160,25 @@ export class PlayerRuntimeController {
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
     this.#runtime.scene.background = new THREE.Color("#0b0d12");
     this.#projectRevision = projectRevision;
+
+    const modelReport = await this.#runtime.loadModels(this.#assetResolver);
+    for (const [entityId, meta] of modelReport) {
+      if (meta.loaded) {
+        this.#log("info", "model.loaded", {
+          entityId,
+          assetId: meta.assetId,
+          meshCount: meta.meshCount,
+          nodeCount: meta.nodeCount,
+          bounds: meta.bounds,
+        });
+      } else {
+        this.#log("error", "model.loadFailed", {
+          entityId,
+          assetId: meta.assetId,
+          error: meta.error ?? "Unknown model loading failure",
+        });
+      }
+    }
 
     try {
       this.#physics = await createPhysicsWorldFromScene(scene);
@@ -154,6 +211,7 @@ export class PlayerRuntimeController {
       this.#navMesh = undefined;
     }
     this.#navigationState = { hasNavMesh: false };
+    this.#assetRegistry.clear();
 
     if (!this.#runtime) {
       return;
@@ -313,6 +371,8 @@ export class PlayerRuntimeController {
           ? object.parent.userData.kinetra.entityId
           : undefined;
 
+      const modelMeta = this.#runtime.getModelMetadata(entityId);
+
       entities.push({
         entityId,
         name: object.name,
@@ -321,6 +381,18 @@ export class PlayerRuntimeController {
         position: [object.position.x, object.position.y, object.position.z],
         rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
         scale: [object.scale.x, object.scale.y, object.scale.z],
+        ...(modelMeta
+          ? {
+              model: {
+                assetId: modelMeta.assetId,
+                loaded: modelMeta.loaded,
+                meshCount: modelMeta.meshCount,
+                nodeCount: modelMeta.nodeCount,
+                ...(modelMeta.bounds ? { bounds: modelMeta.bounds } : {}),
+                ...(modelMeta.error ? { error: modelMeta.error } : {}),
+              },
+            }
+          : {}),
       });
     }
 

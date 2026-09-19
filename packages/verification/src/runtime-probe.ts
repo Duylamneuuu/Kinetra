@@ -14,6 +14,9 @@ export interface KinetraRuntimeProbeOptions {
   project: ProjectDocument | (() => ProjectDocument | Promise<ProjectDocument>);
   initialRevision?: number;
   closeOnStop?: boolean;
+  assets?:
+    | Record<string, string>
+    | (() => Record<string, string> | Promise<Record<string, string>>);
 }
 
 export class KinetraRuntimeProbe implements RuntimeProbe {
@@ -23,6 +26,10 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     | (() => ProjectDocument | Promise<ProjectDocument>);
   readonly #initialRevision: number;
   readonly #closeOnStop: boolean;
+  readonly #assets:
+    | Record<string, string>
+    | (() => Record<string, string> | Promise<Record<string, string>>)
+    | undefined;
   #currentSceneId: string | undefined;
 
   constructor(options: KinetraRuntimeProbeOptions) {
@@ -30,6 +37,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     this.#project = options.project;
     this.#initialRevision = options.initialRevision ?? 0;
     this.#closeOnStop = options.closeOnStop ?? false;
+    this.#assets = options.assets;
   }
 
   async start(sceneId: string, _seed: number): Promise<void> {
@@ -38,8 +46,26 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         ? await this.#project()
         : this.#project;
 
+    const assets =
+      typeof this.#assets === "function"
+        ? await this.#assets()
+        : this.#assets;
+
     this.#currentSceneId = sceneId;
-    await this.#host.start(project, sceneId, this.#initialRevision);
+    await this.#host.start(
+      project,
+      sceneId,
+      this.#initialRevision,
+      assets !== undefined && Object.keys(assets).length > 0
+        ? assets
+        : undefined,
+    );
+  }
+
+  async registerAsset(assetId: string, dataBase64: string): Promise<void> {
+    if (typeof this.#host.registerAsset === "function") {
+      await this.#host.registerAsset(assetId, dataBase64);
+    }
   }
 
   async stop(): Promise<void> {

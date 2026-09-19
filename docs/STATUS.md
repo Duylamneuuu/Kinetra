@@ -19,7 +19,7 @@ Legend:
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
 | P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
-| P4 Blender/asset pipeline | CORE MERGED | Asset DB/hash/dependency/diagnostic core and CI-proven headless Blender -> GLB fixture are on main. Full hot-reimport/thumbnail/compression policy is not finished. |
+| P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
 | P5 animation | CORE MERGED | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata/events and text animation-graph semantics are on main. Real skinned-mesh/AnimationMixer integration remains. |
 | P6 complete-game contracts | CORE MERGED | Prefab overrides, script/scene lifecycle, named keyboard/gamepad input/remap, save migrations/settings storage and audio buses are on main. Full game UI/runtime integration remains. |
 | P7 physics/navigation/perf | SLICE 1 PROVEN | Rapier physics baseline proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, live transform sync. Navigation/Recast remains pending. |
@@ -37,7 +37,15 @@ What has meaningful proof:
 - structured diagnostics;
 - GLB validation;
 - Blender headless fixture generation/export through CI;
-- GLB parse/normalization with permissive core dependencies.
+- GLB parse/normalization with permissive core dependencies;
+- programmatic synthetic GLB fixture generation (`createSyntheticGlb`);
+- narrow `AssetResolver` contract resolving Kinetra-owned `assetId`;
+- real Electron/Three.js `GLTFLoader` projection into disposable scene objects;
+- transform inheritance from entity `Transform` component;
+- truthful structured runtime query (`entity.model: { assetId, loaded, meshCount, nodeCount, bounds, error }`);
+- structured error log `model.loadFailed` on unresolvable assets;
+- recursive disposal of geometry, material, and texture resources;
+- end-to-end verification via `AcceptanceRunner` and real frame capture.
 
 Not yet equivalent to a production importer:
 - hot reimport daemon/watch;
