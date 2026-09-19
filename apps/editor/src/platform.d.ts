@@ -1,16 +1,14 @@
-import type { ProjectDocument } from "@kinetra/project-model";
-
 export {};
 
 declare global {
   interface Window {
     kinetraEditor?: {
-      loadProject(): Promise<{
+      loadProjectText(): Promise<{
         path: string | null;
         writable: boolean;
-        project: ProjectDocument;
+        text: string;
       }>;
-      saveProject(project: ProjectDocument): Promise<{
+      saveProjectText(text: string): Promise<{
         saved: boolean;
         path: string | null;
       }>;
