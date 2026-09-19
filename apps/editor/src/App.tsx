@@ -1,9 +1,10 @@
 import MonacoEditor from "@monaco-editor/react";
-import type {
-  EntityDefinition,
-  JsonObject,
-  JsonValue,
-  ProjectDocument,
+import {
+  serializeProject,
+  type EntityDefinition,
+  type JsonObject,
+  type JsonValue,
+  type ProjectDocument,
 } from "@kinetra/project-model";
 import {
   useEffect,
@@ -56,7 +57,9 @@ export function App({
       ...(writable && window.kinetraEditor
         ? {
             persist: async (nextProject) => {
-              await window.kinetraEditor?.saveProject(nextProject);
+              await window.kinetraEditor?.saveProjectText(
+                serializeProject(nextProject),
+              );
             },
           }
         : {}),
