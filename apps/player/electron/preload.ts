@@ -58,6 +58,8 @@ const runtimeBridge = {
         })();
       },
     );
+
+    ipcRenderer.send("kinetra:runtime:renderer-ready");
   },
 };
 
