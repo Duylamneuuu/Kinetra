@@ -16,5 +16,8 @@
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
     "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.180.0"
   }
 }
