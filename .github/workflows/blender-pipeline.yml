@@ -1,0 +1,48 @@
+name: Blender asset pipeline
+
+on:
+  pull_request:
+    paths:
+      - "packages/blender-bridge/**"
+      - "packages/asset-pipeline/**"
+      - ".github/workflows/blender-pipeline.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blender-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender python3-numpy
+          blender --version
+      - name: Create deterministic .blend fixture
+        run: blender --background --python packages/blender-bridge/python/create_fixture.py -- --output "$RUNNER_TEMP/kinetra-fixture.blend"
+      - name: Export fixture through Kinetra Blender bridge script
+        run: |
+          blender --background "$RUNNER_TEMP/kinetra-fixture.blend" --python packages/blender-bridge/python/export_glb.py -- --output "$RUNNER_TEMP/kinetra-fixture.glb" --manifest "$RUNNER_TEMP/kinetra-fixture.manifest.json"
+          test -s "$RUNNER_TEMP/kinetra-fixture.glb"
+          test -s "$RUNNER_TEMP/kinetra-fixture.manifest.json"
+      - run: pnpm --filter @kinetra/asset-pipeline build
+      - name: Validate exported GLB through Kinetra asset pipeline
+        run: |
+          node packages/asset-pipeline/scripts/validate-glb.mjs "$RUNNER_TEMP/kinetra-fixture.glb"
+          cat "$RUNNER_TEMP/kinetra-fixture.manifest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kinetra-blender-fixture
+          path: |
+            ${{ runner.temp }}/kinetra-fixture.glb
+            ${{ runner.temp }}/kinetra-fixture.manifest.json
+          if-no-files-found: error
