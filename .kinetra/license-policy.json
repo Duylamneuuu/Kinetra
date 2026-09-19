@@ -6,7 +6,11 @@
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "0BSD"
+    "0BSD",
+    "CC0-1.0"
+  ],
+  "allowedWithNotice": [
+    "CC-BY-3.0"
   ],
   "referenceOnly": [
     "GPL-2.0",
