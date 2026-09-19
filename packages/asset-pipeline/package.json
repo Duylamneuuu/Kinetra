@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
-    "@gltf-transform/core": "4.5.0",
-    "@gltf-transform/functions": "4.5.0"
+    "@gltf-transform/core": "4.5.0"
   }
 }
