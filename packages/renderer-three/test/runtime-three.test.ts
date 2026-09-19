@@ -10,6 +10,7 @@ const sceneId = stableId("scene", "runtime");
 const rootId = stableId("entity", "root");
 const cameraId = stableId("entity", "camera");
 const lightId = stableId("entity", "light");
+const primitiveId = stableId("entity", "primitive");
 
 function project(): ProjectDocument {
   return {
@@ -25,7 +26,11 @@ function project(): ProjectDocument {
             id: rootId,
             name: "Root",
             components: {
-              Transform: { position: [4, 5, 6], rotation: [0, 0.5, 0], scale: [2, 2, 2] },
+              Transform: {
+                position: [4, 5, 6],
+                rotation: [0, 0.5, 0],
+                scale: [2, 2, 2],
+              },
               Model: { assetId: "asset_hero" },
             },
           },
@@ -35,14 +40,34 @@ function project(): ProjectDocument {
             parentId: rootId,
             components: {
               Transform: { position: [0, 2, 5] },
-              Camera: { type: "perspective", fov: 70, near: 0.2, far: 1000 },
+              Camera: {
+                type: "perspective",
+                fov: 70,
+                near: 0.2,
+                far: 1000,
+              },
             },
           },
           {
             id: lightId,
             name: "Sun",
             components: {
-              Light: { kind: "directional", color: "#ffffff", intensity: 3 },
+              Light: {
+                kind: "directional",
+                color: "#ffffff",
+                intensity: 3,
+              },
+            },
+          },
+          {
+            id: primitiveId,
+            name: "DebugBox",
+            components: {
+              Primitive: {
+                kind: "box",
+                size: [2, 1, 3],
+                color: "#ff8844",
+              },
             },
           },
         ],
@@ -57,10 +82,13 @@ test("instantiates project data into Three.js runtime objects", () => {
   const root = runtime.getObject(rootId);
   const camera = runtime.getObject(cameraId);
   const light = runtime.getObject(lightId);
+  const primitive = runtime.getObject(primitiveId);
 
   assert.ok(root instanceof THREE.Group);
   assert.ok(camera instanceof THREE.PerspectiveCamera);
   assert.ok(light instanceof THREE.DirectionalLight);
+  assert.ok(primitive instanceof THREE.Mesh);
+  assert.ok(primitive.geometry instanceof THREE.BoxGeometry);
 
   assert.equal(camera.parent, root);
   assert.deepEqual(root.position.toArray(), [4, 5, 6]);
@@ -68,11 +96,12 @@ test("instantiates project data into Three.js runtime objects", () => {
   assert.deepEqual(root.userData.kinetraModel, { assetId: "asset_hero" });
   assert.equal(runtime.scene.children.includes(root), true);
   assert.equal(runtime.scene.children.includes(light), true);
+  assert.equal(runtime.scene.children.includes(primitive), true);
 });
 
 test("dispose tears down runtime projection deterministically", () => {
   const runtime = ThreeSceneRuntime.instantiate(project(), sceneId);
-  assert.equal(runtime.objects().size, 3);
+  assert.equal(runtime.objects().size, 4);
 
   runtime.dispose();
 

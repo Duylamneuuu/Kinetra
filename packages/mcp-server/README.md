@@ -28,7 +28,7 @@ runtime.readLogs
 runtime.captureFrame
 ~~~
 
-The MCP layer does **not** mutate Three.js objects directly. Authoring tools mutate the text project through `@kinetra/command-bus`. `runtime.start` then instantiates a snapshot into the runtime model.
+The MCP layer does **not** mutate Three.js objects directly. Authoring tools mutate the text project through `@kinetra/command-bus`. `runtime.start` then instantiates a project snapshot into the selected runtime host.
 
 ## Stdio
 
@@ -38,16 +38,27 @@ Build the workspace, then point an MCP client at:
 node packages/mcp-server/dist/src/cli.js --project /absolute/path/game.kinetra.json
 ~~~
 
-or set:
+For real Electron rendering and PNG capture:
+
+~~~bash
+node packages/mcp-server/dist/src/cli.js \
+  --project /absolute/path/game.kinetra.json \
+  --runtime electron
+~~~
+
+Environment equivalents:
 
 ~~~text
 KINETRA_PROJECT=/absolute/path/game.kinetra.json
+KINETRA_RUNTIME=electron
 ~~~
 
-The stdio process writes protocol traffic to stdout and errors only to stderr.
+The MCP stdio process writes protocol traffic to stdout and errors only to stderr.
 
-## Runtime capture status
+## Runtime hosts
 
-P2 currently includes a local Three.js **scene-graph** runtime host that supports start/stop/state query/logs/semantic input. It intentionally does not fake a screenshot: `runtime.captureFrame` reports that raster capture is unavailable and returns structured fallback state.
+**local** is the portable default. It instantiates the Three.js scene graph in-process and supports structured state/log/input verification without a raster surface.
 
-A later P2 bridge connects the MCP service to the Electron/browser player so the same tool returns a real frame without changing the MCP contract.
+**electron** spawns the Kinetra player over a private JSONL stdio bridge. Project snapshots are rendered by the actual browser/Electron player; `runtime.captureFrame` uses Electron `webContents.capturePage()` and returns a real `image/png` MCP content item.
+
+No local network port or WebSocket server is required for the bridge.

@@ -7,12 +7,56 @@ import * as THREE from "three";
 
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 
+function makePrimitive(entity: EntityDefinition): THREE.Mesh | undefined {
+  const primitive = asObject(entity.components.Primitive);
+  if (!primitive) {
+    return undefined;
+  }
+
+  const kind = stringValue(primitive.kind, "box");
+  const color = new THREE.Color(stringValue(primitive.color, "#d9e6ff"));
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: numberValue(primitive.roughness, 0.6),
+    metalness: numberValue(primitive.metalness, 0),
+  });
+
+  switch (kind) {
+    case "box": {
+      const size = vec3Value(primitive.size, [1, 1, 1]);
+      return new THREE.Mesh(
+        new THREE.BoxGeometry(size[0], size[1], size[2]),
+        material,
+      );
+    }
+    case "sphere":
+      return new THREE.Mesh(
+        new THREE.SphereGeometry(numberValue(primitive.radius, 0.5), 24, 16),
+        material,
+      );
+    case "plane": {
+      const size = vec3Value(primitive.size, [1, 1, 1]);
+      return new THREE.Mesh(
+        new THREE.PlaneGeometry(size[0], size[1]),
+        material,
+      );
+    }
+    default:
+      material.dispose();
+      throw new Error(
+        `Unsupported Primitive.kind "${kind}" for entity "${entity.id}"`,
+      );
+  }
+}
+
 function makeObject(entity: EntityDefinition): THREE.Object3D {
   const camera = asObject(entity.components.Camera);
   if (camera) {
     const type = stringValue(camera.type, "perspective");
     if (type !== "perspective") {
-      throw new Error(`Unsupported Camera.type "${type}" for entity "${entity.id}"`);
+      throw new Error(
+        `Unsupported Camera.type "${type}" for entity "${entity.id}"`,
+      );
     }
 
     return new THREE.PerspectiveCamera(
@@ -37,11 +81,13 @@ function makeObject(entity: EntityDefinition): THREE.Object3D {
       case "directional":
         return new THREE.DirectionalLight(color, intensity);
       default:
-        throw new Error(`Unsupported Light.kind "${kind}" for entity "${entity.id}"`);
+        throw new Error(
+          `Unsupported Light.kind "${kind}" for entity "${entity.id}"`,
+        );
     }
   }
 
-  return new THREE.Group();
+  return makePrimitive(entity) ?? new THREE.Group();
 }
 
 function applyTransform(object: THREE.Object3D, entity: EntityDefinition): void {
@@ -72,6 +118,21 @@ function decorateObject(object: THREE.Object3D, entity: EntityDefinition): void 
   }
 }
 
+function disposeObjectResources(object: THREE.Object3D): void {
+  const mesh = object as THREE.Mesh;
+  if (mesh.isMesh) {
+    mesh.geometry?.dispose();
+
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+
+    for (const material of materials) {
+      material.dispose();
+    }
+  }
+}
+
 export class ThreeSceneRuntime {
   readonly scene = new THREE.Scene();
   readonly sceneId: string;
@@ -92,13 +153,17 @@ export class ThreeSceneRuntime {
     for (const entity of sceneDefinition.entities) {
       const object = this.#objects.get(entity.id);
       if (!object) {
-        throw new Error(`Runtime object missing for entity "${entity.id}"`);
+        throw new Error(
+          `Runtime object missing for entity "${entity.id}"`,
+        );
       }
 
       if (entity.parentId) {
         const parent = this.#objects.get(entity.parentId);
         if (!parent) {
-          throw new Error(`Runtime parent "${entity.parentId}" missing for "${entity.id}"`);
+          throw new Error(
+            `Runtime parent "${entity.parentId}" missing for "${entity.id}"`,
+          );
         }
         parent.add(object);
       } else {
@@ -107,7 +172,10 @@ export class ThreeSceneRuntime {
     }
   }
 
-  static instantiate(project: ProjectDocument, sceneId: string): ThreeSceneRuntime {
+  static instantiate(
+    project: ProjectDocument,
+    sceneId: string,
+  ): ThreeSceneRuntime {
     const scene = project.scenes.find((candidate) => candidate.id === sceneId);
     if (!scene) {
       throw new Error(`Scene "${sceneId}" does not exist`);
@@ -133,6 +201,7 @@ export class ThreeSceneRuntime {
     }
 
     for (const object of this.#objects.values()) {
+      disposeObjectResources(object);
       object.removeFromParent();
     }
 

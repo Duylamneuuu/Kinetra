@@ -21,6 +21,7 @@ await writeFile(
       productName: "KinetraGame",
       version: "0.0.0",
       private: true,
+      type: "module",
       main: "electron/main.js",
     },
     null,
