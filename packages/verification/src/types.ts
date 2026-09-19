@@ -40,6 +40,7 @@ export interface RuntimeProbeHost {
       rotation: [number, number, number];
       scale: [number, number, number];
     }>;
+    navigation?: Record<string, unknown>;
   }>;
   injectInput(event: {
     action: string;
@@ -60,6 +61,21 @@ export interface RuntimeProbeHost {
     data?: Record<string, unknown>;
   }>>;
   step?(steps?: number, deltaSeconds?: number): Promise<unknown>;
+  bakeNavigation?(params: {
+    positions?: number[];
+    indices?: number[];
+    config?: Record<string, unknown>;
+  }): Promise<unknown>;
+  loadNavigation?(params: { dataBase64: string }): Promise<unknown>;
+  closestPointNavigation?(params: {
+    position: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<unknown>;
+  computePathNavigation?(params: {
+    start: [number, number, number];
+    end: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<unknown>;
 }
 
 export interface RuntimeProbe {
@@ -73,12 +89,45 @@ export interface RuntimeProbe {
   captureFrame():Promise<Uint8Array>;
   metrics():Promise<RuntimeMetrics>;
   close?():Promise<void>;
+  bakeNavigation?(params: {
+    positions?: number[];
+    indices?: number[];
+    config?: Record<string, unknown>;
+  }): Promise<void>;
+  loadNavigation?(params: { dataBase64: string }): Promise<void>;
+  closestPointNavigation?(params: {
+    position: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<void>;
+  computePathNavigation?(params: {
+    start: [number, number, number];
+    end: [number, number, number];
+    halfExtents?: [number, number, number];
+  }): Promise<void>;
 }
 
 export type AcceptanceStep =
   | {type:"runtime.start";sceneId:string}
   | {type:"runtime.stop"}
   | {type:"runtime.step";steps?:number;deltaSeconds?:number}
+  | {
+      type: "navigation.bake";
+      positions?: number[];
+      indices?: number[];
+      config?: Record<string, unknown>;
+    }
+  | { type: "navigation.load"; dataBase64: string }
+  | {
+      type: "navigation.closestPoint";
+      position: [number, number, number];
+      halfExtents?: [number, number, number];
+    }
+  | {
+      type: "navigation.computePath";
+      start: [number, number, number];
+      end: [number, number, number];
+      halfExtents?: [number, number, number];
+    }
   | ({type:"input"}&RuntimeInput)
   | {type:"wait";milliseconds:number}
   | {type:"assert.equal";path:string;expected:unknown}

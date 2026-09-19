@@ -14,6 +14,7 @@
     "smoke:win": "node scripts/smoke-win.mjs"
   },
   "dependencies": {
+    "@kinetra/navigation-recast": "workspace:*",
     "@kinetra/physics-rapier": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "@kinetra/renderer-three": "workspace:*",
