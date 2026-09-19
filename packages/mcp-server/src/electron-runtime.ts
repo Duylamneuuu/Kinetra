@@ -51,7 +51,7 @@ function defaultElectronExecutable(): string {
 function defaultPlayerEntry(): string {
   return resolve(
     repositoryRoot(),
-    "apps/player/dist/electron/main.js",
+    "apps/player/dist/package",
   );
 }
 
@@ -162,13 +162,16 @@ export class ElectronRuntimeHost implements RuntimeHost {
       return;
     }
 
+    const electronEnv = { ...process.env };
+    delete electronEnv.ELECTRON_RUN_AS_NODE;
+
     const child = spawn(
       this.electronExecutable,
       [this.playerEntry, "--runtime-bridge-stdio"],
       {
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
-        env: { ...process.env },
+        env: electronEnv,
       },
     );
 
