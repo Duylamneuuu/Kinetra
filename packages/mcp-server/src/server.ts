@@ -35,7 +35,9 @@ async function safe<T>(operation: () => Promise<T> | T) {
 
 const jsonRecord = z.record(z.string(), z.unknown());
 
-export function createKinetraMcpServer(service: KinetraAgentService): McpServer {
+export function createKinetraMcpServer(
+  service: KinetraAgentService,
+): McpServer {
   const server = new McpServer({
     name: "kinetra",
     version: "0.0.0",
@@ -60,13 +62,15 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         sinceRevision: z.number().int().nonnegative().default(0),
       }),
     },
-    async ({ sinceRevision }) => safe(() => service.diffSince(sinceRevision)),
+    async ({ sinceRevision }) =>
+      safe(() => service.diffSince(sinceRevision)),
   );
 
   server.registerTool(
     "scene.query",
     {
-      description: "List scenes, optionally filtering by stable scene ID.",
+      description:
+        "List scenes, optionally filtering by stable scene ID.",
       inputSchema: z.object({
         id: z.string().optional(),
       }),
@@ -82,7 +86,11 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
       inputSchema: z.object({
         name: z.string().min(1),
         id: z.string().min(1).optional(),
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
         dryRun: z.boolean().optional(),
       }),
     },
@@ -92,9 +100,14 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
           name: input.name,
           ...(input.id !== undefined ? { id: input.id } : {}),
           ...(input.expectedProjectRevision !== undefined
-            ? { expectedProjectRevision: input.expectedProjectRevision }
+            ? {
+                expectedProjectRevision:
+                  input.expectedProjectRevision,
+              }
             : {}),
-          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+          ...(input.dryRun !== undefined
+            ? { dryRun: input.dryRun }
+            : {}),
         }),
       ),
   );
@@ -109,7 +122,10 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         ids: z.array(z.string()).max(500).optional(),
         component: z.string().optional(),
         nameContains: z.string().optional(),
-        selectComponents: z.array(z.string()).max(100).optional(),
+        selectComponents: z
+          .array(z.string())
+          .max(100)
+          .optional(),
         offset: z.number().int().nonnegative().optional(),
         limit: z.number().int().min(1).max(500).optional(),
       }),
@@ -117,17 +133,25 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     async (query) =>
       safe(() =>
         service.queryEntities({
-          ...(query.sceneId !== undefined ? { sceneId: query.sceneId } : {}),
+          ...(query.sceneId !== undefined
+            ? { sceneId: query.sceneId }
+            : {}),
           ...(query.ids !== undefined ? { ids: query.ids } : {}),
-          ...(query.component !== undefined ? { component: query.component } : {}),
+          ...(query.component !== undefined
+            ? { component: query.component }
+            : {}),
           ...(query.nameContains !== undefined
             ? { nameContains: query.nameContains }
             : {}),
           ...(query.selectComponents !== undefined
             ? { selectComponents: query.selectComponents }
             : {}),
-          ...(query.offset !== undefined ? { offset: query.offset } : {}),
-          ...(query.limit !== undefined ? { limit: query.limit } : {}),
+          ...(query.offset !== undefined
+            ? { offset: query.offset }
+            : {}),
+          ...(query.limit !== undefined
+            ? { limit: query.limit }
+            : {}),
         }),
       ),
   );
@@ -143,7 +167,11 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         id: z.string().min(1).optional(),
         parentId: z.string().min(1).optional(),
         components: jsonRecord.optional(),
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
         dryRun: z.boolean().optional(),
       }),
     },
@@ -153,14 +181,24 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
           sceneId: input.sceneId,
           name: input.name,
           ...(input.id !== undefined ? { id: input.id } : {}),
-          ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+          ...(input.parentId !== undefined
+            ? { parentId: input.parentId }
+            : {}),
           ...(input.components !== undefined
-            ? { components: input.components as ComponentMap }
+            ? {
+                components:
+                  input.components as ComponentMap,
+              }
             : {}),
           ...(input.expectedProjectRevision !== undefined
-            ? { expectedProjectRevision: input.expectedProjectRevision }
+            ? {
+                expectedProjectRevision:
+                  input.expectedProjectRevision,
+              }
             : {}),
-          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+          ...(input.dryRun !== undefined
+            ? { dryRun: input.dryRun }
+            : {}),
         }),
       ),
   );
@@ -174,7 +212,11 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         entityId: z.string().min(1),
         component: z.string().min(1),
         patch: jsonRecord,
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
         dryRun: z.boolean().optional(),
       }),
     },
@@ -185,9 +227,14 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
           component: input.component,
           patch: input.patch as JsonObject,
           ...(input.expectedProjectRevision !== undefined
-            ? { expectedProjectRevision: input.expectedProjectRevision }
+            ? {
+                expectedProjectRevision:
+                  input.expectedProjectRevision,
+              }
             : {}),
-          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+          ...(input.dryRun !== undefined
+            ? { dryRun: input.dryRun }
+            : {}),
         }),
       ),
   );
@@ -195,11 +242,16 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   server.registerTool(
     "entity.reparent",
     {
-      description: "Reparent an entity inside its scene through a validated command.",
+      description:
+        "Reparent an entity inside its scene through a validated command.",
       inputSchema: z.object({
         entityId: z.string().min(1),
         parentId: z.string().min(1).optional(),
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
         dryRun: z.boolean().optional(),
       }),
     },
@@ -207,11 +259,18 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
       safe(() =>
         service.reparentEntity({
           entityId: input.entityId,
-          ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
-          ...(input.expectedProjectRevision !== undefined
-            ? { expectedProjectRevision: input.expectedProjectRevision }
+          ...(input.parentId !== undefined
+            ? { parentId: input.parentId }
             : {}),
-          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? {
+                expectedProjectRevision:
+                  input.expectedProjectRevision,
+              }
+            : {}),
+          ...(input.dryRun !== undefined
+            ? { dryRun: input.dryRun }
+            : {}),
         }),
       ),
   );
@@ -224,7 +283,11 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
       inputSchema: z.object({
         entityId: z.string().min(1),
         cascade: z.boolean().optional(),
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
         dryRun: z.boolean().optional(),
       }),
     },
@@ -232,11 +295,18 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
       safe(() =>
         service.deleteEntity({
           entityId: input.entityId,
-          ...(input.cascade !== undefined ? { cascade: input.cascade } : {}),
-          ...(input.expectedProjectRevision !== undefined
-            ? { expectedProjectRevision: input.expectedProjectRevision }
+          ...(input.cascade !== undefined
+            ? { cascade: input.cascade }
             : {}),
-          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? {
+                expectedProjectRevision:
+                  input.expectedProjectRevision,
+              }
+            : {}),
+          ...(input.dryRun !== undefined
+            ? { dryRun: input.dryRun }
+            : {}),
         }),
       ),
   );
@@ -244,21 +314,28 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   server.registerTool(
     "project.undo",
     {
-      description: "Consume an undo token returned by a committed mutation.",
+      description:
+        "Consume an undo token returned by a committed mutation.",
       inputSchema: z.object({
         undoToken: z.string().min(1),
-        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        expectedProjectRevision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional(),
       }),
     },
     async ({ undoToken, expectedProjectRevision }) =>
-      safe(() => service.undo(undoToken, expectedProjectRevision)),
+      safe(() =>
+        service.undo(undoToken, expectedProjectRevision),
+      ),
   );
 
   server.registerTool(
     "runtime.start",
     {
       description:
-        "Instantiate the current project revision into the local Three.js scene-graph runtime.",
+        "Instantiate the current project revision into the selected runtime host.",
       inputSchema: z.object({
         sceneId: z.string().min(1),
       }),
@@ -273,7 +350,8 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   server.registerTool(
     "runtime.stop",
     {
-      description: "Stop and dispose the current local runtime projection.",
+      description:
+        "Stop and dispose the current runtime projection.",
       inputSchema: z.object({}),
     },
     async () =>
@@ -287,7 +365,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "runtime.query",
     {
       description:
-        "Inspect live scene-graph state for selected entities using stable entity IDs.",
+        "Inspect live runtime state for selected entities using stable entity IDs.",
       inputSchema: z.object({
         entityIds: z.array(z.string()).max(500).optional(),
       }),
@@ -295,7 +373,9 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     async (query) =>
       safe(() =>
         service.queryRuntime({
-          ...(query.entityIds !== undefined ? { entityIds: query.entityIds } : {}),
+          ...(query.entityIds !== undefined
+            ? { entityIds: query.entityIds }
+            : {}),
         }),
       ),
   );
@@ -304,11 +384,18 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "runtime.injectInput",
     {
       description:
-        "Inject a semantic gameplay action. The local P2 host records actions; gameplay systems consume them in later phases.",
+        "Inject a semantic gameplay action into the selected runtime host.",
       inputSchema: z.object({
         action: z.string().min(1),
-        phase: z.enum(["press", "release", "hold"]).default("press"),
-        value: z.union([z.number(), z.tuple([z.number(), z.number()])]).optional(),
+        phase: z
+          .enum(["press", "release", "hold"])
+          .default("press"),
+        value: z
+          .union([
+            z.number(),
+            z.tuple([z.number(), z.number()]),
+          ])
+          .optional(),
         durationMs: z.number().nonnegative().optional(),
       }),
     },
@@ -317,8 +404,12 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         await service.injectRuntimeInput({
           action: event.action,
           phase: event.phase,
-          ...(event.value !== undefined ? { value: event.value } : {}),
-          ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+          ...(event.value !== undefined
+            ? { value: event.value }
+            : {}),
+          ...(event.durationMs !== undefined
+            ? { durationMs: event.durationMs }
+            : {}),
         });
         return { accepted: true };
       }),
@@ -327,23 +418,68 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   server.registerTool(
     "runtime.readLogs",
     {
-      description: "Read structured runtime logs after a sequence cursor.",
+      description:
+        "Read structured runtime logs after a sequence cursor.",
       inputSchema: z.object({
-        sinceSequence: z.number().int().nonnegative().default(0),
+        sinceSequence: z
+          .number()
+          .int()
+          .nonnegative()
+          .default(0),
       }),
     },
     async ({ sinceSequence }) =>
-      safe(() => service.readRuntimeLogs(sinceSequence)),
+      safe(() =>
+        service.readRuntimeLogs(sinceSequence),
+      ),
   );
 
   server.registerTool(
     "runtime.captureFrame",
     {
       description:
-        "Capture the connected runtime frame. The local scene-graph host returns an explicit unavailable result plus structured fallback state until the Electron bridge lands.",
+        "Capture the connected runtime frame. Electron runtime returns a real PNG; local runtime returns explicit fallback state.",
       inputSchema: z.object({}),
     },
-    async () => safe(() => service.captureRuntimeFrame()),
+    async () => {
+      try {
+        const frame = await service.captureRuntimeFrame();
+
+        if (
+          frame.available &&
+          frame.base64 &&
+          frame.mimeType
+        ) {
+          return {
+            content: [
+              {
+                type: "image" as const,
+                data: frame.base64,
+                mimeType: frame.mimeType,
+              },
+              {
+                type: "text" as const,
+                text: JSON.stringify(
+                  {
+                    available: true,
+                    mimeType: frame.mimeType,
+                    bytesApprox: Math.floor(
+                      (frame.base64.length * 3) / 4,
+                    ),
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        return success(frame);
+      } catch (error) {
+        return failure(error);
+      }
+    },
   );
 
   return server;
