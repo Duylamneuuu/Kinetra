@@ -78,6 +78,22 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
     }
 
+    case "animation.play": {
+      const entityId = requireString(params.entityId, "entityId");
+      const clip = requireString(params.clip, "clip");
+      const loop = typeof params.loop === "boolean" ? params.loop : undefined;
+      const result = runtime.playAnimation(entityId, clip, {
+        ...(loop !== undefined ? { loop } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.stop": {
+      const entityId = requireString(params.entityId, "entityId");
+      runtime.stopAnimation(entityId);
+      return runtime.query();
+    }
+
     case "navigation.bake": {
       const positions = Array.isArray(params.positions)
         ? (params.positions as number[])

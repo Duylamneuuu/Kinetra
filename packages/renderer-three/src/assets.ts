@@ -15,11 +15,33 @@ export interface ModelBounds {
   size: [number, number, number];
 }
 
+export interface ClipMetadata {
+  name: string;
+  duration: number;
+}
+
+export interface ModelAnimationState {
+  clips: ClipMetadata[];
+  activeClip?: string;
+  playing: boolean;
+  time: number;
+  duration?: number;
+}
+
+export interface ModelNodeState {
+  name: string;
+  position: [number, number, number];
+  rotation?: [number, number, number, number];
+  scale?: [number, number, number];
+}
+
 export interface ModelMetadata {
   assetId: string;
   loaded: boolean;
   meshCount: number;
   nodeCount: number;
   bounds?: ModelBounds;
+  animation?: ModelAnimationState;
+  nodes?: ModelNodeState[];
   error?: string;
 }

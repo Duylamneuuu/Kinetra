@@ -20,7 +20,7 @@ Legend:
 | P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
-| P5 animation | CORE MERGED | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata/events and text animation-graph semantics are on main. Real skinned-mesh/AnimationMixer integration remains. |
+| P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
 | P6 complete-game contracts | CORE MERGED | Prefab overrides, script/scene lifecycle, named keyboard/gamepad input/remap, save migrations/settings storage and audio buses are on main. Full game UI/runtime integration remains. |
 | P7 physics/navigation/perf | SLICE 1 PROVEN | Rapier physics baseline proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, live transform sync. Navigation/Recast remains pending. |
 | P8 verification | CORE MERGED | Acceptance manifest/runner, semantic steps, structured state/log/metric checks, screenshot hash primitive and process-smoke primitive are on main. Runtime/MCP/package wiring remains. |
@@ -55,19 +55,31 @@ Not yet equivalent to a production importer:
 
 ### Animation
 
-What exists:
+What has meaningful proof:
 - semantic humanoid bone mapping;
 - skeleton signatures;
 - source->target retarget plan;
 - retarget cache key;
 - root-motion extraction policy;
-- text-backed graph/state-machine semantics.
+- text-backed graph/state-machine semantics;
+- programmatic synthetic animated GLB fixture generation (`createSyntheticAnimatedGlb`);
+- GLTF animation clip extraction via Three.js `GLTFLoader` in the Electron player runtime;
+- encapsulated `THREE.AnimationMixer` management in `ThreeSceneRuntime` behind semantic methods (`playAnimation`, `stopAnimation`, `updateAnimation`);
+- semantic command dispatch (`animation.play`, `animation.stop`) over named pipe bridge;
+- deterministic simulation advancement via `runtime.step` updating mixer and synchronizing internal node transforms;
+- truthful structured runtime state exposing `entity.model.animation` (`clips`, `activeClip`, `playing`, `time`, `duration`) and `entity.model.nodes` (`name`, `position`);
+- structured error log `animation.playFailed` on invalid clip requests without runtime crash;
+- resource cleanup and zero-leak teardown on scene stop and restart;
+- real AcceptanceRunner proof with real PNG frame capture in live Electron.
 
 Still missing:
 - actual Three.js `AnimationClip` retarget baking;
-- safe skinned-mesh clone lifecycle;
+- humanoid retargeting / Mixamo / skeleton mapping;
+- animation graph runtime and complex blend trees;
+- root-motion extraction driving character physics;
 - morph-target runtime;
-- complete blend/transition adapter.
+- complete blend/transition adapter;
+- safe skinned-mesh clone lifecycle.
 
 ### Complete-game contracts
 

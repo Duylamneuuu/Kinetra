@@ -217,6 +217,8 @@ async function handleBridgeRequest(
     case "runtime.readLogs":
     case "runtime.step":
     case "asset.register":
+    case "animation.play":
+    case "animation.stop":
     case "navigation.bake":
     case "navigation.load":
     case "navigation.closestPoint":

@@ -6,7 +6,7 @@ import type {
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import type { AssetResolver, ModelMetadata } from "./assets.js";
+import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 
 function makeObject(entity: EntityDefinition): THREE.Object3D {
@@ -151,6 +151,10 @@ export class ThreeSceneRuntime {
   readonly sceneId: string;
   #objects = new Map<string, THREE.Object3D>();
   #models = new Map<string, ModelMetadata>();
+  #modelScenes = new Map<string, THREE.Group>();
+  #mixers = new Map<string, THREE.AnimationMixer>();
+  #clips = new Map<string, THREE.AnimationClip[]>();
+  #activeActions = new Map<string, THREE.AnimationAction>();
   #disposed = false;
 
   private constructor(sceneDefinition: SceneDefinition) {
@@ -272,12 +276,12 @@ export class ThreeSceneRuntime {
               arrayBuffer = bytes.buffer;
             } else {
               const gltf = await loader.loadAsync(resolved);
-              this.#attachModel(object, gltf.scene, metadata);
+              this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
               continue;
             }
           } else {
             const gltf = await loader.loadAsync(resolved);
-            this.#attachModel(object, gltf.scene, metadata);
+            this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
             continue;
           }
         } else {
@@ -287,7 +291,7 @@ export class ThreeSceneRuntime {
         }
 
         const gltf = await loader.parseAsync(arrayBuffer, "");
-        this.#attachModel(object, gltf.scene, metadata);
+        this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
       } catch (error) {
         metadata.loaded = false;
         metadata.error = error instanceof Error ? error.message : String(error);
@@ -297,9 +301,138 @@ export class ThreeSceneRuntime {
     return this.#models;
   }
 
+  playAnimation(
+    entityId: string,
+    clipName: string,
+    options: { loop?: boolean } = {},
+  ): boolean {
+    if (this.#disposed) return false;
+    const mixer = this.#mixers.get(entityId);
+    const clips = this.#clips.get(entityId);
+    const metadata = this.#models.get(entityId);
+    if (!mixer || !clips || !metadata) {
+      return false;
+    }
+
+    const clip = clips.find((c) => c.name === clipName);
+    if (!clip) {
+      return false;
+    }
+
+    const existingAction = this.#activeActions.get(entityId);
+    if (existingAction) {
+      existingAction.stop();
+    }
+
+    const action = mixer.clipAction(clip);
+    action.reset();
+    const shouldLoop = options.loop !== false;
+    if (shouldLoop) {
+      action.loop = THREE.LoopRepeat;
+      action.clampWhenFinished = false;
+    } else {
+      action.loop = THREE.LoopOnce;
+      action.clampWhenFinished = true;
+    }
+    action.play();
+    this.#activeActions.set(entityId, action);
+
+    if (!metadata.animation) {
+      metadata.animation = {
+        clips: clips.map((c) => ({ name: c.name, duration: c.duration })),
+        activeClip: clipName,
+        playing: true,
+        time: 0,
+        duration: clip.duration,
+      };
+    } else {
+      metadata.animation.activeClip = clipName;
+      metadata.animation.playing = true;
+      metadata.animation.time = 0;
+      metadata.animation.duration = clip.duration;
+    }
+
+    return true;
+  }
+
+  stopAnimation(entityId: string): void {
+    const action = this.#activeActions.get(entityId);
+    if (action) {
+      action.stop();
+      this.#activeActions.delete(entityId);
+    }
+    const mixer = this.#mixers.get(entityId);
+    if (mixer) {
+      mixer.stopAllAction();
+    }
+    const metadata = this.#models.get(entityId);
+    if (metadata?.animation) {
+      metadata.animation.playing = false;
+      metadata.animation.time = 0;
+      delete metadata.animation.activeClip;
+      delete metadata.animation.duration;
+    }
+    const modelScene = this.#modelScenes.get(entityId);
+    if (metadata && modelScene) {
+      metadata.nodes = this.#extractNodeStates(modelScene);
+    }
+  }
+
+  updateAnimation(deltaSeconds: number): void {
+    if (this.#disposed || deltaSeconds <= 0) return;
+
+    for (const [entityId, mixer] of this.#mixers) {
+      mixer.update(deltaSeconds);
+
+      const metadata = this.#models.get(entityId);
+      const action = this.#activeActions.get(entityId);
+      const modelScene = this.#modelScenes.get(entityId);
+
+      if (metadata && modelScene) {
+        metadata.nodes = this.#extractNodeStates(modelScene);
+
+        const box = new THREE.Box3().setFromObject(modelScene);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        metadata.bounds = {
+          min: [box.min.x, box.min.y, box.min.z],
+          max: [box.max.x, box.max.y, box.max.z],
+          size: [size.x, size.y, size.z],
+        };
+
+        if (metadata.animation && action) {
+          metadata.animation.time = action.time;
+          metadata.animation.playing = action.isRunning();
+        }
+      }
+    }
+  }
+
+  #extractNodeStates(modelScene: THREE.Group): ModelNodeState[] {
+    const nodes: ModelNodeState[] = [];
+    modelScene.traverse((child) => {
+      if (child !== modelScene) {
+        nodes.push({
+          name: child.name,
+          position: [child.position.x, child.position.y, child.position.z],
+          rotation: [
+            child.quaternion.x,
+            child.quaternion.y,
+            child.quaternion.z,
+            child.quaternion.w,
+          ],
+          scale: [child.scale.x, child.scale.y, child.scale.z],
+        });
+      }
+    });
+    return nodes;
+  }
+
   #attachModel(
+    entityId: string,
     object: THREE.Object3D,
     modelScene: THREE.Group,
+    animations: THREE.AnimationClip[],
     metadata: ModelMetadata,
   ): void {
     let meshCount = 0;
@@ -324,9 +457,26 @@ export class ThreeSceneRuntime {
       max: [box.max.x, box.max.y, box.max.z],
       size: [size.x, size.y, size.z],
     };
+    metadata.nodes = this.#extractNodeStates(modelScene);
+
+    if (animations.length > 0) {
+      const mixer = new THREE.AnimationMixer(modelScene);
+      this.#mixers.set(entityId, mixer);
+      this.#clips.set(entityId, animations);
+      metadata.animation = {
+        clips: animations.map((clip) => ({
+          name: clip.name,
+          duration: clip.duration,
+        })),
+        playing: false,
+        time: 0,
+      };
+    }
+
     delete metadata.error;
 
     modelScene.name = `${object.name}:Model`;
+    this.#modelScenes.set(entityId, modelScene);
     object.add(modelScene);
   }
 
@@ -334,6 +484,28 @@ export class ThreeSceneRuntime {
     if (this.#disposed) {
       return;
     }
+
+    for (const action of this.#activeActions.values()) {
+      action.stop();
+    }
+    this.#activeActions.clear();
+
+    for (const [entityId, mixer] of this.#mixers) {
+      mixer.stopAllAction();
+      const modelScene = this.#modelScenes.get(entityId);
+      if (modelScene) {
+        mixer.uncacheRoot(modelScene);
+      }
+      const clips = this.#clips.get(entityId);
+      if (clips) {
+        for (const clip of clips) {
+          mixer.uncacheClip(clip);
+        }
+      }
+    }
+    this.#mixers.clear();
+    this.#clips.clear();
+    this.#modelScenes.clear();
 
     for (const object of this.#objects.values()) {
       disposeObjectResources(object);

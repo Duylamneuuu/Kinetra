@@ -77,6 +77,18 @@ async function executeStep(
         });
       }
       return;
+    case "animation.play":
+      if (typeof probe.playAnimation === "function") {
+        await probe.playAnimation(step.entityId, step.clip, {
+          ...(step.loop !== undefined ? { loop: step.loop } : {}),
+        });
+      }
+      return;
+    case "animation.stop":
+      if (typeof probe.stopAnimation === "function") {
+        await probe.stopAnimation(step.entityId);
+      }
+      return;
     case "navigation.load":
       if (typeof probe.loadNavigation === "function") {
         await probe.loadNavigation({
