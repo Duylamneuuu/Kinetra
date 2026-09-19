@@ -1,0 +1,36 @@
+{
+  "name": "@kinetra/editor",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build:web": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "assemble": "node scripts/assemble.mjs",
+    "build": "pnpm build:web && pnpm build:electron && pnpm assemble",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "node --test dist-test/session.test.js",
+    "build:test": "tsc -p tsconfig.test.json",
+    "smoke:win": "node scripts/smoke-win.mjs"
+  },
+  "dependencies": {
+    "@kinetra/command-bus": "workspace:*",
+    "@kinetra/project-model": "workspace:*",
+    "@kinetra/renderer-three": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.1.16",
+    "@types/react-dom": "^19.1.9",
+    "@types/three": "0.180.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "38.0.0",
+    "vite": "^7.1.0"
+  }
+}
