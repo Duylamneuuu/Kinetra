@@ -196,41 +196,49 @@ export class ElectronRuntimeHost
 
   async close(): Promise<void> {
     const child = this.#child;
+    const socket = this.#socket;
+    const server = this.#server;
 
-    if (child) {
+    // Runtime stop is polite, but teardown must never be hostage to a broken renderer.
+    if (child && socket && !socket.destroyed) {
       try {
-        await this.#request(
-          "runtime.stop",
-          {},
-        );
+        await Promise.race([
+          this.#request("runtime.stop", {}),
+          new Promise<void>((resolveTimeout) =>
+            setTimeout(resolveTimeout, 1_000),
+          ),
+        ]);
       } catch {
-        // Teardown below is authoritative.
+        // Hard teardown below is authoritative.
       }
     }
 
-    this.#socket?.destroy();
     this.#socket = undefined;
+    socket?.destroy();
 
-    await new Promise<void>((resolveClose) => {
-      if (!this.#server) {
-        resolveClose();
-        return;
-      }
+    this.#server = undefined;
+    if (server) {
+      await Promise.race([
+        new Promise<void>((resolveClose) => {
+          server.close(() => resolveClose());
+        }),
+        new Promise<void>((resolveTimeout) =>
+          setTimeout(resolveTimeout, 1_000),
+        ),
+      ]);
+    }
 
-      const server = this.#server;
-      this.#server = undefined;
-      server.close(() => resolveClose());
-    });
-
-    if (child) {
-      this.#child = undefined;
+    this.#child = undefined;
+    if (child && !child.killed) {
       child.kill();
     }
 
+    this.#readyPromise = undefined;
+    this.#resolveReady = undefined;
+    this.#rejectReady = undefined;
+
     this.#rejectAllPending(
-      new Error(
-        "Electron runtime bridge closed",
-      ),
+      new Error("Electron runtime bridge closed"),
     );
   }
 
