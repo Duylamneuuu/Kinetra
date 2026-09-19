@@ -1,11 +1,20 @@
 import { Document, NodeIO } from "@gltf-transform/core";
 
+export interface SyntheticGlbAnimationOptions {
+  clipName?: string;
+  duration?: number;
+  property?: "translation" | "rotation" | "scale";
+  from?: [number, number, number];
+  to?: [number, number, number];
+}
+
 export interface SyntheticGlbOptions {
   meshName?: string;
   nodeName?: string;
   materialName?: string;
   size?: [number, number, number];
   color?: [number, number, number, number];
+  animation?: SyntheticGlbAnimationOptions;
 }
 
 /**
@@ -86,6 +95,79 @@ export async function createSyntheticGlb(
 
   scene.addChild(node);
 
+  if (options.animation) {
+    const clipName = options.animation.clipName ?? "MoveX";
+    const duration = options.animation.duration ?? 1.0;
+    const property = options.animation.property ?? "translation";
+    const from = options.animation.from ?? [0, 0, 0];
+    const to = options.animation.to ?? [1, 0, 0];
+
+    const inputAccessor = doc
+      .createAccessor(`${clipName}_times`)
+      .setType("SCALAR")
+      .setArray(new Float32Array([0.0, duration]))
+      .setBuffer(buffer);
+
+    const outputAccessor = doc
+      .createAccessor(`${clipName}_values`)
+      .setType("VEC3")
+      .setArray(new Float32Array([
+        from[0], from[1], from[2],
+        to[0], to[1], to[2],
+      ]))
+      .setBuffer(buffer);
+
+    const sampler = doc
+      .createAnimationSampler()
+      .setInput(inputAccessor)
+      .setOutput(outputAccessor)
+      .setInterpolation("LINEAR");
+
+    const channel = doc
+      .createAnimationChannel()
+      .setTargetPath(property)
+      .setTargetNode(node)
+      .setSampler(sampler);
+
+    doc.createAnimation(clipName)
+      .addSampler(sampler)
+      .addChannel(channel);
+  }
+
   const io = new NodeIO();
   return io.writeBinary(doc);
 }
+
+/**
+ * Creates a deterministic, valid glTF 2.0 binary (GLB) with a named animation clip.
+ * Default: "AnimatedBoxNode", "AnimatedBoxMesh", clip "MoveX" (1.0s, X translation 0 -> 1).
+ */
+export async function createSyntheticAnimatedGlb(
+  options: {
+    meshName?: string;
+    nodeName?: string;
+    materialName?: string;
+    clipName?: string;
+    duration?: number;
+    from?: [number, number, number];
+    to?: [number, number, number];
+    size?: [number, number, number];
+    color?: [number, number, number, number];
+  } = {},
+): Promise<Uint8Array> {
+  return createSyntheticGlb({
+    meshName: options.meshName ?? "AnimatedBoxMesh",
+    nodeName: options.nodeName ?? "AnimatedBoxNode",
+    materialName: options.materialName ?? "AnimatedBoxMaterial",
+    ...(options.size !== undefined ? { size: options.size } : {}),
+    ...(options.color !== undefined ? { color: options.color } : {}),
+    animation: {
+      clipName: options.clipName ?? "MoveX",
+      duration: options.duration ?? 1.0,
+      property: "translation",
+      from: options.from ?? [0, 0, 0],
+      to: options.to ?? [1, 0, 0],
+    },
+  });
+}
+

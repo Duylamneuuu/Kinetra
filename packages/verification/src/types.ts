@@ -55,6 +55,19 @@ export interface RuntimeProbeHost {
           max: [number, number, number];
           size: [number, number, number];
         };
+        animation?: {
+          clips: Array<{ name: string; duration: number }>;
+          activeClip?: string;
+          playing: boolean;
+          time: number;
+          duration?: number;
+        };
+        nodes?: Array<{
+          name: string;
+          position: [number, number, number];
+          rotation?: [number, number, number, number];
+          scale?: [number, number, number];
+        }>;
         error?: string;
       };
     }>;
@@ -94,6 +107,8 @@ export interface RuntimeProbeHost {
     end: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<unknown>;
+  playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
+  stopAnimation?(entityId: string): Promise<unknown>;
 }
 
 export interface RuntimeProbe {
@@ -123,6 +138,8 @@ export interface RuntimeProbe {
     end: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void>;
+  playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<void>;
+  stopAnimation?(entityId: string): Promise<void>;
 }
 
 export type AcceptanceStep =
@@ -130,6 +147,8 @@ export type AcceptanceStep =
   | { type: "runtime.stop" }
   | { type: "runtime.step"; steps?: number; deltaSeconds?: number }
   | { type: "asset.register"; assetId: string; dataBase64: string }
+  | { type: "animation.play"; entityId: string; clip: string; loop?: boolean }
+  | { type: "animation.stop"; entityId: string }
   | {
       type: "navigation.bake";
       positions?: number[];

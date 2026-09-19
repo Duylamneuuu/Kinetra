@@ -60,6 +60,8 @@ export interface RuntimeHost {
   readLogs(sinceSequence?: number): Promise<RuntimeLogEntry[]>;
   step?(steps?: number, deltaSeconds?: number): Promise<RuntimeQueryResult>;
   registerAsset?(assetId: string, dataBase64: string): Promise<void>;
+  playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
+  stopAnimation?(entityId: string): Promise<unknown>;
 }
 
 export class LocalRuntimeHost implements RuntimeHost {

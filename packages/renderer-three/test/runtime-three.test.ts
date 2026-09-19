@@ -187,3 +187,77 @@ test("handles unresolvable assetId with structured error metadata", async () => 
 
   runtime.dispose();
 });
+
+test("loads animated GLTF, discovers clips, plays, deterministically advances, stops, and handles invalid clips", async () => {
+  const { createSyntheticAnimatedGlb } = await import("@kinetra/asset-pipeline");
+  const glbBytes = await createSyntheticAnimatedGlb({
+    meshName: "HeroMesh",
+    nodeName: "AnimatedBoxNode",
+    clipName: "MoveX",
+    duration: 1.0,
+    from: [0, 0, 0],
+    to: [1, 0, 0],
+  });
+
+  const resolver = {
+    resolve(assetId: string) {
+      if (assetId === "asset_hero") {
+        return glbBytes;
+      }
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  const metadata = runtime.getModelMetadata(rootId);
+  assert.ok(metadata);
+  assert.equal(metadata.loaded, true);
+  assert.ok(metadata.animation);
+  assert.equal(metadata.animation.clips.length, 1);
+  assert.equal(metadata.animation.clips[0]!.name, "MoveX");
+  assert.equal(metadata.animation.clips[0]!.duration, 1.0);
+  assert.equal(metadata.animation.playing, false);
+
+  // Missing clip returns false
+  const invalidResult = runtime.playAnimation(rootId, "DOES_NOT_EXIST");
+  assert.equal(invalidResult, false);
+  assert.equal(metadata.animation.playing, false);
+
+  // Valid clip starts
+  const playResult = runtime.playAnimation(rootId, "MoveX", { loop: false });
+  assert.equal(playResult, true);
+  assert.equal(metadata.animation.playing, true);
+  assert.equal(metadata.animation.activeClip, "MoveX");
+
+  // Initial node position
+  const initialNode = metadata.nodes?.find((n) => n.name === "AnimatedBoxNode");
+  assert.ok(initialNode);
+  assert.equal(initialNode.position[0], 0);
+
+  // Step 0.5s
+  runtime.updateAnimation(0.5);
+  assert.equal(metadata.animation.time, 0.5);
+  assert.equal(metadata.animation.playing, true);
+  const midNode = metadata.nodes?.find((n) => n.name === "AnimatedBoxNode");
+  assert.ok(midNode);
+  assert.ok(Math.abs(midNode.position[0] - 0.5) < 0.001);
+
+  // Step another 0.5s -> reaches end
+  runtime.updateAnimation(0.5);
+  assert.equal(metadata.animation.time, 1.0);
+  const endNode = metadata.nodes?.find((n) => n.name === "AnimatedBoxNode");
+  assert.ok(endNode);
+  assert.ok(Math.abs(endNode.position[0] - 1.0) < 0.001);
+
+  // Stop animation
+  runtime.stopAnimation(rootId);
+  assert.equal(metadata.animation.playing, false);
+
+  // Dispose cleanly
+  runtime.dispose();
+  assert.equal(runtime.disposed, true);
+});
+

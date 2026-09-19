@@ -154,6 +154,24 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
   }
 
+  async playAnimation(
+    entityId: string,
+    clip: string,
+    options?: { loop?: boolean },
+  ): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("animation.play", {
+      entityId,
+      clip,
+      ...(options?.loop !== undefined ? { loop: options.loop } : {}),
+    });
+  }
+
+  async stopAnimation(entityId: string): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("animation.stop", { entityId });
+  }
+
   async bakeNavigation(params: {
     positions?: number[];
     indices?: number[];

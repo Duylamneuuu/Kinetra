@@ -102,3 +102,28 @@ test("creates deterministic synthetic GLB with valid v2 header and non-empty pay
   assert.equal(header.version, 2);
   assert.equal(header.length, bytes.byteLength);
 });
+
+test("creates deterministic synthetic animated GLB with animation clip", async () => {
+  const { createSyntheticAnimatedGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticAnimatedGlb({
+    clipName: "MoveX",
+    duration: 1.0,
+  });
+
+  assert.ok(bytes.byteLength > 100);
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.version, 2);
+
+  const io = new NodeIO();
+  const doc = await io.readBinary(bytes);
+  const animations = doc.getRoot().listAnimations();
+  assert.equal(animations.length, 1);
+  assert.equal(animations[0]!.getName(), "MoveX");
+
+  const channels = animations[0]!.listChannels();
+  assert.equal(channels.length, 1);
+  assert.equal(channels[0]!.getTargetPath(), "translation");
+  assert.equal(channels[0]!.getTargetNode()!.getName(), "AnimatedBoxNode");
+});
+

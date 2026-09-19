@@ -23,6 +23,21 @@ export interface PlayerRuntimeQuery {
   entityIds?: string[];
 }
 
+export interface PlayerRuntimeModelAnimationState {
+  clips: Array<{ name: string; duration: number }>;
+  activeClip?: string;
+  playing: boolean;
+  time: number;
+  duration?: number;
+}
+
+export interface PlayerRuntimeModelNodeState {
+  name: string;
+  position: [number, number, number];
+  rotation?: [number, number, number, number];
+  scale?: [number, number, number];
+}
+
 export interface PlayerRuntimeModelState {
   assetId: string;
   loaded: boolean;
@@ -33,6 +48,8 @@ export interface PlayerRuntimeModelState {
     max: [number, number, number];
     size: [number, number, number];
   };
+  animation?: PlayerRuntimeModelAnimationState;
+  nodes?: PlayerRuntimeModelNodeState[];
   error?: string;
 }
 
@@ -353,6 +370,52 @@ export class PlayerRuntimeController {
     return pathState;
   }
 
+  playAnimation(
+    entityId: string,
+    clipName: string,
+    options: { loop?: boolean } = {},
+  ): { success: boolean; error?: string } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const object = this.#runtime.getObject(entityId);
+    if (!object) {
+      const error = `Entity "${entityId}" does not exist in runtime`;
+      this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const modelMeta = this.#runtime.getModelMetadata(entityId);
+    if (!modelMeta || !modelMeta.loaded) {
+      const error = `Entity "${entityId}" has no loaded model`;
+      this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const success = this.#runtime.playAnimation(entityId, clipName, options);
+    if (!success) {
+      const error = `Clip "${clipName}" not found on entity "${entityId}"`;
+      this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    this.#log("info", "animation.played", {
+      entityId,
+      clip: clipName,
+      loop: options.loop !== false,
+    });
+    return { success: true };
+  }
+
+  stopAnimation(entityId: string): void {
+    if (!this.#runtime) return;
+    this.#runtime.stopAnimation(entityId);
+    this.#log("info", "animation.stopped", { entityId });
+  }
+
   query(query: PlayerRuntimeQuery = {}): PlayerRuntimeQueryResult {
     if (!this.#runtime) {
       return { running: false, entities: [] };
@@ -389,6 +452,8 @@ export class PlayerRuntimeController {
                 meshCount: modelMeta.meshCount,
                 nodeCount: modelMeta.nodeCount,
                 ...(modelMeta.bounds ? { bounds: modelMeta.bounds } : {}),
+                ...(modelMeta.animation ? { animation: modelMeta.animation } : {}),
+                ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),
                 ...(modelMeta.error ? { error: modelMeta.error } : {}),
               },
             }
@@ -481,6 +546,9 @@ export class PlayerRuntimeController {
       }
       this.#syncTransformsFromPhysics();
     }
+    if (this.#runtime) {
+      this.#runtime.updateAnimation(steps * fixedDeltaSeconds);
+    }
     this.renderOnce();
   }
 
@@ -515,6 +583,9 @@ export class PlayerRuntimeController {
     if (this.#physics) {
       this.#physics.advance(deltaSeconds);
       this.#syncTransformsFromPhysics();
+    }
+    if (this.#runtime) {
+      this.#runtime.updateAnimation(deltaSeconds);
     }
     this.renderOnce();
   }
