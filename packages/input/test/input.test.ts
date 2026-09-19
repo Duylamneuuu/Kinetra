@@ -19,7 +19,7 @@ const map:InputMap={
 test("named actions unify keyboard and gamepad",()=>{
   const router=new InputRouter(map);
   assert.equal(router.value("move.forward",{keys:new Set(["KeyW"]),gamepadButtons:[],gamepadAxes:[]}),1);
-  assert.equal(router.value("move.forward",{keys:new Set(),gamepadButtons:[],gamepadAxes:[-0.8]}),0.8);
+  assert.equal(router.value("move.forward",{keys:new Set(),gamepadButtons:[],gamepadAxes:[0,-0.8]}),0.8);
   assert.equal(router.value("jump",{keys:new Set(),gamepadButtons:[1],gamepadAxes:[]}),1);
 });
 
