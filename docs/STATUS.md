@@ -17,7 +17,7 @@ Legend:
 | P0 Three.js projection | DONE | Minimal runtime projection exists without making Three.js authoritative. |
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
-| P2 AI-native runtime bridge | WIP | MCP/service baseline exists, but real Electron runtime bridge/frame capture is in PR #29 and must be revalidated before merge. |
+| P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | CORE MERGED | Asset DB/hash/dependency/diagnostic core and CI-proven headless Blender -> GLB fixture are on main. Full hot-reimport/thumbnail/compression policy is not finished. |
 | P5 animation | CORE MERGED | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata/events and text animation-graph semantics are on main. Real skinned-mesh/AnimationMixer integration remains. |
@@ -87,21 +87,32 @@ What exists:
 - exact screenshot hash primitive;
 - process smoke runner.
 
-Still missing:
 - real runtime probe adapter;
 - MCP `test.runAcceptance`;
 - packaged-game acceptance wiring;
 - optional perceptual/AI visual critique.
 
+### Runtime bridge (P2)
+
+What has meaningful proof:
+- Electron player runtime controlled over Windows named pipes (`ElectronRuntimeHost`);
+- handshake synchronization (document load + renderer ready via `.cts` preload script);
+- project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
+- live structured entity query and semantic input injection (`runtime.injectInput`);
+- structured runtime log recording;
+- real non-empty PNG frame capture via `webContents.capturePage()`;
+- clean teardown without leaked Electron processes or dangling pipe sockets;
+- packaged Windows executable (`KinetraGame.exe`) smoke test and runtime bridge compatibility.
+
+What remains:
+- connecting P8 verification runner to live `ElectronRuntimeHost`;
+- complex model/mesh loading through asset pipeline into player runtime.
+
 ## Open implementation references
 
 ### PR #29 — P2 Electron runtime bridge
 
-Keep as a reference. Before merging, prove:
-- Windows test terminates reliably;
-- start/query/input/frame/log round-trip works;
-- no hidden dev-only path;
-- packaged smoke remains green.
+Superseded by `feat/p2-real-runtime-bridge`. Proven on Windows with deterministic tests, real PNG capture, and clean teardown. Safe to close after branch review.
 
 ### PR #26 — P7 Rapier/Recast
 

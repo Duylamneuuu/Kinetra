@@ -7,5 +7,14 @@ declare global {
       getWindowState(): Promise<{ fullscreen: boolean }>;
       getUserDataPath(): Promise<string>;
     };
+    kinetraRuntimeBridge?: {
+      onCommand(
+        handler: (request: {
+          id: string;
+          method: string;
+          params?: unknown;
+        }) => Promise<unknown>,
+      ): void;
+    };
   }
 }

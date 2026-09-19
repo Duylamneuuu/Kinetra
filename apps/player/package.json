@@ -14,6 +14,8 @@
     "smoke:win": "node scripts/smoke-win.mjs"
   },
   "dependencies": {
+    "@kinetra/project-model": "workspace:*",
+    "@kinetra/renderer-three": "workspace:*",
     "three": "0.180.0"
   },
   "devDependencies": {
