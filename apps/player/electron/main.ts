@@ -46,7 +46,25 @@ let mainWindow: BrowserWindow | null = null;
 let smokeFinished = false;
 let rendererRequestCounter = 0;
 let bridgeSocket: Socket | undefined;
+let documentLoaded = false;
+let rendererReady = false;
+let bridgeReadyEmitted = false;
 const rendererPending = new Map<string, PendingRendererRequest>();
+
+function maybeEmitBridgeReady(): void {
+  if (
+    !runtimeBridgeMode ||
+    bridgeReadyEmitted ||
+    !documentLoaded ||
+    !rendererReady ||
+    (runtimeBridgePipe && (!bridgeSocket || bridgeSocket.destroyed))
+  ) {
+    return;
+  }
+
+  bridgeReadyEmitted = true;
+  bridgeWrite({ type: "event", event: "ready" });
+}
 
 function bridgeWrite(value: unknown): void {
   const line = `${JSON.stringify(value)}\n`;
@@ -107,8 +125,10 @@ function createWindow(): BrowserWindow {
   );
 
   window.webContents.once("did-finish-load", () => {
+    documentLoaded = true;
+
     if (runtimeBridgeMode) {
-      bridgeWrite({ type: "event", event: "ready" });
+      maybeEmitBridgeReady();
       return;
     }
 
@@ -152,6 +172,15 @@ function callRenderer(
     );
   });
 }
+
+ipcMain.on("kinetra:runtime:renderer-ready", (event) => {
+  if (event.sender !== mainWindow?.webContents) {
+    return;
+  }
+
+  rendererReady = true;
+  maybeEmitBridgeReady();
+});
 
 ipcMain.on(
   "kinetra:runtime:response",
@@ -329,6 +358,7 @@ function startRuntimeBridge(): Promise<void> {
         () => {
           bridgeSocket = socket;
           attachBridgeInput(socket, true);
+          maybeEmitBridgeReady();
           resolve();
         },
       );
