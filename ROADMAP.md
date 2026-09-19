@@ -2,12 +2,20 @@
 
 Kinetra's roadmap is ordered by dependency and proof, not by editor spectacle.
 
+> **Status note (2026-09-19):** This file describes intended phases. It is not the implementation source of truth. Read [docs/STATUS.md](./docs/STATUS.md) before coding.
+
+## Current checkpoint
+
+- P0 and P1 foundation gates were completed.
+- P4, P5, P6 and P8 have meaningful **core** work merged, but their full production gates are still broader than the merged core.
+- P2, P3, P7 and P9 have WIP/experimental branches or PRs that should not be assumed merge-ready.
+- P10 should not begin until the real runtime/verification path is consolidated.
+
 ## Phase 0 — Runtime contracts
 
 **Goal:** establish the architecture that every later system depends on.
 
 Deliverables:
-
 - monorepo boundaries;
 - project schema/versioning;
 - stable IDs;
@@ -27,7 +35,6 @@ Deliverables:
 ## Phase 1 — Windows build spike
 
 Deliverables:
-
 - minimal Vite player build;
 - Electron game shell;
 - fullscreen/window modes;
@@ -40,7 +47,6 @@ Deliverables:
 ## Phase 2 — AI-native vertical slice
 
 Deliverables:
-
 - MCP server;
 - scene/entity/component queries;
 - typed mutation tools;
@@ -55,7 +61,6 @@ Deliverables:
 ## Phase 3 — Observer editor MVP
 
 Deliverables:
-
 - Electron/React editor;
 - viewport;
 - hierarchy;
@@ -72,24 +77,22 @@ Deliverables:
 ## Phase 4 — Production asset pipeline
 
 Deliverables:
-
 - asset IDs/database;
 - source/imported/generated separation;
-- Blender→GLB recipes;
+- Blender->GLB recipes;
 - validation;
 - thumbnails/previews;
 - dependency graph;
 - hashes/cache;
 - hot reimport;
-- glTF-Transform optimization;
-- Meshopt/Draco/KTX2 policies.
+- glTF processing/optimization policy;
+- compression/texture policy.
 
 **Gate:** modifying a source Blender file causes deterministic, validated reimport and only invalidates dependent artifacts.
 
 ## Phase 5 — Character and animation
 
 Deliverables:
-
 - skinned mesh lifecycle;
 - skeleton signatures/profiles;
 - safe cloning;
@@ -107,7 +110,6 @@ Deliverables:
 ## Phase 6 — Core game systems
 
 Deliverables:
-
 - prefabs + overrides;
 - script lifecycle;
 - named input actions/axes;
@@ -123,7 +125,6 @@ Deliverables:
 ## Phase 7 — Physics, navigation and performance
 
 Deliverables:
-
 - Rapier rigid bodies/colliders;
 - authoritative character motor;
 - collision layers;
@@ -138,7 +139,6 @@ Deliverables:
 ## Phase 8 — Verification platform
 
 Deliverables:
-
 - acceptance manifest;
 - deterministic runtime scenarios;
 - semantic player bot;
@@ -154,7 +154,6 @@ Deliverables:
 ## Phase 9 — Distribution
 
 Deliverables:
-
 - release packaging;
 - installer/portable layouts;
 - code-signing hooks;
@@ -169,7 +168,6 @@ Deliverables:
 Target: a deliberately modest 20–40 minute single-player 3D action/adventure slice.
 
 It must force the engine to prove:
-
 - boot/main menu;
 - animated 3D player;
 - camera/physics;
