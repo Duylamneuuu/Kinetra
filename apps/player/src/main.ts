@@ -10,6 +10,8 @@ if (!canvas || !status || !fullscreenButton) {
   throw new Error("Kinetra player bootstrap DOM is incomplete");
 }
 
+const statusElement = status;
+
 // This raw scene exists only to prove the desktop packaging path.
 // Game authoring remains command/project-model driven; P2+ will feed runtime scenes here.
 const renderer = new THREE.WebGLRenderer({
@@ -69,7 +71,7 @@ requestAnimationFrame(frame);
 
 async function updatePlatformStatus(): Promise<void> {
   if (!window.kinetraPlatform) {
-    status.textContent = "browser runtime";
+    statusElement.textContent = "browser runtime";
     return;
   }
 
@@ -78,7 +80,7 @@ async function updatePlatformStatus(): Promise<void> {
     window.kinetraPlatform.getUserDataPath(),
   ]);
 
-  status.textContent = `desktop · ${state.fullscreen ? "fullscreen" : "windowed"} · save root: ${saveRoot}`;
+  statusElement.textContent = `desktop · ${state.fullscreen ? "fullscreen" : "windowed"} · save root: ${saveRoot}`;
 }
 
 fullscreenButton.addEventListener("click", async () => {
