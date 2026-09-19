@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const policy = JSON.parse(
   await readFile(new URL("../.kinetra/license-policy.json", import.meta.url), "utf8"),
@@ -63,7 +64,7 @@ async function collectPackageJsonFiles(root) {
   return results;
 }
 
-const storeRoot = new URL("../node_modules/.pnpm/", import.meta.url);
+const storeRoot = fileURLToPath(new URL("../node_modules/.pnpm/", import.meta.url));
 
 let packageFiles;
 try {
