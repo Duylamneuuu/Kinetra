@@ -7,13 +7,6 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  assertValidProject,
-  parseProject,
-  serializeProject,
-  type ProjectDocument,
-} from "@kinetra/project-model";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const smokeTest = process.argv.includes("--smoke-test");
@@ -35,8 +28,8 @@ const projectPath = projectPathRaw
   ? resolve(projectPathRaw)
   : null;
 
-function demoProject(): ProjectDocument {
-  return {
+const demoProjectText = `${JSON.stringify(
+  {
     schemaVersion: 1,
     projectId: "project_editor_demo",
     name: "Kinetra Editor Demo",
@@ -64,27 +57,31 @@ function demoProject(): ProjectDocument {
         ],
       },
     ],
-  };
-}
+  },
+  null,
+  2,
+)}\n`;
 
-async function loadProject(): Promise<ProjectDocument> {
+async function loadProjectText(): Promise<string> {
   if (!projectPath) {
-    return demoProject();
+    return demoProjectText;
   }
 
-  return parseProject(await readFile(projectPath, "utf8"));
+  return readFile(projectPath, "utf8");
 }
 
-async function saveProject(
-  project: ProjectDocument,
+async function saveProjectText(
+  text: unknown,
 ): Promise<{ saved: boolean; path: string | null }> {
-  assertValidProject(project);
+  if (typeof text !== "string") {
+    throw new TypeError("Project text must be a string");
+  }
 
   if (!projectPath) {
     return { saved: false, path: null };
   }
 
-  await writeFile(projectPath, serializeProject(project), "utf8");
+  await writeFile(projectPath, text, "utf8");
   return { saved: true, path: projectPath };
 }
 
@@ -106,10 +103,15 @@ function createWindow(): BrowserWindow {
   });
 
   if (smokeTest) {
-    window.webContents.once("did-fail-load", (_event, code, description) => {
-      console.error(`KINETRA_EDITOR_SMOKE_FAIL ${code} ${description}`);
-      app.exit(1);
-    });
+    window.webContents.once(
+      "did-fail-load",
+      (_event, code, description) => {
+        console.error(
+          `KINETRA_EDITOR_SMOKE_FAIL ${code} ${description}`,
+        );
+        app.exit(1);
+      },
+    );
 
     window.webContents.once("did-finish-load", () => {
       console.log("KINETRA_EDITOR_READY");
@@ -124,16 +126,19 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
-ipcMain.handle("kinetra:editor:load-project", async () => ({
-  path: projectPath,
-  writable: projectPath !== null,
-  project: await loadProject(),
-}));
+ipcMain.handle(
+  "kinetra:editor:load-project-text",
+  async () => ({
+    path: projectPath,
+    writable: projectPath !== null,
+    text: await loadProjectText(),
+  }),
+);
 
 ipcMain.handle(
-  "kinetra:editor:save-project",
-  async (_event, project: ProjectDocument) =>
-    saveProject(project),
+  "kinetra:editor:save-project-text",
+  async (_event, text: unknown) =>
+    saveProjectText(text),
 );
 
 ipcMain.handle(
