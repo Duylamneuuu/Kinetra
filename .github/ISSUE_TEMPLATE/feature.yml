@@ -1,0 +1,29 @@
+name: Feature / engine capability
+description: Propose a capability against a roadmap acceptance gate
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: agent
+    attributes:
+      label: Agent-facing contract
+      description: How should an agent query/control this without GUI automation?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance proof
+      description: What deterministic evidence proves this is complete?
+    validations:
+      required: true
+  - type: textarea
+    id: deferred
+    attributes:
+      label: Explicitly deferred
