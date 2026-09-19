@@ -162,11 +162,11 @@ export class ElectronRuntimeHost implements RuntimeHost {
       return;
     }
 
-    const electronEnv = {
+    const electronEnv: NodeJS.ProcessEnv = {
       ...process.env,
       KINETRA_RUNTIME_BRIDGE_STDIO: "1",
     };
-    delete electronEnv.ELECTRON_RUN_AS_NODE;
+    delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
     const child = spawn(
       this.electronExecutable,
