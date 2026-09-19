@@ -28,6 +28,16 @@ function severity(level:RuntimeLog["level"]):number{
   return{debug:0,info:1,warning:2,error:3}[level];
 }
 
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function isValidPng(bytes: Uint8Array): boolean {
+  if (bytes.length < 8) return false;
+  for (let i = 0; i < 8; i++) {
+    if (bytes[i] !== PNG_MAGIC[i]) return false;
+  }
+  return true;
+}
+
 async function executeStep(
   probe:RuntimeProbe,
   step:AcceptanceStep,
@@ -104,6 +114,19 @@ async function executeStep(
       }
       return;
     }
+    case "assert.screenshotValidPng":{
+      const bytes=await probe.captureFrame();
+      const minBytes=step.minBytes??1_000;
+      if(bytes.length<minBytes){
+        throw new Error(
+          `Screenshot too small: expected at least ${minBytes} bytes, got ${bytes.length}`,
+        );
+      }
+      if(!isValidPng(bytes)){
+        throw new Error("Screenshot is not a valid PNG (missing PNG magic header)");
+      }
+      return;
+    }
   }
 }
 
@@ -114,23 +137,39 @@ export class AcceptanceRunner {
     if(manifest.schemaVersion!==1) throw new Error("Unsupported acceptance manifest schema");
     const started=new Date();
     const steps:StepResult[]=[];
+    let runtimeStarted=false;
 
-    for(let index=0;index<manifest.steps.length;index++){
-      const step=manifest.steps[index]!;
-      const before=performance.now();
-      try{
-        await executeStep(this.probe,step,manifest.seed);
-        steps.push({
-          index,type:step.type,passed:true,
-          durationMs:performance.now()-before,
-        });
-      }catch(error){
-        steps.push({
-          index,type:step.type,passed:false,
-          durationMs:performance.now()-before,
-          message:error instanceof Error?error.message:String(error),
-        });
-        break;
+    try{
+      for(let index=0;index<manifest.steps.length;index++){
+        const step=manifest.steps[index]!;
+        const before=performance.now();
+        try{
+          if(step.type==="runtime.start"){
+            runtimeStarted=true;
+          }else if(step.type==="runtime.stop"){
+            runtimeStarted=false;
+          }
+          await executeStep(this.probe,step,manifest.seed);
+          steps.push({
+            index,type:step.type,passed:true,
+            durationMs:performance.now()-before,
+          });
+        }catch(error){
+          steps.push({
+            index,type:step.type,passed:false,
+            durationMs:performance.now()-before,
+            message:error instanceof Error?error.message:String(error),
+          });
+          break;
+        }
+      }
+    }finally{
+      if(runtimeStarted){
+        try{
+          await this.probe.stop();
+        }catch{
+          // Clean teardown on failure
+        }
       }
     }
 

@@ -78,16 +78,16 @@ Still missing:
 
 ### Verification
 
-What exists:
-- acceptance manifest;
-- semantic input steps;
-- state assertions;
-- log absence assertions;
-- metric budgets;
-- exact screenshot hash primitive;
-- process smoke runner.
+What has meaningful proof:
+- pure acceptance-runner state machine (`AcceptanceRunner`);
+- `FakeProbe` execution proof;
+- real runtime probe adapter (`KinetraRuntimeProbe`) driving live Electron runtime host;
+- semantic input injection (`input`), structured state query (`assert.equal`, `assert.near`), structured log verification (`assert.logAbsent`), and real frame capture (`assert.screenshotValidPng` with magic bytes and size check);
+- machine-readable failure reports on deliberate assertion failures;
+- clean, leak-free process teardown and lifecycle management;
+- process smoke runner for packaged exes.
 
-- real runtime probe adapter;
+What remains:
 - MCP `test.runAcceptance`;
 - packaged-game acceptance wiring;
 - optional perceptual/AI visual critique.
@@ -105,7 +105,6 @@ What has meaningful proof:
 - packaged Windows executable (`KinetraGame.exe`) smoke test and runtime bridge compatibility.
 
 What remains:
-- connecting P8 verification runner to live `ElectronRuntimeHost`;
 - complex model/mesh loading through asset pipeline into player runtime.
 
 ## Open implementation references
