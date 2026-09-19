@@ -139,6 +139,14 @@ export class ElectronRuntimeHost implements RuntimeHost {
     await this.#request("runtime.injectInput", event);
   }
 
+  async step(steps = 1, deltaSeconds = 1 / 60): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("runtime.step", {
+      steps,
+      deltaSeconds,
+    });
+  }
+
   async captureFrame(): Promise<RuntimeFrameCapture> {
     await this.#ensureProcess();
     return this.#request<RuntimeFrameCapture>("runtime.captureFrame", {});

@@ -22,7 +22,7 @@ Legend:
 | P4 Blender/asset pipeline | CORE MERGED | Asset DB/hash/dependency/diagnostic core and CI-proven headless Blender -> GLB fixture are on main. Full hot-reimport/thumbnail/compression policy is not finished. |
 | P5 animation | CORE MERGED | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata/events and text animation-graph semantics are on main. Real skinned-mesh/AnimationMixer integration remains. |
 | P6 complete-game contracts | CORE MERGED | Prefab overrides, script/scene lifecycle, named keyboard/gamepad input/remap, save migrations/settings storage and audio buses are on main. Full game UI/runtime integration remains. |
-| P7 physics/navigation/perf | WIP | PR #26 contains Rapier/Recast adapters. Real CI behavior exposed unresolved character-controller/navmesh assumptions. Not merge-ready. |
+| P7 physics/navigation/perf | SLICE 1 PROVEN | Rapier physics baseline proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, live transform sync. Navigation/Recast remains pending. |
 | P8 verification | CORE MERGED | Acceptance manifest/runner, semantic steps, structured state/log/metric checks, screenshot hash primitive and process-smoke primitive are on main. Runtime/MCP/package wiring remains. |
 | P9 distribution/Steam | WIP | PR #28 contains release/signing/SteamPipe contracts. Real signing/upload is intentionally outside repo-only proof. |
 | P10 reference game | NOT STARTED | Placeholder/issue only. Do not build until P2/P7/P8 integration is stable. |
@@ -107,6 +107,23 @@ What has meaningful proof:
 What remains:
 - complex model/mesh loading through asset pipeline into player runtime.
 
+### Physics (P7 Slice 1)
+
+What has meaningful proof:
+- minimal, deterministic Rapier 3D integration via `@dimforge/rapier3d-compat` in `@kinetra/physics-rapier`;
+- fixed-step accumulator and simulation independent of render delta partition;
+- dynamic body gravity fall and static floor collision without tunneling;
+- kinematic character controller driven by semantic input (`player.moveRight`) with obstacle collision clipping (`actual displacement < requested displacement`);
+- real-time transform synchronization from physics world into Three.js scene graph;
+- deterministic stepping command (`runtime.step`) exposed over the runtime bridge;
+- full acceptance verification (`real-physics.test.ts`) driving live Electron runtime with real PNG capture and clean teardown.
+
+Still missing:
+- Recast navigation and navmesh query;
+- raycasting / shape casting query API;
+- physics materials / dynamic friction/restitution overrides;
+- compound colliders and trimeshes.
+
 ## Open implementation references
 
 ### PR #29 — P2 Electron runtime bridge
@@ -115,11 +132,8 @@ Superseded by `feat/p2-real-runtime-bridge`. Proven on Windows with deterministi
 
 ### PR #26 — P7 Rapier/Recast
 
-Known real test findings included:
-- character-controller collision query did not behave as assumed;
-- Recast closest-point fixture used assumptions incompatible with actual query extents.
-
-Do not "fix" by weakening the acceptance goal. Repair the adapter/test geometry using documented library behavior.
+Old exploratory branch with failing tests around character-controller queries and Recast extents.
+Superseded in part by `feat/p7-rapier-physics-slice`, which fixed the character-controller spatial query pipeline initialization and proved deterministic Rapier simulation in the real Electron player runtime. Recast navigation remains to be ported cleanly in a subsequent vertical slice.
 
 ### PR #28 — P9 distribution contracts
 

@@ -52,10 +52,18 @@ async function handleRuntimeCommand(request: {
       const project = params.project as ProjectDocument;
       const sceneId = requireString(params.sceneId, "sceneId");
       const projectRevision = requireRevision(params.projectRevision);
-      const result = runtime.start(project, sceneId, projectRevision);
+      const result = await runtime.start(project, sceneId, projectRevision);
       statusElement.textContent =
         `agent runtime · scene ${sceneId} · revision ${projectRevision}`;
       return result;
+    }
+
+    case "runtime.step": {
+      const steps = typeof params.steps === "number" ? params.steps : 1;
+      const deltaSeconds =
+        typeof params.deltaSeconds === "number" ? params.deltaSeconds : 1 / 60;
+      runtime.step(steps, deltaSeconds);
+      return runtime.query();
     }
 
     case "runtime.stop":
@@ -213,10 +221,13 @@ const demoProject: ProjectDocument = {
   ],
 };
 
-runtime.start(demoProject, "scene_player_demo", 0);
+void runtime.start(demoProject, "scene_player_demo", 0);
 
-function frame(): void {
-  runtime.frame();
+let lastTime = performance.now();
+function frame(now: number): void {
+  const deltaSeconds = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
+  lastTime = now;
+  runtime.frame(deltaSeconds);
   requestAnimationFrame(frame);
 }
 

@@ -9,7 +9,7 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/verification.test.js dist/test/real-runtime.test.js"
+    "test":"node --test dist/test/verification.test.js dist/test/real-runtime.test.js dist/test/real-physics.test.js"
   },
   "dependencies":{
     "@kinetra/project-model":"workspace:*"

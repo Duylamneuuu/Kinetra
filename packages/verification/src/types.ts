@@ -59,6 +59,7 @@ export interface RuntimeProbeHost {
     message: string;
     data?: Record<string, unknown>;
   }>>;
+  step?(steps?: number, deltaSeconds?: number): Promise<unknown>;
 }
 
 export interface RuntimeProbe {
@@ -66,6 +67,7 @@ export interface RuntimeProbe {
   stop():Promise<void>;
   input(event:RuntimeInput):Promise<void>;
   wait(milliseconds:number):Promise<void>;
+  step?(steps?: number, deltaSeconds?: number): Promise<void>;
   snapshot():Promise<RuntimeSnapshot>;
   logs():Promise<RuntimeLog[]>;
   captureFrame():Promise<Uint8Array>;
@@ -76,6 +78,7 @@ export interface RuntimeProbe {
 export type AcceptanceStep =
   | {type:"runtime.start";sceneId:string}
   | {type:"runtime.stop"}
+  | {type:"runtime.step";steps?:number;deltaSeconds?:number}
   | ({type:"input"}&RuntimeInput)
   | {type:"wait";milliseconds:number}
   | {type:"assert.equal";path:string;expected:unknown}
