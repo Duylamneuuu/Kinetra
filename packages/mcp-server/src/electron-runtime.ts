@@ -218,19 +218,21 @@ export class ElectronRuntimeHost
 
     this.#server = undefined;
     if (server) {
-      await Promise.race([
-        new Promise<void>((resolveClose) => {
-          server.close(() => resolveClose());
-        }),
-        new Promise<void>((resolveTimeout) =>
-          setTimeout(resolveTimeout, 1_000),
-        ),
-      ]);
+      server.close();
+      server.unref();
     }
 
     this.#child = undefined;
-    if (child && !child.killed) {
-      child.kill();
+    if (child) {
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+
+      if (!child.killed) {
+        child.kill();
+      }
+
+      child.unref();
     }
 
     this.#readyPromise = undefined;
