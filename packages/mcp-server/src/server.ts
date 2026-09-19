@@ -86,7 +86,17 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         dryRun: z.boolean().optional(),
       }),
     },
-    async (input) => safe(() => service.createScene(input)),
+    async (input) =>
+      safe(() =>
+        service.createScene({
+          name: input.name,
+          ...(input.id !== undefined ? { id: input.id } : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -104,7 +114,22 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         limit: z.number().int().min(1).max(500).optional(),
       }),
     },
-    async (query) => safe(() => service.queryEntities(query)),
+    async (query) =>
+      safe(() =>
+        service.queryEntities({
+          ...(query.sceneId !== undefined ? { sceneId: query.sceneId } : {}),
+          ...(query.ids !== undefined ? { ids: query.ids } : {}),
+          ...(query.component !== undefined ? { component: query.component } : {}),
+          ...(query.nameContains !== undefined
+            ? { nameContains: query.nameContains }
+            : {}),
+          ...(query.selectComponents !== undefined
+            ? { selectComponents: query.selectComponents }
+            : {}),
+          ...(query.offset !== undefined ? { offset: query.offset } : {}),
+          ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -125,10 +150,17 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     async (input) =>
       safe(() =>
         service.createEntity({
-          ...input,
-          ...(input.components
+          sceneId: input.sceneId,
+          name: input.name,
+          ...(input.id !== undefined ? { id: input.id } : {}),
+          ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+          ...(input.components !== undefined
             ? { components: input.components as ComponentMap }
             : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
         }),
       ),
   );
@@ -149,8 +181,13 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     async (input) =>
       safe(() =>
         service.patchComponent({
-          ...input,
+          entityId: input.entityId,
+          component: input.component,
           patch: input.patch as JsonObject,
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
         }),
       ),
   );
@@ -166,7 +203,17 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         dryRun: z.boolean().optional(),
       }),
     },
-    async (input) => safe(() => service.reparentEntity(input)),
+    async (input) =>
+      safe(() =>
+        service.reparentEntity({
+          entityId: input.entityId,
+          ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -181,7 +228,17 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         dryRun: z.boolean().optional(),
       }),
     },
-    async (input) => safe(() => service.deleteEntity(input)),
+    async (input) =>
+      safe(() =>
+        service.deleteEntity({
+          entityId: input.entityId,
+          ...(input.cascade !== undefined ? { cascade: input.cascade } : {}),
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -235,7 +292,12 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         entityIds: z.array(z.string()).max(500).optional(),
       }),
     },
-    async (query) => safe(() => service.queryRuntime(query)),
+    async (query) =>
+      safe(() =>
+        service.queryRuntime({
+          ...(query.entityIds !== undefined ? { entityIds: query.entityIds } : {}),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -252,7 +314,12 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     },
     async (event) =>
       safe(async () => {
-        await service.injectRuntimeInput(event);
+        await service.injectRuntimeInput({
+          action: event.action,
+          phase: event.phase,
+          ...(event.value !== undefined ? { value: event.value } : {}),
+          ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+        });
         return { accepted: true };
       }),
   );
