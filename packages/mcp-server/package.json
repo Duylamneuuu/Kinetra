@@ -14,13 +14,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/service.test.js"
+    "test": "node --test dist/test/service.test.js",
+    "test:electron": "node --test dist/test/electron-runtime.test.js"
   },
   "dependencies": {
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "@kinetra/renderer-three": "workspace:*",
     "@modelcontextprotocol/server": "2.0.0",
+    "electron": "38.0.0",
     "zod": "^4.2.0"
   }
 }
