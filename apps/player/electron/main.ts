@@ -215,6 +215,7 @@ async function handleBridgeRequest(
     case "runtime.query":
     case "runtime.injectInput":
     case "runtime.readLogs":
+    case "runtime.step":
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {

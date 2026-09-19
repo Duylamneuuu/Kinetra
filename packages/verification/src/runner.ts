@@ -50,6 +50,14 @@ async function executeStep(
     case "runtime.stop":
       await probe.stop();
       return;
+    case "runtime.step":
+      if (typeof probe.step === "function") {
+        await probe.step(step.steps, step.deltaSeconds);
+      } else {
+        const ms = Math.round((step.steps ?? 1) * (step.deltaSeconds ?? 1 / 60) * 1000);
+        await probe.wait(ms);
+      }
+      return;
     case "input":
       await probe.input({
         action:step.action,

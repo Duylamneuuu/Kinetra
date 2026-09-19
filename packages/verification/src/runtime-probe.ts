@@ -82,6 +82,15 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     await new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
+  async step(steps?: number, deltaSeconds?: number): Promise<void> {
+    if (typeof this.#host.step === "function") {
+      await this.#host.step(steps, deltaSeconds);
+    } else {
+      const ms = Math.round((steps ?? 1) * (deltaSeconds ?? 1 / 60) * 1000);
+      await this.wait(ms);
+    }
+  }
+
   async snapshot(): Promise<RuntimeSnapshot> {
     const query = await this.#host.query();
     const byEntityId: Record<string, unknown> = {};

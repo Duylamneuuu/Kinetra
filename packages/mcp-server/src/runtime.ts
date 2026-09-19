@@ -53,6 +53,7 @@ export interface RuntimeHost {
   injectInput(event: RuntimeInputEvent): Promise<void>;
   captureFrame(): Promise<RuntimeFrameCapture>;
   readLogs(sinceSequence?: number): Promise<RuntimeLogEntry[]>;
+  step?(steps?: number, deltaSeconds?: number): Promise<RuntimeQueryResult>;
 }
 
 export class LocalRuntimeHost implements RuntimeHost {
@@ -137,6 +138,10 @@ export class LocalRuntimeHost implements RuntimeHost {
       ...(event.value !== undefined ? { value: event.value } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
     });
+  }
+
+  async step(_steps = 1, _deltaSeconds = 1 / 60): Promise<RuntimeQueryResult> {
+    return this.query();
   }
 
   async captureFrame(): Promise<RuntimeFrameCapture> {

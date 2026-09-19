@@ -2,6 +2,10 @@ import {
   assertValidProject,
   type ProjectDocument,
 } from "@kinetra/project-model";
+import {
+  createPhysicsWorldFromScene,
+  RapierPhysicsWorld,
+} from "@kinetra/physics-rapier";
 import { ThreeSceneRuntime } from "@kinetra/renderer-three";
 import * as THREE from "three";
 
@@ -46,6 +50,7 @@ export class PlayerRuntimeController {
   readonly renderer: THREE.WebGLRenderer;
 
   #runtime: ThreeSceneRuntime | undefined;
+  #physics: RapierPhysicsWorld | undefined;
   #camera: THREE.Camera;
   #projectRevision: number | undefined;
   #logs: PlayerRuntimeLog[] = [];
@@ -64,17 +69,29 @@ export class PlayerRuntimeController {
     this.resize();
   }
 
-  start(
+  async start(
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
-  ): PlayerRuntimeQueryResult {
+  ): Promise<PlayerRuntimeQueryResult> {
     assertValidProject(project);
     this.stop();
+
+    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
+    if (!scene) {
+      throw new Error(`Scene "${sceneId}" does not exist`);
+    }
 
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
     this.#runtime.scene.background = new THREE.Color("#0b0d12");
     this.#projectRevision = projectRevision;
+
+    try {
+      this.#physics = await createPhysicsWorldFromScene(scene);
+      this.#syncTransformsFromPhysics();
+    } catch (error) {
+      console.error("Physics initialization error:", error);
+    }
 
     this.#camera =
       [...this.#runtime.objects().values()].find(
@@ -90,6 +107,11 @@ export class PlayerRuntimeController {
   }
 
   stop(): void {
+    if (this.#physics) {
+      this.#physics.dispose();
+      this.#physics = undefined;
+    }
+
     if (!this.#runtime) {
       return;
     }
@@ -148,6 +170,55 @@ export class PlayerRuntimeController {
       throw new Error("Runtime is not running");
     }
 
+    let displacementActual: number | undefined;
+
+    if (this.#physics) {
+      const characterIds = this.#physics.characterIds();
+      const rawValue = event.value;
+      const magnitude =
+        typeof rawValue === "number"
+          ? rawValue
+          : Array.isArray(rawValue) && typeof rawValue[0] === "number"
+            ? rawValue[0]
+            : 1;
+
+      let desired = { x: 0, y: 0, z: 0 };
+      if (
+        event.action === "player.moveRight" ||
+        event.action === "move.right"
+      ) {
+        desired = { x: magnitude, y: 0, z: 0 };
+      } else if (
+        event.action === "player.moveLeft" ||
+        event.action === "move.left"
+      ) {
+        desired = { x: -magnitude, y: 0, z: 0 };
+      } else if (
+        event.action === "player.moveForward" ||
+        event.action === "move.forward"
+      ) {
+        desired = { x: 0, y: 0, z: -magnitude };
+      } else if (
+        event.action === "player.moveBackward" ||
+        event.action === "move.backward"
+      ) {
+        desired = { x: 0, y: 0, z: magnitude };
+      }
+
+      if (desired.x !== 0 || desired.y !== 0 || desired.z !== 0) {
+        for (const charId of characterIds) {
+          const moveResult = this.#physics.moveCharacter(charId, desired);
+          displacementActual =
+            moveResult.actual.x !== 0
+              ? moveResult.actual.x
+              : moveResult.actual.z !== 0
+                ? moveResult.actual.z
+                : moveResult.actual.y;
+        }
+        this.#syncTransformsFromPhysics();
+      }
+    }
+
     this.#log("debug", "runtime.input", {
       action: event.action,
       phase: event.phase,
@@ -155,7 +226,18 @@ export class PlayerRuntimeController {
       ...(event.durationMs !== undefined
         ? { durationMs: event.durationMs }
         : {}),
+      ...(displacementActual !== undefined ? { displacementActual } : {}),
     });
+  }
+
+  step(steps = 1, fixedDeltaSeconds = 1 / 60): void {
+    if (this.#physics) {
+      for (let i = 0; i < steps; i++) {
+        this.#physics.step(fixedDeltaSeconds);
+      }
+      this.#syncTransformsFromPhysics();
+    }
+    this.renderOnce();
   }
 
   readLogs(sinceSequence = 0): PlayerRuntimeLog[] {
@@ -185,8 +267,42 @@ export class PlayerRuntimeController {
     this.renderer.render(this.#runtime.scene, this.#camera);
   }
 
-  frame(): void {
+  frame(deltaSeconds = 1 / 60): void {
+    if (this.#physics) {
+      this.#physics.advance(deltaSeconds);
+      this.#syncTransformsFromPhysics();
+    }
     this.renderOnce();
+  }
+
+  #syncTransformsFromPhysics(): void {
+    if (!this.#runtime || !this.#physics) {
+      return;
+    }
+
+    for (const id of this.#physics.bodyIds()) {
+      const object = this.#runtime.getObject(id);
+      if (!object) {
+        continue;
+      }
+
+      try {
+        const state = this.#physics.state(id);
+        object.position.set(
+          state.position.x,
+          state.position.y,
+          state.position.z,
+        );
+        object.quaternion.set(
+          state.rotation.x,
+          state.rotation.y,
+          state.rotation.z,
+          state.rotation.w,
+        );
+      } catch (error) {
+        console.error(`Physics state sync error for "${id}":`, error);
+      }
+    }
   }
 
   #createFallbackCamera(): THREE.PerspectiveCamera {
