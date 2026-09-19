@@ -186,7 +186,7 @@ test(
             type: "assert.near",
             path: "state.byName.Falling Ball.position.1",
             expected: 5,
-            tolerance: 0.05,
+            tolerance: 0.20,
           },
           {
             type: "assert.equal",

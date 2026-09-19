@@ -119,10 +119,24 @@ What has meaningful proof:
 - full acceptance verification (`real-physics.test.ts`) driving live Electron runtime with real PNG capture and clean teardown.
 
 Still missing:
-- Recast navigation and navmesh query;
 - raycasting / shape casting query API;
 - physics materials / dynamic friction/restitution overrides;
 - compound colliders and trimeshes.
+
+### Navigation (P7 Slice 2)
+
+What has meaningful proof:
+- isolated, deterministic Recast Navigation integration via `@recast-navigation/core` and `@recast-navigation/generators` in `@kinetra/navigation-recast`;
+- async initialization with clean disposal (`nav.dispose()`);
+- Solo NavMesh baking from synthetic vertices and triangle indices;
+- closest point query with configurable half-extents (resolving the historical vertical search extent failure on elevated coordinates);
+- waypoint path calculation between start/end points with complete status reporting;
+- deterministic binary NavMesh serialization (`toBytes`) and deserialization (`fromBytes`) round-trip.
+
+Still missing:
+- crowd agent steering / crowd simulation;
+- dynamic obstacle avoidance / tile cache;
+- automated player steering integration in runtime bridge.
 
 ## Open implementation references
 
