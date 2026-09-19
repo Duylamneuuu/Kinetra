@@ -28,16 +28,9 @@ jobs:
           sudo apt-get install -y blender
           blender --version
       - name: Create deterministic .blend fixture
-        run: |
-          blender --background \\
-            --python packages/blender-bridge/python/create_fixture.py \\
-            -- --output "$RUNNER_TEMP/kinetra-fixture.blend"
+        run: blender --background --python packages/blender-bridge/python/create_fixture.py -- --output "$RUNNER_TEMP/kinetra-fixture.blend"
       - name: Export fixture through Kinetra Blender bridge script
-        run: |
-          blender --background "$RUNNER_TEMP/kinetra-fixture.blend" \\
-            --python packages/blender-bridge/python/export_glb.py \\
-            -- --output "$RUNNER_TEMP/kinetra-fixture.glb" \\
-               --manifest "$RUNNER_TEMP/kinetra-fixture.manifest.json"
+        run: blender --background "$RUNNER_TEMP/kinetra-fixture.blend" --python packages/blender-bridge/python/export_glb.py -- --output "$RUNNER_TEMP/kinetra-fixture.glb" --manifest "$RUNNER_TEMP/kinetra-fixture.manifest.json"
       - run: pnpm --filter @kinetra/asset-pipeline build
       - name: Validate exported GLB through Kinetra asset pipeline
         run: |
