@@ -73,6 +73,59 @@ test("acceptance stops at first failed proof and returns machine-readable failur
   assert.match(report.steps[1]?.message??"",/Expected/);
 });
 
+test("assert.screenshotValidPng validates PNG magic header and minBytes", async () => {
+  const probe = new FakeProbe();
+  const validPng = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(1200),
+  ]);
+  probe.frame = validPng;
+
+  const passedReport = await new AcceptanceRunner(probe).run({
+    schemaVersion: 1,
+    suite: "png-valid",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.screenshotValidPng", minBytes: 1000 },
+      { type: "runtime.stop" },
+    ],
+  });
+  assert.equal(passedReport.passed, true);
+
+  // Fails when too small
+  const smallReport = await new AcceptanceRunner(probe).run({
+    schemaVersion: 1,
+    suite: "png-too-small",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.screenshotValidPng", minBytes: 5000 },
+      { type: "runtime.stop" },
+    ],
+  });
+  assert.equal(smallReport.passed, false);
+  assert.match(smallReport.steps[1]?.message ?? "", /too small/);
+
+  // Fails when magic header is invalid
+  probe.frame = Buffer.alloc(1200);
+  const invalidHeaderReport = await new AcceptanceRunner(probe).run({
+    schemaVersion: 1,
+    suite: "png-invalid-header",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.screenshotValidPng", minBytes: 1000 },
+      { type: "runtime.stop" },
+    ],
+  });
+  assert.equal(invalidHeaderReport.passed, false);
+  assert.match(invalidHeaderReport.steps[1]?.message ?? "", /not a valid PNG/);
+});
+
 test("process smoke can validate a packaged-process style command",async()=>{
   const result=await runProcessSmoke({
     executable:process.execPath,
@@ -82,3 +135,4 @@ test("process smoke can validate a packaged-process style command",async()=>{
   assert.equal(result.exitCode,0);
   assert.match(result.stdout,/KINETRA_SMOKE_OK/);
 });
+
