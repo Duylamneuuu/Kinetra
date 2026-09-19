@@ -1,4 +1,4 @@
-import { stableId, type ComponentMap, type EntityDefinition } from "@kinetra/project-model";
+import { stableId, type ComponentMap, type EntityDefinition, type JsonObject } from "@kinetra/project-model";
 
 export interface PrefabEntityTemplate {
   localId:string;
@@ -16,10 +16,10 @@ export interface PrefabDefinition {
 export interface PrefabOverride {
   localId:string;
   component:string;
-  patch:Record<string,unknown>;
+  patch:JsonObject;
 }
 
-function jsonObject(value:unknown):value is Record<string,unknown>{
+function jsonObject(value:unknown):value is JsonObject{
   return typeof value==="object"&&value!==null&&!Array.isArray(value);
 }
 
