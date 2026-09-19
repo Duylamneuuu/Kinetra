@@ -3,8 +3,9 @@ import {
   exportNavMesh,
   importNavMesh,
   init,
-} from "recast-navigation";
-import { generateSoloNavMesh } from "recast-navigation/generators";
+  type NavMesh,
+} from "@recast-navigation/core";
+import { generateSoloNavMesh } from "@recast-navigation/generators";
 
 export interface Vec3 {x:number;y:number;z:number}
 
@@ -18,7 +19,7 @@ export async function initNavigation():Promise<void>{
 export class RecastNavMesh {
   #query:NavMeshQuery;
 
-  private constructor(private readonly navMesh:ReturnType<typeof importNavMesh>){
+  private constructor(private readonly navMesh:NavMesh){
     this.#query=new NavMeshQuery(navMesh);
   }
 
@@ -36,7 +37,7 @@ export class RecastNavMesh {
 
   static async fromBytes(bytes:Uint8Array):Promise<RecastNavMesh>{
     await initNavigation();
-    return new RecastNavMesh(importNavMesh(bytes));
+    return new RecastNavMesh(importNavMesh(bytes).navMesh);
   }
 
   toBytes():Uint8Array{
@@ -54,7 +55,9 @@ export class RecastNavMesh {
     if(!result.success){
       throw new Error(`Path query failed: ${result.error?.name??"unknown error"}`);
     }
-    return result.path.map(point=>({x:point.x,y:point.y,z:point.z}));
+    return result.path.map((point:{x:number;y:number;z:number})=>({
+      x:point.x,y:point.y,z:point.z,
+    }));
   }
 
   dispose():void{
