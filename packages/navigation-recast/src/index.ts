@@ -30,7 +30,7 @@ export class RecastNavMesh {
     await initNavigation();
     const result=generateSoloNavMesh(input.positions,input.indices);
     if(!result.success){
-      throw new Error(`NavMesh bake failed: ${result.error?.name??"unknown error"}`);
+      throw new Error(`NavMesh bake failed: ${result.error ?? "unknown error"}`);
     }
     return new RecastNavMesh(result.navMesh);
   }
@@ -53,7 +53,7 @@ export class RecastNavMesh {
   computePath(start:Vec3,end:Vec3):Vec3[]{
     const result=this.#query.computePath(start,end);
     if(!result.success){
-      throw new Error(`Path query failed: ${result.error?.name??"unknown error"}`);
+      throw new Error(`Path query failed: ${result.error ?? "unknown error"}`);
     }
     return result.path.map((point:{x:number;y:number;z:number})=>({
       x:point.x,y:point.y,z:point.z,
