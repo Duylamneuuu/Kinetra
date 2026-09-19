@@ -1,0 +1,32 @@
+node_modules/
+.pnpm-store/
+dist/
+build/
+out/
+coverage/
+.cache/
+.vite/
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Generated/imported game artifacts
+**/assets/imported/
+**/assets/generated/
+**/.kinetra-cache/
+
+# Environment/secrets
+.env
+.env.*
+!.env.example
+
+# Desktop signing/build secrets
+*.pfx
+*.p12
+*.key
