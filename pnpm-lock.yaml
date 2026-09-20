@@ -98,6 +98,9 @@ importers:
       '@kinetra/renderer-three':
         specifier: workspace:*
         version: link:../renderer-three
+      '@kinetra/verification':
+        specifier: workspace:*
+        version: link:../verification
       '@modelcontextprotocol/server':
         specifier: 2.0.0
         version: 2.0.0
@@ -155,6 +158,9 @@ importers:
       '@kinetra/project-model':
         specifier: workspace:*
         version: link:../project-model
+      zod:
+        specifier: ^4.2.0
+        version: 4.6.5
     devDependencies:
       '@kinetra/asset-pipeline':
         specifier: workspace:*
@@ -162,9 +168,9 @@ importers:
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../audio
-      '@kinetra/mcp-server':
-        specifier: workspace:*
-        version: link:../mcp-server
+      electron:
+        specifier: 38.0.0
+        version: 38.0.0
 
 packages:
 

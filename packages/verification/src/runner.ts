@@ -38,6 +38,17 @@ function isValidPng(bytes: Uint8Array): boolean {
   return true;
 }
 
+export class StepAssertionError extends Error {
+  constructor(
+    message: string,
+    public readonly expected?: unknown,
+    public readonly actual?: unknown,
+  ) {
+    super(message);
+    this.name = "StepAssertionError";
+  }
+}
+
 async function executeStep(
   probe:RuntimeProbe,
   step:AcceptanceStep,
@@ -175,8 +186,10 @@ async function executeStep(
       const snapshot=await probe.snapshot();
       const actual=getPath(snapshot,step.path);
       if(!stableEqual(actual,step.expected)){
-        throw new Error(
+        throw new StepAssertionError(
           `Expected ${step.path} = ${JSON.stringify(step.expected)}, got ${JSON.stringify(actual)}`,
+          step.expected,
+          actual,
         );
       }
       return;
@@ -184,11 +197,17 @@ async function executeStep(
     case "assert.near":{
       const actual=getPath(await probe.snapshot(),step.path);
       if(typeof actual!=="number"){
-        throw new Error(`Expected numeric value at ${step.path}`);
+        throw new StepAssertionError(
+          `Expected numeric value at ${step.path}`,
+          step.expected,
+          actual,
+        );
       }
       if(Math.abs(actual-step.expected)>step.tolerance){
-        throw new Error(
+        throw new StepAssertionError(
           `Expected ${step.path} near ${step.expected} ± ${step.tolerance}, got ${actual}`,
+          step.expected,
+          actual,
         );
       }
       return;
@@ -200,26 +219,34 @@ async function executeStep(
         (step.messageIncludes===undefined||log.message.includes(step.messageIncludes))
       );
       if(offending){
-        throw new Error(`Unexpected ${offending.level} log: ${offending.message}`);
+        throw new StepAssertionError(
+          `Unexpected ${offending.level} log: ${offending.message}`,
+          `no logs with level >= ${step.minimumLevel}${step.messageIncludes ? ` containing "${step.messageIncludes}"` : ""}`,
+          `[${offending.level}] ${offending.message}`,
+        );
       }
       return;
     }
     case "assert.metricMax":{
       const value=(await probe.metrics())[step.metric];
-      if(value===undefined) throw new Error(`Metric "${step.metric}" is unavailable`);
-      if(value>step.max) throw new Error(`Metric "${step.metric}" = ${value} exceeds max ${step.max}`);
+      if(value===undefined) throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.max, undefined);
+      if(value>step.max) throw new StepAssertionError(`Metric "${step.metric}" = ${value} exceeds max ${step.max}`, step.max, value);
       return;
     }
     case "assert.metricMin":{
       const value=(await probe.metrics())[step.metric];
-      if(value===undefined) throw new Error(`Metric "${step.metric}" is unavailable`);
-      if(value<step.min) throw new Error(`Metric "${step.metric}" = ${value} is below min ${step.min}`);
+      if(value===undefined) throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.min, undefined);
+      if(value<step.min) throw new StepAssertionError(`Metric "${step.metric}" = ${value} is below min ${step.min}`, step.min, value);
       return;
     }
     case "assert.screenshotSha256":{
       const actual=createHash("sha256").update(await probe.captureFrame()).digest("hex");
       if(actual!==step.sha256){
-        throw new Error(`Screenshot hash mismatch: expected ${step.sha256}, got ${actual}`);
+        throw new StepAssertionError(
+          `Screenshot hash mismatch: expected ${step.sha256}, got ${actual}`,
+          step.sha256,
+          actual,
+        );
       }
       return;
     }
@@ -227,12 +254,18 @@ async function executeStep(
       const bytes=await probe.captureFrame();
       const minBytes=step.minBytes??1_000;
       if(bytes.length<minBytes){
-        throw new Error(
+        throw new StepAssertionError(
           `Screenshot too small: expected at least ${minBytes} bytes, got ${bytes.length}`,
+          minBytes,
+          bytes.length,
         );
       }
       if(!isValidPng(bytes)){
-        throw new Error("Screenshot is not a valid PNG (missing PNG magic header)");
+        throw new StepAssertionError(
+          "Screenshot is not a valid PNG (missing PNG magic header)",
+          "valid PNG magic header",
+          bytes.length >= 8 ? Array.from(bytes.slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join(" ") : "truncated",
+        );
       }
       return;
     }
@@ -245,6 +278,7 @@ export class AcceptanceRunner {
   async run(manifest:AcceptanceManifest):Promise<AcceptanceReport>{
     if(manifest.schemaVersion!==1) throw new Error("Unsupported acceptance manifest schema");
     const started=new Date();
+    const startedPerf=performance.now();
     const steps:StepResult[]=[];
     let runtimeStarted=false;
 
@@ -264,10 +298,19 @@ export class AcceptanceRunner {
             durationMs:performance.now()-before,
           });
         }catch(error){
+          const message=error instanceof Error?error.message:String(error);
+          const isAssertion=error instanceof StepAssertionError;
+          const expected=isAssertion?error.expected:("expected" in step?step.expected:undefined);
+          const actual=isAssertion?error.actual:undefined;
           steps.push({
-            index,type:step.type,passed:false,
+            index,
+            type:step.type,
+            passed:false,
             durationMs:performance.now()-before,
-            message:error instanceof Error?error.message:String(error),
+            message,
+            error:message,
+            ...(expected!==undefined?{expected}:{}),
+            ...(actual!==undefined?{actual}:{}),
           });
           break;
         }
@@ -283,13 +326,25 @@ export class AcceptanceRunner {
     }
 
     const finished=new Date();
+    const durationMs=performance.now()-startedPerf;
+    const failedSteps=steps.filter((step)=>!step.passed);
+    const failureReason=failedSteps.length>0?failedSteps[0]?.message:undefined;
+
     return{
       suite:manifest.suite,
       target:manifest.target,
       passed:steps.length===manifest.steps.length&&steps.every(step=>step.passed),
+      durationMs,
       startedAt:started.toISOString(),
       finishedAt:finished.toISOString(),
       steps,
+      failedSteps,
+      ...(failureReason!==undefined?{failureReason}:{}),
+      observations:{
+        totalSteps:manifest.steps.length,
+        executedSteps:steps.length,
+        target:manifest.target,
+      },
     };
   }
 }

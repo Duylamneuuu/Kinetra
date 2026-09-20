@@ -213,6 +213,14 @@ async function handleBridgeRequest(
     case "ping":
       return { ready: true };
 
+    case "runtime.hostInfo":
+      return {
+        isPackaged: app.isPackaged,
+        execPath: process.execPath,
+        platform: process.platform,
+        arch: process.arch,
+      };
+
     case "runtime.start":
     case "runtime.stop":
     case "runtime.query":

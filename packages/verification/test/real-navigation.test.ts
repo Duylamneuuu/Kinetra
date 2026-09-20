@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
-import { ElectronRuntimeHost } from "@kinetra/mcp-server";
-
 import {
   AcceptanceRunner,
+  ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";

@@ -23,7 +23,7 @@ Legend:
 | P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
 | P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
-| P8 verification | CORE MERGED | Acceptance manifest/runner, semantic steps, structured state/log/metric checks, screenshot hash primitive and process-smoke primitive are on main. Runtime/MCP/package wiring remains. |
+| P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
 | P9 distribution/Steam | WIP | PR #28 contains release/signing/SteamPipe contracts. Real signing/upload is intentionally outside repo-only proof. |
 | P10 reference game | NOT STARTED | Placeholder/issue only. Do not build until P2/P7/P8 integration is stable. |
 
@@ -115,14 +115,18 @@ What has meaningful proof:
 - `FakeProbe` execution proof;
 - real runtime probe adapter (`KinetraRuntimeProbe`) driving live Electron runtime host;
 - semantic input injection (`input`), structured state query (`assert.equal`, `assert.near`), structured log verification (`assert.logAbsent`), and real frame capture (`assert.screenshotValidPng` with magic bytes and size check);
-- machine-readable failure reports on deliberate assertion failures;
-- clean, leak-free process teardown and lifecycle management;
-- process smoke runner for packaged exes.
+- machine-readable failure reports on deliberate assertion failures with exact failing step, expected/actual values, and `failureReason`;
+- clean, leak-free process teardown and lifecycle management across repeated PASS/FAIL invocations;
+- process smoke runner for packaged exes;
+- MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
+- engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
+- truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
+- end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
 
 What remains:
-- MCP `test.runAcceptance`;
-- packaged-game acceptance wiring;
-- optional perceptual/AI visual critique.
+- perceptual/AI visual critique;
+- broader performance gates;
+- complete-game shipping acceptance suite.
 
 ### Runtime bridge (P2)
 

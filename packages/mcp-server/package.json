@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/service.test.js dist/test/electron-runtime.test.js"
+    "test": "node --test dist/test/service.test.js dist/test/electron-runtime.test.js dist/test/real-mcp-acceptance.test.js"
   },
   "devDependencies": {
     "electron": "38.0.0"
@@ -23,6 +23,7 @@
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "@kinetra/renderer-three": "workspace:*",
+    "@kinetra/verification": "workspace:*",
     "@modelcontextprotocol/server": "2.0.0",
     "zod": "^4.2.0"
   }

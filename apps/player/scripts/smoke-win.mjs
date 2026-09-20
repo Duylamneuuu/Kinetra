@@ -39,3 +39,28 @@ if (exitCode !== 0) {
 }
 
 console.log("Packaged Windows executable smoke test passed.");
+
+// Prove real acceptance suite against packaged KinetraGame.exe
+const { spawnSync } = await import("node:child_process");
+const acceptanceTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "mcp-server",
+  "dist",
+  "test",
+  "real-mcp-acceptance.test.js",
+);
+
+console.log("Running real packaged acceptance suite...");
+const testRun = spawnSync(process.execPath, ["--test", acceptanceTestFile], {
+  stdio: "inherit",
+});
+
+if (testRun.status !== 0) {
+  throw new Error(`Packaged acceptance test failed with exit code ${String(testRun.status)}`);
+}
+
+console.log("Packaged Windows acceptance tests passed successfully.");
