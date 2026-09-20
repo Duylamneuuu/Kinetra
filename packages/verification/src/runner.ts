@@ -89,6 +89,35 @@ async function executeStep(
         await probe.stopAnimation(step.entityId);
       }
       return;
+    case "audio.play":
+      if (typeof probe.playAudio === "function") {
+        await probe.playAudio({
+          assetId: step.assetId,
+          ...(step.bus !== undefined ? { bus: step.bus } : {}),
+          ...(step.loop !== undefined ? { loop: step.loop } : {}),
+          ...(step.gain !== undefined ? { gain: step.gain } : {}),
+          ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
+        });
+      }
+      return;
+    case "audio.stop":
+      if (typeof probe.stopAudio === "function") {
+        await probe.stopAudio({
+          ...(step.playbackId !== undefined ? { playbackId: step.playbackId } : {}),
+          ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
+        });
+      }
+      return;
+    case "audio.setBusGain":
+      if (typeof probe.setAudioBusGain === "function") {
+        await probe.setAudioBusGain(step.busId, step.gain);
+      }
+      return;
+    case "audio.setBusMuted":
+      if (typeof probe.setAudioBusMuted === "function") {
+        await probe.setAudioBusMuted(step.busId, step.muted);
+      }
+      return;
     case "navigation.load":
       if (typeof probe.loadNavigation === "function") {
         await probe.loadNavigation({

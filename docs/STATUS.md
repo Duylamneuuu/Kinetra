@@ -21,7 +21,7 @@ Legend:
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
 | P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
-| P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state), schema migration (v1->v2), error isolation, and AcceptanceRunner proof verified in live Electron. Audio, game UI, settings, and broader game loop remain unfinished. |
+| P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration, hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | CORE MERGED | Acceptance manifest/runner, semantic steps, structured state/log/metric checks, screenshot hash primitive and process-smoke primitive are on main. Runtime/MCP/package wiring remains. |
 | P9 distribution/Steam | WIP | PR #28 contains release/signing/SteamPipe contracts. Real signing/upload is intentionally outside repo-only proof. |
@@ -89,7 +89,14 @@ What exists:
 - scene lifecycle;
 - action-based input + remapping;
 - versioned save migration/store contracts;
-- hierarchical audio buses.
+- hierarchical audio buses (@kinetra/audio) with truthful gain/mute computation;
+- deterministic synthetic WAV generation (`createSyntheticWav`);
+- real Web Audio decoding and playback in Electron player runtime via Kinetra assetId;
+- semantic audio command execution (`audio.play`, `audio.stop`, `audio.setBusGain`, `audio.setBusMuted`);
+- truthful structured observation (`state.audio.initialized`, `state.audio.buses`, `state.audio.activePlaybacks`);
+- structured error handling for missing/corrupt audio assets and unknown buses;
+- clean audio resource teardown and session restart;
+- real AcceptanceRunner verification and active-playback PNG frame capture.
 
 Still missing:
 - integrated runtime UI layer;

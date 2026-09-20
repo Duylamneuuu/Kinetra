@@ -177,6 +177,36 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     }
   }
 
+  async playAudio(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<void> {
+    if (typeof this.#host.playAudio === "function") {
+      await this.#host.playAudio(params);
+    }
+  }
+
+  async stopAudio(params?: { playbackId?: string; entityId?: string }): Promise<void> {
+    if (typeof this.#host.stopAudio === "function") {
+      await this.#host.stopAudio(params);
+    }
+  }
+
+  async setAudioBusGain(busId: string, gain: number): Promise<void> {
+    if (typeof this.#host.setAudioBusGain === "function") {
+      await this.#host.setAudioBusGain(busId, gain);
+    }
+  }
+
+  async setAudioBusMuted(busId: string, muted: boolean): Promise<void> {
+    if (typeof this.#host.setAudioBusMuted === "function") {
+      await this.#host.setAudioBusMuted(busId, muted);
+    }
+  }
+
   async captureSave(slotId?: string): Promise<{
     success: boolean;
     envelope?: Record<string, unknown>;
@@ -237,6 +267,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         byEntityId,
         byName,
         ...(query.navigation ? { navigation: query.navigation } : {}),
+        ...(query.audio ? { audio: query.audio } : {}),
       },
     };
   }

@@ -32,6 +32,14 @@ import {
   type EntitySaveState,
   type GameplaySaveData,
 } from "@kinetra/save-state";
+import type { AudioRuntimeState } from "@kinetra/audio";
+import {
+  PlayerAudioController,
+  type PlayAudioOptions,
+  type PlayAudioResult,
+  type StopAudioOptions,
+  type StopAudioResult,
+} from "./audio-controller.js";
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
@@ -117,6 +125,7 @@ export interface PlayerRuntimeQueryResult {
   projectRevision?: number;
   entities: PlayerRuntimeEntityState[];
   navigation?: PlayerRuntimeNavigationState;
+  audio?: AudioRuntimeState;
 }
 
 export interface PlayerRuntimeInput {
@@ -183,6 +192,7 @@ export class PlayerRuntimeController {
   #nextLogSequence = 1;
   #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
   #saveMigrator: SaveMigrator;
+  #audio: PlayerAudioController = new PlayerAudioController();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -370,12 +380,14 @@ export class PlayerRuntimeController {
 
     this.resize();
     this.renderOnce();
+    this.#audio.init(this.#assetResolver);
     this.#log("info", "runtime.started", { sceneId, projectRevision });
 
     return this.query();
   }
 
   async stop(): Promise<void> {
+    this.#audio.reset();
     await this.#scripts.destroyAll();
     this.#scripts = new ScriptHost();
     this.#unresolvedScripts.clear();
@@ -577,6 +589,56 @@ export class PlayerRuntimeController {
     if (!this.#runtime) return;
     this.#runtime.stopAnimation(entityId);
     this.#log("info", "animation.stopped", { entityId });
+  }
+
+  async playAudio(options: PlayAudioOptions): Promise<PlayAudioResult> {
+    const result = await this.#audio.play(options);
+    if (result.success) {
+      this.#log("info", "audio.played", {
+        playbackId: result.playbackId,
+        assetId: options.assetId,
+        bus: options.bus ?? "master",
+      });
+    } else {
+      this.#log("error", "audio.playFailed", {
+        assetId: options.assetId,
+        bus: options.bus,
+        error: result.error,
+      });
+    }
+    return result;
+  }
+
+  stopAudio(options: StopAudioOptions = {}): StopAudioResult {
+    const result = this.#audio.stop(options);
+    this.#log("info", "audio.stopped", {
+      playbackId: options.playbackId,
+      entityId: options.entityId,
+      stoppedCount: result.stoppedCount,
+    });
+    return result;
+  }
+
+  setAudioBusGain(busId: string, gain: number): void {
+    try {
+      this.#audio.setBusGain(busId, gain);
+      this.#log("info", "audio.busGainSet", { busId, gain });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.#log("error", "audio.busGainFailed", { busId, gain, error });
+      throw err;
+    }
+  }
+
+  setAudioBusMuted(busId: string, muted: boolean): void {
+    try {
+      this.#audio.setBusMuted(busId, muted);
+      this.#log("info", "audio.busMutedSet", { busId, muted });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.#log("error", "audio.busMutedFailed", { busId, muted, error });
+      throw err;
+    }
   }
 
   async captureSave(slotId = "default"): Promise<{
@@ -993,7 +1055,7 @@ export class PlayerRuntimeController {
 
   query(query: PlayerRuntimeQuery = {}): PlayerRuntimeQueryResult {
     if (!this.#runtime) {
-      return { running: false, entities: [] };
+      return { running: false, entities: [], audio: this.#audio.getState() };
     }
 
     const requested = query.entityIds ? new Set(query.entityIds) : undefined;
@@ -1067,6 +1129,7 @@ export class PlayerRuntimeController {
         : {}),
       entities,
       navigation: structuredClone(this.#navigationState),
+      audio: this.#audio.getState(),
     };
   }
 
