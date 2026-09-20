@@ -70,6 +70,13 @@ export interface RuntimeProbeHost {
         }>;
         error?: string;
       };
+      gameplay?: {
+        scriptId: string;
+        lifecycleState: string;
+        updateCount: number;
+        state?: Record<string, unknown>;
+        error?: string;
+      };
     }>;
     navigation?: Record<string, unknown>;
   }>;

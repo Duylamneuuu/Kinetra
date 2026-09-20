@@ -17,6 +17,12 @@ importers:
 
   apps/player:
     dependencies:
+      '@kinetra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@kinetra/input':
+        specifier: workspace:*
+        version: link:../../packages/input
       '@kinetra/navigation-recast':
         specifier: workspace:*
         version: link:../../packages/navigation-recast
