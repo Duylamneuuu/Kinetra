@@ -95,23 +95,24 @@ export class InputRouter {
   }
 
   getActionValue(actionId: string, snapshot?: PhysicalInputSnapshot): number {
-    let semanticVal = 0;
-    const semantic = this.#semanticActions.get(actionId);
-    if (semantic && semantic.phase !== "release") {
-      semanticVal = semantic.value;
-    }
-
-    if (!snapshot) {
-      return semanticVal;
-    }
-
     const action = this.#map.actions.find(candidate => candidate.id === actionId);
-    if (!action) {
-      return semanticVal;
+    const semantic = this.#semanticActions.get(actionId);
+    const hasSemantic = semantic !== undefined && semantic.phase !== "release";
+
+    let rawValue: number;
+    if (hasSemantic) {
+      rawValue = semantic.value;
+    } else if (snapshot && action) {
+      rawValue = this.value(actionId, snapshot);
+    } else {
+      rawValue = 0;
     }
 
-    const physVal = this.value(actionId, snapshot);
-    return Math.max(semanticVal, physVal);
+    const clamped = Math.max(-1, Math.min(1, rawValue));
+    if (action?.type === "button") {
+      return clamped > 0.5 ? 1 : 0;
+    }
+    return clamped;
   }
 
   isActionPressed(actionId: string, snapshot?: PhysicalInputSnapshot): boolean {

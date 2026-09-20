@@ -159,3 +159,162 @@ test("ScriptHost isolates script runtime errors without silent crash",async()=>{
   await host.destroyAll();
 });
 
+test("ScriptHost error cleanup: onUpdate error still executes onDestroy exactly once", async () => {
+  const host = new ScriptHost();
+  const events: string[] = [];
+  const logs: Array<{ level: string; category: string; data?: Record<string, unknown> | undefined }> = [];
+
+  host.register({
+    id: "updating_script",
+    scriptId: "UpdatingScript",
+    context: {
+      entityId: "e1",
+      sceneId: "main",
+      log: (level, category, data) => { logs.push({ level, category, data }); },
+    },
+    script: {
+      onCreate: () => { events.push("create"); },
+      onStart: () => { events.push("start"); },
+      onUpdate: () => {
+        events.push("update");
+        throw new Error("Update failure");
+      },
+      onStop: () => { events.push("stop"); },
+      onDestroy: () => { events.push("destroy"); },
+    },
+  });
+
+  await host.startAll();
+  assert.equal(host.isCreated("updating_script"), true);
+  assert.equal(host.isStarted("updating_script"), true);
+  assert.equal(host.isStopApplicable("updating_script"), true);
+  assert.equal(host.isDestroyApplicable("updating_script"), true);
+
+  host.update(1 / 60);
+  const errState = host.getExecutionState("updating_script")!;
+  assert.equal(errState.lifecycleState, "error");
+  assert.equal(errState.error, "Update failure");
+
+  const updateLog = logs.find(l => l.category === "script.error");
+  assert.ok(updateLog);
+  assert.equal(updateLog.data?.phase, "onUpdate");
+
+  // destroyAll must execute appropriate cleanup for the script whose lifecycle progressed
+  await host.destroyAll();
+  assert.deepEqual(events, ["create", "start", "update", "stop", "destroy"]);
+  const destroyCount = events.filter(e => e === "destroy").length;
+  assert.equal(destroyCount, 1);
+});
+
+test("ScriptHost error cleanup: onCreate error prevents onDestroy invocation", async () => {
+  const host = new ScriptHost();
+  const events: string[] = [];
+  const logs: Array<{ level: string; category: string; data?: Record<string, unknown> | undefined }> = [];
+
+  host.register({
+    id: "failing_create",
+    scriptId: "FailingCreateScript",
+    context: {
+      entityId: "e2",
+      sceneId: "main",
+      log: (level, category, data) => { logs.push({ level, category, data }); },
+    },
+    script: {
+      onCreate: () => {
+        events.push("create_throw");
+        throw new Error("Creation failure");
+      },
+      onStart: () => { events.push("start"); },
+      onStop: () => { events.push("stop"); },
+      onDestroy: () => { events.push("destroy"); },
+    },
+  });
+
+  await host.startAll();
+  assert.equal(host.isCreated("failing_create"), false);
+  assert.equal(host.isStarted("failing_create"), false);
+  assert.equal(host.isStopApplicable("failing_create"), false);
+  assert.equal(host.isDestroyApplicable("failing_create"), false);
+
+  const createLog = logs.find(l => l.category === "script.error");
+  assert.ok(createLog);
+  assert.equal(createLog.data?.phase, "onCreate");
+
+  // destroyAll must NOT invoke onDestroy since onCreate failed
+  await host.destroyAll();
+  assert.deepEqual(events, ["create_throw"]);
+  assert.equal(events.includes("destroy"), false);
+});
+
+test("ScriptHost error cleanup: onStart error after successful onCreate executes onDestroy but not onStop", async () => {
+  const host = new ScriptHost();
+  const events: string[] = [];
+  const logs: Array<{ level: string; category: string; data?: Record<string, unknown> | undefined }> = [];
+
+  host.register({
+    id: "failing_start",
+    scriptId: "FailingStartScript",
+    context: {
+      entityId: "e3",
+      sceneId: "main",
+      log: (level, category, data) => { logs.push({ level, category, data }); },
+    },
+    script: {
+      onCreate: () => { events.push("create"); },
+      onStart: () => {
+        events.push("start_throw");
+        throw new Error("Start failure");
+      },
+      onStop: () => { events.push("stop"); },
+      onDestroy: () => { events.push("destroy"); },
+    },
+  });
+
+  await host.startAll();
+  assert.equal(host.isCreated("failing_start"), true);
+  assert.equal(host.isStarted("failing_start"), false);
+  assert.equal(host.isStopApplicable("failing_start"), false);
+  assert.equal(host.isDestroyApplicable("failing_start"), true);
+
+  const startLog = logs.find(l => l.category === "script.error");
+  assert.ok(startLog);
+  assert.equal(startLog.data?.phase, "onStart");
+
+  // destroyAll cleans up what onCreate allocated by executing onDestroy, but onStop is not called
+  await host.destroyAll();
+  assert.deepEqual(events, ["create", "start_throw", "destroy"]);
+  assert.equal(events.includes("stop"), false);
+  assert.equal(events.filter(e => e === "destroy").length, 1);
+});
+
+test("ScriptHost reports correct failing phase for onStop and onDestroy errors", async () => {
+  const host = new ScriptHost();
+  const logs: Array<{ level: string; category: string; data?: Record<string, unknown> | undefined }> = [];
+
+  host.register({
+    id: "failing_stop_destroy",
+    context: {
+      entityId: "e4",
+      sceneId: "main",
+      log: (level, category, data) => { logs.push({ level, category, data }); },
+    },
+    script: {
+      onCreate: () => {},
+      onStart: () => {},
+      onStop: () => { throw new Error("Stop failure"); },
+      onDestroy: () => { throw new Error("Destroy failure"); },
+    },
+  });
+
+  await host.startAll();
+  await host.destroyAll();
+
+  const stopLog = logs.find(l => l.category === "script.error" && l.data?.phase === "onStop");
+  assert.ok(stopLog, "Must log onStop failure");
+  assert.equal(stopLog.data?.error, "Stop failure");
+
+  const destroyLog = logs.find(l => l.category === "script.error" && l.data?.phase === "onDestroy");
+  assert.ok(destroyLog, "Must log onDestroy failure");
+  assert.equal(destroyLog.data?.error, "Destroy failure");
+});
+
