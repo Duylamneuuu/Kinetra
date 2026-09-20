@@ -15,11 +15,23 @@ import {
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
+  type PreparedScriptRestore,
 } from "@kinetra/core";
+import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
 } from "@kinetra/input";
+import {
+  JsonDocumentStore,
+  MemoryStorage,
+  SaveMigrator,
+  createGameplaySaveMigrator,
+  CURRENT_SAVE_SCHEMA_VERSION,
+  type SaveEnvelope,
+  type EntitySaveState,
+  type GameplaySaveData,
+} from "@kinetra/save-state";
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
@@ -133,6 +145,24 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function isEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) {
+    return false;
+  }
+  const keysA = Object.keys(a as object).sort();
+  const keysB = Object.keys(b as object).sort();
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    const key = keysA[i]!;
+    if (key !== keysB[i]) return false;
+    if (!isEqualJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export class PlayerRuntimeController {
   readonly renderer: THREE.WebGLRenderer;
 
@@ -151,6 +181,8 @@ export class PlayerRuntimeController {
   #projectRevision: number | undefined;
   #logs: PlayerRuntimeLog[] = [];
   #nextLogSequence = 1;
+  #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
+  #saveMigrator: SaveMigrator;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -159,6 +191,12 @@ export class PlayerRuntimeController {
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    this.#saveMigrator = createGameplaySaveMigrator();
+    this.#saveStore = new JsonDocumentStore<SaveEnvelope<GameplaySaveData>>(
+      new MemoryStorage(),
+      "saves",
+    );
 
     this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
 
@@ -180,6 +218,13 @@ export class PlayerRuntimeController {
     this.#scriptRegistry.register(scriptId, factory);
   }
 
+  enableTestScriptFixtures(preset: "save-load-atomicity"): void {
+    if (preset === "save-load-atomicity") {
+      registerSaveLoadTestFixtures(this.#scriptRegistry);
+      this.#log("info", "testHarness.fixturesEnabled", { preset });
+    }
+  }
+
   registerAsset(assetId: string, data: Uint8Array | string): void {
     const bytes = typeof data === "string" ? base64ToUint8Array(data) : data;
     this.#assetRegistry.set(assetId, bytes);
@@ -193,8 +238,15 @@ export class PlayerRuntimeController {
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
-    options?: { assets?: Record<string, string>; stepped?: boolean },
+    options?: {
+      assets?: Record<string, string>;
+      stepped?: boolean;
+      testScriptPreset?: string;
+    },
   ): Promise<PlayerRuntimeQueryResult> {
+    if (options?.testScriptPreset === "save-load-atomicity") {
+      this.enableTestScriptFixtures("save-load-atomicity");
+    }
     assertValidProject(project);
     await this.stop();
     this.#stepped = options?.stepped ?? false;
@@ -525,6 +577,418 @@ export class PlayerRuntimeController {
     if (!this.#runtime) return;
     this.#runtime.stopAnimation(entityId);
     this.#log("info", "animation.stopped", { entityId });
+  }
+
+  async captureSave(slotId = "default"): Promise<{
+    success: boolean;
+    envelope?: SaveEnvelope<GameplaySaveData>;
+    error?: string;
+  }> {
+    if (!this.#runtime) {
+      const error = "Cannot capture save: Runtime is not running";
+      this.#log("error", "save.captureFailed", { slotId, error });
+      return { success: false, error };
+    }
+
+    const entities: Record<string, EntitySaveState> = {};
+    for (const [entityId, obj] of this.#runtime.objects()) {
+      const execState = this.#scripts.getExecutionState(entityId);
+      entities[entityId] = {
+        position: [obj.position.x, obj.position.y, obj.position.z],
+        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+        ...(execState?.state ? { gameplay: structuredClone(execState.state) } : {}),
+      };
+    }
+
+    const envelope: SaveEnvelope<GameplaySaveData> = {
+      schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
+      gameVersion: "0.1.0",
+      slotId,
+      savedAt: new Date().toISOString(),
+      data: {
+        sceneId: this.#runtime.sceneId,
+        entities,
+      },
+    };
+
+    await this.#saveStore.save(slotId, envelope);
+    this.#log("info", "save.captured", {
+      slotId,
+      schemaVersion: envelope.schemaVersion,
+      sceneId: envelope.data.sceneId,
+      entityCount: Object.keys(entities).length,
+    });
+
+    return { success: true, envelope };
+  }
+
+  async getSave(
+    slotId = "default",
+  ): Promise<SaveEnvelope<GameplaySaveData> | undefined> {
+    return this.#saveStore.load(slotId);
+  }
+
+  async loadSave(options?: {
+    slotId?: string;
+    envelope?: SaveEnvelope;
+  }): Promise<{
+    success: boolean;
+    slotId?: string;
+    schemaVersion?: number;
+    error?: string;
+    phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
+    rolledBack?: boolean;
+    atomicityViolation?: boolean;
+  }> {
+    if (!this.#runtime) {
+      const error = "Cannot load save: Runtime is not running";
+      this.#log("error", "save.restoreFailed", { phase: "validation", error });
+      return { success: false, error };
+    }
+
+    const slotId = options?.slotId ?? "default";
+    const rawEnvelope = options?.envelope ?? (await this.#saveStore.load(slotId));
+
+    if (!rawEnvelope) {
+      const error = `Save document not found for slot "${slotId}"`;
+      this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
+      return { success: false, error };
+    }
+
+    // Phase 1: Validation
+    if (
+      typeof rawEnvelope !== "object" ||
+      rawEnvelope === null ||
+      typeof (rawEnvelope as any).schemaVersion !== "number" ||
+      typeof (rawEnvelope as any).data !== "object" ||
+      (rawEnvelope as any).data === null
+    ) {
+      const error = "Invalid save envelope structure";
+      this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
+      return { success: false, error };
+    }
+
+    // Phase 2: Migration
+    let migratedEnvelope: SaveEnvelope<GameplaySaveData>;
+    try {
+      migratedEnvelope = this.#saveMigrator.migrate<GameplaySaveData>(
+        rawEnvelope as SaveEnvelope,
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.#log("error", "save.restoreFailed", { slotId, phase: "migration", error });
+      return { success: false, error };
+    }
+
+    // Phase 3: Preparation & Target Validation (Preflight: apply nothing if any check fails)
+    if (migratedEnvelope.data?.sceneId !== this.#runtime.sceneId) {
+      const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${this.#runtime.sceneId}"`;
+      this.#log("error", "save.restoreFailed", {
+        slotId,
+        phase: "preparation",
+        saveSceneId: migratedEnvelope.data?.sceneId,
+        activeSceneId: this.#runtime.sceneId,
+        error,
+      });
+      return { success: false, error };
+    }
+
+    if (
+      !migratedEnvelope.data?.entities ||
+      typeof migratedEnvelope.data.entities !== "object" ||
+      Array.isArray(migratedEnvelope.data.entities)
+    ) {
+      const error = "Save contains invalid entities record";
+      this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
+      return { success: false, error };
+    }
+
+    interface PreparedTransform {
+      obj: THREE.Object3D;
+      position?: [number, number, number];
+      rotation?: [number, number, number];
+    }
+
+    interface PreparedScript {
+      entityId: string;
+      restore: PreparedScriptRestore;
+    }
+
+    const preparedTransforms: PreparedTransform[] = [];
+    const preparedScripts: PreparedScript[] = [];
+
+    for (const [entityId, entry] of Object.entries(
+      migratedEnvelope.data.entities,
+    )) {
+      const obj = this.#runtime.getObject(entityId);
+      if (!obj) {
+        const error = `Entity "${entityId}" from save does not exist in active scene`;
+        this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+        return { success: false, error };
+      }
+
+      let prepPos: [number, number, number] | undefined;
+      let prepRot: [number, number, number] | undefined;
+
+      if (entry.position) {
+        if (
+          !Array.isArray(entry.position) ||
+          entry.position.length !== 3 ||
+          entry.position.some((v) => typeof v !== "number" || !Number.isFinite(v))
+        ) {
+          const error = `Invalid position coordinates for entity "${entityId}"`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+        prepPos = [entry.position[0], entry.position[1], entry.position[2]];
+      }
+
+      if (entry.rotation) {
+        if (
+          !Array.isArray(entry.rotation) ||
+          entry.rotation.length !== 3 ||
+          entry.rotation.some((v) => typeof v !== "number" || !Number.isFinite(v))
+        ) {
+          const error = `Invalid rotation coordinates for entity "${entityId}"`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+        prepRot = [entry.rotation[0], entry.rotation[1], entry.rotation[2]];
+      }
+
+      if (prepPos || prepRot) {
+        preparedTransforms.push({
+          obj,
+          ...(prepPos ? { position: prepPos } : {}),
+          ...(prepRot ? { rotation: prepRot } : {}),
+        });
+      }
+
+      if (entry.gameplay) {
+        if (
+          typeof entry.gameplay !== "object" ||
+          entry.gameplay === null ||
+          Array.isArray(entry.gameplay)
+        ) {
+          const error = `Invalid gameplay payload for entity "${entityId}"`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        if (!this.#scripts.hasScript(entityId)) {
+          const error = `Entity "${entityId}" has gameplay save state but no active script`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        if (!this.#scripts.canRestoreScriptState(entityId)) {
+          const error = `Script on entity "${entityId}" does not support state restoration`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        if (!this.#scripts.canPrepareTransactionalRestore(entityId)) {
+          const error = `Script on entity "${entityId}" does not support transactional state restoration`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        const validation = this.#scripts.validateScriptRestoreState(
+          entityId,
+          entry.gameplay,
+        );
+        if (!validation.valid) {
+          const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        const preparedRestore = await this.#scripts.prepareScriptRestore(
+          entityId,
+          entry.gameplay,
+        );
+
+        preparedScripts.push({
+          entityId,
+          restore: preparedRestore,
+        });
+      }
+    }
+
+    // Phase 4: Transactional Commit with Strict Invariant Verification
+    const rollbackTransforms: Array<{
+      obj: THREE.Object3D;
+      position: [number, number, number];
+      rotation: [number, number, number];
+    }> = preparedTransforms.map((p) => ({
+      obj: p.obj,
+      position: [p.obj.position.x, p.obj.position.y, p.obj.position.z],
+      rotation: [p.obj.rotation.x, p.obj.rotation.y, p.obj.rotation.z],
+    }));
+
+    const priorScriptStates = new Map<string, Record<string, unknown> | undefined>();
+    for (const p of preparedScripts) {
+      const exec = this.#scripts.getExecutionState(p.entityId);
+      priorScriptStates.set(
+        p.entityId,
+        exec?.state ? (structuredClone(exec.state) as Record<string, unknown>) : undefined,
+      );
+    }
+
+    const committedRestores: Array<{
+      entityId: string;
+      restore: PreparedScriptRestore;
+    }> = [];
+
+    let rollbackError: string | undefined;
+
+    try {
+      // 1. Commit all prepared transforms
+      for (const prep of preparedTransforms) {
+        if (prep.position) {
+          prep.obj.position.set(
+            prep.position[0],
+            prep.position[1],
+            prep.position[2],
+          );
+        }
+        if (prep.rotation) {
+          prep.obj.rotation.set(
+            prep.rotation[0],
+            prep.rotation[1],
+            prep.rotation[2],
+          );
+        }
+      }
+
+      // 2. Commit all prepared script states
+      for (const prep of preparedScripts) {
+        try {
+          await prep.restore.commit();
+          committedRestores.push(prep);
+        } catch (scriptErr) {
+          // Even if this script threw during commit, it may have partially mutated state.
+          // Rollback this script immediately as well:
+          try {
+            await prep.restore.rollback();
+          } catch (rbErr) {
+            const rbMsg =
+              rbErr instanceof Error ? rbErr.message : String(rbErr);
+            rollbackError = rollbackError
+              ? `${rollbackError}; ${rbMsg}`
+              : rbMsg;
+          }
+          throw scriptErr;
+        }
+      }
+    } catch (commitErr) {
+      const rawCommitError =
+        commitErr instanceof Error ? commitErr.message : String(commitErr);
+
+      // 1. Rollback all modified transforms
+      try {
+        for (const rollback of rollbackTransforms) {
+          rollback.obj.position.set(
+            rollback.position[0],
+            rollback.position[1],
+            rollback.position[2],
+          );
+          rollback.obj.rotation.set(
+            rollback.rotation[0],
+            rollback.rotation[1],
+            rollback.rotation[2],
+          );
+        }
+      } catch (err) {
+        rollbackError = err instanceof Error ? err.message : String(err);
+      }
+
+      // 2. Rollback all committed scripts in reverse order
+      for (const committed of [...committedRestores].reverse()) {
+        try {
+          await committed.restore.rollback();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          rollbackError = rollbackError ? `${rollbackError}; ${msg}` : msg;
+        }
+      }
+
+      // 3. Strict post-rollback verification:
+      // Verify transforms
+      for (const rollback of rollbackTransforms) {
+        if (
+          rollback.obj.position.x !== rollback.position[0] ||
+          rollback.obj.position.y !== rollback.position[1] ||
+          rollback.obj.position.z !== rollback.position[2] ||
+          rollback.obj.rotation.x !== rollback.rotation[0] ||
+          rollback.obj.rotation.y !== rollback.rotation[1] ||
+          rollback.obj.rotation.z !== rollback.rotation[2]
+        ) {
+          rollbackError = rollbackError
+            ? `${rollbackError}; Transform position/rotation did not match pre-transaction snapshot`
+            : "Transform position/rotation did not match pre-transaction snapshot";
+        }
+      }
+
+      // Verify script states
+      for (const [entityId, priorState] of priorScriptStates.entries()) {
+        const currentExec = this.#scripts.getExecutionState(entityId);
+        const currentState = currentExec?.state;
+        if (priorState !== undefined) {
+          if (!isEqualJson(currentState, priorState)) {
+            const mismatchMsg = `Script state for entity "${entityId}" did not match pre-transaction snapshot (expected ${JSON.stringify(priorState)}, got ${JSON.stringify(currentState)})`;
+            rollbackError = rollbackError ? `${rollbackError}; ${mismatchMsg}` : mismatchMsg;
+          }
+        }
+      }
+
+      if (rollbackError) {
+        const error = `Rollback failed: atomicity invariant violated: ${rollbackError} (original commit error: ${rawCommitError})`;
+        this.#log("error", "save.restoreFailed", {
+          slotId,
+          phase: "rollback",
+          rolledBack: false,
+          atomicityViolation: true,
+          error,
+        });
+        return {
+          success: false,
+          phase: "rollback",
+          rolledBack: false,
+          atomicityViolation: true,
+          error,
+        };
+      }
+
+      // Rollback verified complete and identical to pre-load state
+      const error = `Commit failed and was rolled back: ${rawCommitError}`;
+      this.#log("error", "save.restoreFailed", {
+        slotId,
+        phase: "commit",
+        rolledBack: true,
+        error,
+      });
+      return {
+        success: false,
+        phase: "commit",
+        rolledBack: true,
+        error,
+      };
+    }
+
+    this.renderOnce();
+    this.#log("info", "save.restored", {
+      slotId,
+      schemaVersion: migratedEnvelope.schemaVersion,
+      sceneId: migratedEnvelope.data.sceneId,
+      entityCount: Object.keys(migratedEnvelope.data.entities).length,
+    });
+
+    return {
+      success: true,
+      slotId,
+      schemaVersion: migratedEnvelope.schemaVersion,
+    };
   }
 
   query(query: PlayerRuntimeQuery = {}): PlayerRuntimeQueryResult {

@@ -61,9 +61,14 @@ async function handleRuntimeCommand(request: {
           : params.mode === "realtime"
             ? false
             : true;
+      const testScriptPreset =
+        typeof params.testScriptPreset === "string"
+          ? params.testScriptPreset
+          : undefined;
       const result = await runtime.start(project, sceneId, projectRevision, {
         ...(assets !== undefined ? { assets } : {}),
         stepped,
+        ...(testScriptPreset !== undefined ? { testScriptPreset } : {}),
       });
       statusElement.textContent =
         `agent runtime · scene ${sceneId} · revision ${projectRevision}`;
@@ -153,6 +158,39 @@ async function handleRuntimeCommand(request: {
           : undefined;
       runtime.computePath(start, end, halfExtents);
       return runtime.query();
+    }
+
+    case "save.capture": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : "default";
+      const result = await runtime.captureSave(slotId);
+      return result;
+    }
+
+    case "save.get": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : "default";
+      const envelope = await runtime.getSave(slotId);
+      return { success: !!envelope, envelope };
+    }
+
+    case "save.load": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : undefined;
+      const envelope = isRecord(params.envelope)
+        ? (params.envelope as Record<string, unknown> as any)
+        : undefined;
+      const result = await runtime.loadSave({
+        ...(slotId !== undefined ? { slotId } : {}),
+        ...(envelope !== undefined ? { envelope } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "testHarness.enableTestFixtures": {
+      const preset = requireString(params.preset, "preset");
+      if (preset === "save-load-atomicity") {
+        runtime.enableTestScriptFixtures("save-load-atomicity");
+        return { enabled: true, preset };
+      }
+      throw new Error(`Unsupported test fixture preset: "${preset}"`);
     }
 
     case "runtime.stop":

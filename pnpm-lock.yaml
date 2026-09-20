@@ -35,6 +35,9 @@ importers:
       '@kinetra/renderer-three':
         specifier: workspace:*
         version: link:../../packages/renderer-three
+      '@kinetra/save-state':
+        specifier: workspace:*
+        version: link:../../packages/save-state
       three:
         specifier: 0.180.0
         version: 0.180.0

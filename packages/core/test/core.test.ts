@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ScriptHost, SceneLifecycle, instantiatePrefab, ScriptRegistry, PlayerControllerScript } from "../src/index.js";
+import { ScriptHost, SceneLifecycle, instantiatePrefab, ScriptRegistry, PlayerControllerScript, type PreparedScriptRestore } from "../src/index.js";
 
 test("script lifecycle is deterministic and tears down in reverse order",async()=>{
   const log:string[]=[];
@@ -317,4 +317,308 @@ test("ScriptHost reports correct failing phase for onStop and onDestroy errors",
   assert.ok(destroyLog, "Must log onDestroy failure");
   assert.equal(destroyLog.data?.error, "Destroy failure");
 });
+
+test("ScriptHost and PlayerControllerScript support restoreState", async () => {
+  const host = new ScriptHost();
+  const script = new PlayerControllerScript();
+
+  host.register({
+    id: "hero_script",
+    scriptId: "PlayerController",
+    context: {
+      entityId: "hero",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Restore state
+  const restored = await host.restoreScriptState("hero_script", {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+  assert.equal(restored, true);
+  assert.deepEqual(script.getState(), {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+
+  // State reflects in host execution state
+  const execState = host.getExecutionState("hero_script");
+  assert.deepEqual(execState?.state, {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+
+  // Verification of canRestoreScriptState and validateScriptRestoreState
+  assert.equal(host.hasScript("hero_script"), true);
+  assert.equal(host.hasScript("nonexistent"), false);
+  assert.equal(host.canRestoreScriptState("hero_script"), true);
+  assert.equal(host.canRestoreScriptState("nonexistent"), false);
+
+  // Validation passes on valid payload
+  const validRes = host.validateScriptRestoreState("hero_script", { moveCount: 1, jumpCount: 1 });
+  assert.equal(validRes.valid, true);
+
+  // Validation fails on corrupt fields
+  const corruptMove = host.validateScriptRestoreState("hero_script", { moveCount: "CORRUPT" });
+  assert.equal(corruptMove.valid, false);
+  assert.ok(corruptMove.error?.includes("moveCount must be a finite number"));
+
+  const corruptJump = host.validateScriptRestoreState("hero_script", { jumpCount: null as any });
+  assert.equal(corruptJump.valid, false);
+  assert.ok(corruptJump.error?.includes("jumpCount must be a finite number"));
+
+  // Validation fails on non-existent script
+  const nonExistentRes = host.validateScriptRestoreState("nonexistent", { moveCount: 1 });
+  assert.equal(nonExistentRes.valid, false);
+
+  // Direct script restoreState throws on invalid payload
+  assert.throws(
+    () => script.restoreState({ moveCount: "INVALID" as any }),
+    /Cannot restore invalid PlayerController state/,
+  );
+
+  await host.destroyAll();
+});
+
+test("ScriptHost rejects restoration for scripts that do not implement restoreState", async () => {
+  const host = new ScriptHost();
+  host.register({
+    id: "readonly_script",
+    scriptId: "ReadOnlyScript",
+    context: {
+      entityId: "npc",
+      sceneId: "main",
+    },
+    script: {
+      onCreate: () => {},
+    },
+  });
+
+  await host.startAll();
+  assert.equal(host.hasScript("readonly_script"), true);
+  assert.equal(host.canRestoreScriptState("readonly_script"), false);
+
+  const val = host.validateScriptRestoreState("readonly_script", { someKey: 123 });
+  assert.equal(val.valid, false);
+  assert.ok(val.error?.includes("does not support state restoration"));
+
+  assert.equal(await host.restoreScriptState("readonly_script", { someKey: 123 }), false);
+  await host.destroyAll();
+});
+
+test("ScriptHost prepareScriptRestore supports two-phase commit and rollback for PlayerControllerScript", async () => {
+  const host = new ScriptHost();
+  const script = new PlayerControllerScript();
+
+  host.register({
+    id: "hero",
+    scriptId: "PlayerController",
+    context: {
+      entityId: "hero",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Phase 3: prepare
+  const prepared = await host.prepareScriptRestore("hero", {
+    moveCount: 10,
+    jumpCount: 5,
+    lastAction: "player.jump",
+  });
+
+  // Verification: preparation does NOT mutate live state
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Phase 4: commit
+  await prepared.commit();
+  assert.deepEqual(script.getState(), {
+    moveCount: 10,
+    jumpCount: 5,
+    lastAction: "player.jump",
+  });
+
+  // Rollback restores previous state
+  await prepared.rollback();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  await host.destroyAll();
+});
+
+test("ScriptHost handles adversarial script mutating before throw with rollback restoring pre-transaction state", async () => {
+  const host = new ScriptHost();
+
+  class AdversarialScript {
+    value = 5;
+    getState() {
+      return { value: this.value };
+    }
+    prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+      const oldValue = this.value;
+      const nextValue = state.value as number;
+      const throwAfterMutation = Boolean(state.throwAfterMutation);
+      return {
+        commit: () => {
+          this.value = nextValue;
+          if (throwAfterMutation) {
+            throw new Error("Adversarial throw AFTER mutation");
+          }
+        },
+        rollback: () => {
+          this.value = oldValue;
+        },
+      };
+    }
+  }
+
+  const script = new AdversarialScript();
+  host.register({
+    id: "adv",
+    context: {
+      entityId: "adv",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  // Prepare restore with throwAfterMutation: true
+  const prepared = await host.prepareScriptRestore("adv", {
+    value: 99,
+    throwAfterMutation: true,
+  });
+
+  // Preparation does not mutate live state
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  // Commit executes mutation and then throws
+  await assert.rejects(
+    async () => {
+      await prepared.commit();
+    },
+    /Adversarial throw AFTER mutation/,
+  );
+
+  // Notice mutation occurred before throw (value is 99)
+  assert.equal(script.value, 99);
+
+  // Rollback restores value back to 5
+  await prepared.rollback();
+  assert.equal(script.value, 5);
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  await host.destroyAll();
+});
+
+test("ScriptHost rollback failure propagates error when rollback throws", async () => {
+  const host = new ScriptHost();
+
+  class BrokenRollbackScript {
+    value = 1;
+    throwOnRollback = false;
+    getState() {
+      return { value: this.value };
+    }
+    prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+      const oldValue = this.value;
+      const nextValue = state.value as number;
+      return {
+        commit: () => {
+          this.value = nextValue;
+        },
+        rollback: () => {
+          if (this.throwOnRollback) {
+            throw new Error("Unrecoverable rollback error");
+          }
+          this.value = oldValue;
+        },
+      };
+    }
+  }
+
+  const script = new BrokenRollbackScript();
+  host.register({
+    id: "broken",
+    context: {
+      entityId: "broken",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+
+  const prep = await host.prepareScriptRestore("broken", { value: 99 });
+  await prep.commit();
+  assert.equal(script.value, 99);
+
+  script.throwOnRollback = true;
+  // If rollback is called, it must not be silently swallowed
+  await assert.rejects(
+    async () => {
+      await prep.rollback();
+    },
+    /Unrecoverable rollback error/,
+  );
+
+  await host.destroyAll();
+});
+
+test("ScriptHost rejects legacy-only restoreState in prepareScriptRestore but permits direct restoreScriptState", async () => {
+  const host = new ScriptHost();
+
+  class LegacyScript {
+    value = 1;
+    getState() {
+      return { value: this.value };
+    }
+    restoreState(state: Record<string, unknown>) {
+      this.value = state.value as number;
+    }
+  }
+
+  host.register({
+    id: "legacy",
+    context: {
+      entityId: "legacy",
+      sceneId: "main",
+    },
+    script: new LegacyScript(),
+  });
+
+  await host.startAll();
+
+  assert.equal(host.canRestoreScriptState("legacy"), true);
+  assert.equal(host.canPrepareTransactionalRestore("legacy"), false);
+
+  // Transactional preparation must be rejected
+  await assert.rejects(
+    async () => {
+      await host.prepareScriptRestore("legacy", { value: 2 });
+    },
+    /does not support transactional state restoration/,
+  );
+
+  // Legacy direct restore still works non-transactionally
+  const directResult = await host.restoreScriptState("legacy", { value: 42 });
+  assert.equal(directResult, true);
+  assert.equal(host.getExecutionState("legacy")?.state?.value, 42);
+
+  await host.destroyAll();
+});
+
+
 

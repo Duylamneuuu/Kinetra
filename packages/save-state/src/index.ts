@@ -67,3 +67,45 @@ export class JsonDocumentStore<T>{
     await this.storage.delete(`${this.prefix}:${key}`);
   }
 }
+
+export interface EntitySaveState {
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  gameplay?: Record<string, unknown>;
+}
+
+export interface GameplaySaveData {
+  sceneId: string;
+  entities: Record<string, EntitySaveState>;
+}
+
+export const CURRENT_SAVE_SCHEMA_VERSION = 2;
+
+export function createGameplaySaveMigrator(): SaveMigrator {
+  return new SaveMigrator(CURRENT_SAVE_SCHEMA_VERSION)
+    .register(1, (data: unknown) => {
+      const v1 = data as {
+        sceneId: string;
+        entities?: Record<string, {
+          position?: [number, number, number];
+          rotation?: [number, number, number];
+          state?: Record<string, unknown>;
+        }>;
+      };
+
+      const entities: Record<string, EntitySaveState> = {};
+      for (const [entityId, entry] of Object.entries(v1.entities ?? {})) {
+        entities[entityId] = {
+          ...(entry.position !== undefined ? { position: entry.position } : {}),
+          ...(entry.rotation !== undefined ? { rotation: entry.rotation } : {}),
+          ...(entry.state !== undefined ? { gameplay: entry.state } : {}),
+        };
+      }
+
+      return {
+        sceneId: v1.sceneId,
+        entities,
+      };
+    });
+}
+

@@ -223,6 +223,10 @@ async function handleBridgeRequest(
     case "navigation.load":
     case "navigation.closestPoint":
     case "navigation.computePath":
+    case "save.capture":
+    case "save.get":
+    case "save.load":
+    case "testHarness.enableTestFixtures":
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {

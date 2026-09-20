@@ -17,6 +17,11 @@ export interface GameScriptContext {
   log?(level: "debug" | "info" | "warning" | "error", category: string, data?: Record<string, unknown>): void;
 }
 
+export interface PreparedScriptRestore {
+  commit(): void | Promise<void>;
+  rollback(): void | Promise<void>;
+}
+
 export interface GameScript {
   onCreate?(context: GameScriptContext): void | Promise<void>;
   onStart?(context: GameScriptContext): void | Promise<void>;
@@ -24,6 +29,15 @@ export interface GameScript {
   onStop?(context: GameScriptContext): void | Promise<void>;
   onDestroy?(context: GameScriptContext): void | Promise<void>;
   getState?(): Record<string, unknown>;
+  validateRestoreState?(
+    state: Record<string, unknown>,
+    context?: GameScriptContext,
+  ): boolean | { valid: boolean; error?: string };
+  prepareRestoreState?(
+    state: Record<string, unknown>,
+    context?: GameScriptContext,
+  ): PreparedScriptRestore | Promise<PreparedScriptRestore>;
+  restoreState?(state: Record<string, unknown>, context?: GameScriptContext): void | Promise<void>;
 }
 
 export type ScriptLifecycleState =
@@ -275,6 +289,102 @@ export class ScriptHost {
     };
   }
 
+  hasScript(id: string): boolean {
+    return this.#entries.has(id);
+  }
+
+  canRestoreScriptState(id: string): boolean {
+    const entry = this.#entries.get(id);
+    return (
+      !!entry &&
+      (typeof entry.script.prepareRestoreState === "function" ||
+        typeof entry.script.restoreState === "function")
+    );
+  }
+
+  canPrepareTransactionalRestore(id: string): boolean {
+    const entry = this.#entries.get(id);
+    return !!entry && typeof entry.script.prepareRestoreState === "function";
+  }
+
+  async prepareScriptRestore(
+    id: string,
+    state: Record<string, unknown>,
+  ): Promise<PreparedScriptRestore> {
+    const entry = this.#entries.get(id);
+    if (!entry) {
+      throw new Error(`Script "${id}" is not registered`);
+    }
+
+    if (typeof entry.script.prepareRestoreState === "function") {
+      return await entry.script.prepareRestoreState(state, entry.context);
+    }
+
+    throw new Error(
+      `Script "${id}" does not support transactional state restoration`,
+    );
+  }
+
+  validateScriptRestoreState(
+    id: string,
+    state: Record<string, unknown>,
+  ): { valid: boolean; error?: string } {
+    const entry = this.#entries.get(id);
+    if (!entry) {
+      return { valid: false, error: `Script "${id}" is not registered` };
+    }
+    if (
+      typeof entry.script.prepareRestoreState !== "function" &&
+      typeof entry.script.restoreState !== "function"
+    ) {
+      return {
+        valid: false,
+        error: `Script "${id}" does not support state restoration`,
+      };
+    }
+    if (typeof entry.script.validateRestoreState === "function") {
+      try {
+        const result = entry.script.validateRestoreState(state, entry.context);
+        if (typeof result === "boolean") {
+          return result
+            ? { valid: true }
+            : { valid: false, error: `Script "${id}" rejected state payload` };
+        }
+        if (typeof result === "object" && result !== null) {
+          return {
+            valid: Boolean(result.valid),
+            ...(result.error ? { error: result.error } : {}),
+          };
+        }
+        return {
+          valid: false,
+          error: `Script "${id}" returned invalid validation response`,
+        };
+      } catch (err) {
+        return {
+          valid: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+    return { valid: true };
+  }
+
+  async restoreScriptState(id: string, state: Record<string, unknown>): Promise<boolean> {
+    const entry = this.#entries.get(id);
+    if (!entry) return false;
+    if (typeof entry.script.prepareRestoreState === "function") {
+      const prepared = await entry.script.prepareRestoreState(state, entry.context);
+      await prepared.commit();
+      return true;
+    }
+    if (typeof entry.script.restoreState === "function") {
+      await entry.script.restoreState(state, entry.context);
+      return true;
+    }
+    return false;
+  }
+
   getAllExecutionStates(): ScriptExecutionState[] {
     return [...this.#entries.keys()].map(id => this.getExecutionState(id)!);
   }
@@ -287,7 +397,7 @@ export class ScriptHost {
 export class PlayerControllerScript implements GameScript {
   moveCount = 0;
   jumpCount = 0;
-  lastAction?: string;
+  lastAction?: string | undefined;
 
   onCreate(context: GameScriptContext): void {
     context.log?.("info", "script.lifecycle", { phase: "onCreate", entityId: context.entityId });
@@ -335,5 +445,66 @@ export class PlayerControllerScript implements GameScript {
       jumpCount: this.jumpCount,
       ...(this.lastAction ? { lastAction: this.lastAction } : {}),
     };
+  }
+
+  validateRestoreState(
+    state: Record<string, unknown>,
+  ): { valid: boolean; error?: string } {
+    if (typeof state !== "object" || state === null || Array.isArray(state)) {
+      return { valid: false, error: "Gameplay state must be a non-null object" };
+    }
+    if ("moveCount" in state) {
+      if (typeof state.moveCount !== "number" || !Number.isFinite(state.moveCount)) {
+        return { valid: false, error: "moveCount must be a finite number" };
+      }
+    }
+    if ("jumpCount" in state) {
+      if (typeof state.jumpCount !== "number" || !Number.isFinite(state.jumpCount)) {
+        return { valid: false, error: "jumpCount must be a finite number" };
+      }
+    }
+    if ("lastAction" in state && state.lastAction !== undefined) {
+      if (typeof state.lastAction !== "string") {
+        return { valid: false, error: "lastAction must be a string if defined" };
+      }
+    }
+    return { valid: true };
+  }
+
+  prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+    const validation = this.validateRestoreState(state);
+    if (!validation.valid) {
+      throw new Error(
+        `Cannot restore invalid PlayerController state: ${validation.error}`,
+      );
+    }
+    const priorMoveCount = this.moveCount;
+    const priorJumpCount = this.jumpCount;
+    const priorLastAction = this.lastAction;
+
+    const nextMoveCount =
+      typeof state.moveCount === "number" ? state.moveCount : this.moveCount;
+    const nextJumpCount =
+      typeof state.jumpCount === "number" ? state.jumpCount : this.jumpCount;
+    const nextLastAction =
+      typeof state.lastAction === "string" ? state.lastAction : this.lastAction;
+
+    return {
+      commit: () => {
+        this.moveCount = nextMoveCount;
+        this.jumpCount = nextJumpCount;
+        this.lastAction = nextLastAction;
+      },
+      rollback: () => {
+        this.moveCount = priorMoveCount;
+        this.jumpCount = priorJumpCount;
+        this.lastAction = priorLastAction;
+      },
+    };
+  }
+
+  restoreState(state: Record<string, unknown>): void {
+    const prepared = this.prepareRestoreState(state);
+    prepared.commit();
   }
 }

@@ -20,6 +20,7 @@
     "@kinetra/physics-rapier": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "@kinetra/renderer-three": "workspace:*",
+    "@kinetra/save-state": "workspace:*",
     "three": "0.180.0"
   },
   "devDependencies": {
