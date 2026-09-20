@@ -24,6 +24,7 @@ export interface GameScript {
   onStop?(context: GameScriptContext): void | Promise<void>;
   onDestroy?(context: GameScriptContext): void | Promise<void>;
   getState?(): Record<string, unknown>;
+  restoreState?(state: Record<string, unknown>, context?: GameScriptContext): void | Promise<void>;
 }
 
 export type ScriptLifecycleState =
@@ -275,6 +276,16 @@ export class ScriptHost {
     };
   }
 
+  async restoreScriptState(id: string, state: Record<string, unknown>): Promise<boolean> {
+    const entry = this.#entries.get(id);
+    if (!entry) return false;
+    if (typeof entry.script.restoreState === "function") {
+      await entry.script.restoreState(state, entry.context);
+      return true;
+    }
+    return false;
+  }
+
   getAllExecutionStates(): ScriptExecutionState[] {
     return [...this.#entries.keys()].map(id => this.getExecutionState(id)!);
   }
@@ -335,5 +346,17 @@ export class PlayerControllerScript implements GameScript {
       jumpCount: this.jumpCount,
       ...(this.lastAction ? { lastAction: this.lastAction } : {}),
     };
+  }
+
+  restoreState(state: Record<string, unknown>): void {
+    if (typeof state.moveCount === "number") {
+      this.moveCount = state.moveCount;
+    }
+    if (typeof state.jumpCount === "number") {
+      this.jumpCount = state.jumpCount;
+    }
+    if (typeof state.lastAction === "string") {
+      this.lastAction = state.lastAction;
+    }
   }
 }

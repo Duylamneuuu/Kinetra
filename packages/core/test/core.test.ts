@@ -318,3 +318,48 @@ test("ScriptHost reports correct failing phase for onStop and onDestroy errors",
   assert.equal(destroyLog.data?.error, "Destroy failure");
 });
 
+test("ScriptHost and PlayerControllerScript support restoreState", async () => {
+  const host = new ScriptHost();
+  const script = new PlayerControllerScript();
+
+  host.register({
+    id: "hero_script",
+    scriptId: "PlayerController",
+    context: {
+      entityId: "hero",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Restore state
+  const restored = await host.restoreScriptState("hero_script", {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+  assert.equal(restored, true);
+  assert.deepEqual(script.getState(), {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+
+  // State reflects in host execution state
+  const execState = host.getExecutionState("hero_script");
+  assert.deepEqual(execState?.state, {
+    moveCount: 4,
+    jumpCount: 2,
+    lastAction: "player.jump",
+  });
+
+  // Restoring non-existent script returns false
+  assert.equal(await host.restoreScriptState("nonexistent", {}), false);
+
+  await host.destroyAll();
+});
+
+

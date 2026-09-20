@@ -117,6 +117,19 @@ async function executeStep(
         });
       }
       return;
+    case "save.capture":
+      if (typeof probe.captureSave === "function") {
+        await probe.captureSave(step.slotId);
+      }
+      return;
+    case "save.load":
+      if (typeof probe.loadSave === "function") {
+        await probe.loadSave({
+          ...(step.slotId !== undefined ? { slotId: step.slotId } : {}),
+          ...(step.envelope !== undefined ? { envelope: step.envelope } : {}),
+        });
+      }
+      return;
     case "input":
       await probe.input({
         action:step.action,

@@ -116,6 +116,9 @@ export interface RuntimeProbeHost {
   }): Promise<unknown>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
   stopAnimation?(entityId: string): Promise<unknown>;
+  captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
+  getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
+  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
 }
 
 export interface RuntimeProbe {
@@ -147,6 +150,9 @@ export interface RuntimeProbe {
   }): Promise<void>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<void>;
   stopAnimation?(entityId: string): Promise<void>;
+  captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
+  getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
+  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
 }
 
 export type AcceptanceStep =
@@ -174,6 +180,8 @@ export type AcceptanceStep =
       end: [number, number, number];
       halfExtents?: [number, number, number];
     }
+  | { type: "save.capture"; slotId?: string }
+  | { type: "save.load"; slotId?: string; envelope?: Record<string, unknown> }
   | ({type:"input"}&RuntimeInput)
   | {type:"wait";milliseconds:number}
   | {type:"assert.equal";path:string;expected:unknown}

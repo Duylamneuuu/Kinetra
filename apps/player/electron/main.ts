@@ -223,6 +223,9 @@ async function handleBridgeRequest(
     case "navigation.load":
     case "navigation.closestPoint":
     case "navigation.computePath":
+    case "save.capture":
+    case "save.get":
+    case "save.load":
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {

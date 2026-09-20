@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { JsonDocumentStore, MemoryStorage, SaveMigrator } from "../src/index.js";
+import { JsonDocumentStore, MemoryStorage, SaveMigrator, createGameplaySaveMigrator, type GameplaySaveData } from "../src/index.js";
 
 test("save migrations advance sequentially",()=>{
   const migrator=new SaveMigrator(3)
@@ -22,3 +22,33 @@ test("JSON document store round-trips settings/save data",async()=>{
   await settings.remove("global");
   assert.equal(await settings.load("global"),undefined);
 });
+
+test("createGameplaySaveMigrator migrates v1 state to v2 gameplay slice", () => {
+  const migrator = createGameplaySaveMigrator();
+  assert.equal(migrator.currentVersion, 2);
+
+  const v1Save = {
+    schemaVersion: 1,
+    gameVersion: "0.1.0",
+    slotId: "slot-1",
+    savedAt: "2026-09-20T00:00:00Z",
+    data: {
+      sceneId: "main",
+      entities: {
+        hero: {
+          position: [1.5, 0, 0] as [number, number, number],
+          state: { moveCount: 5, jumpCount: 2 },
+        },
+      },
+    },
+  };
+
+  const migrated = migrator.migrate<GameplaySaveData>(v1Save);
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.data.sceneId, "main");
+  assert.deepEqual(migrated.data.entities.hero, {
+    position: [1.5, 0, 0],
+    gameplay: { moveCount: 5, jumpCount: 2 },
+  });
+});
+

@@ -217,6 +217,50 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
   }
 
+  async captureSave(slotId?: string): Promise<{
+    success: boolean;
+    envelope?: Record<string, unknown>;
+    error?: string;
+  }> {
+    await this.#ensureProcess();
+    return this.#request<{
+      success: boolean;
+      envelope?: Record<string, unknown>;
+      error?: string;
+    }>("save.capture", { ...(slotId !== undefined ? { slotId } : {}) });
+  }
+
+  async getSave(slotId?: string): Promise<{
+    success: boolean;
+    envelope?: Record<string, unknown>;
+    error?: string;
+  }> {
+    await this.#ensureProcess();
+    return this.#request<{
+      success: boolean;
+      envelope?: Record<string, unknown>;
+      error?: string;
+    }>("save.get", { ...(slotId !== undefined ? { slotId } : {}) });
+  }
+
+  async loadSave(params: {
+    slotId?: string;
+    envelope?: Record<string, unknown>;
+  }): Promise<{
+    success: boolean;
+    slotId?: string;
+    schemaVersion?: number;
+    error?: string;
+  }> {
+    await this.#ensureProcess();
+    return this.#request<{
+      success: boolean;
+      slotId?: string;
+      schemaVersion?: number;
+      error?: string;
+    }>("save.load", params);
+  }
+
   async close(): Promise<void> {
     const child = this.#child;
     const socket = this.#socket;

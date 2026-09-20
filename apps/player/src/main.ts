@@ -155,6 +155,30 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
     }
 
+    case "save.capture": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : "default";
+      const result = await runtime.captureSave(slotId);
+      return result;
+    }
+
+    case "save.get": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : "default";
+      const envelope = await runtime.getSave(slotId);
+      return { success: !!envelope, envelope };
+    }
+
+    case "save.load": {
+      const slotId = typeof params.slotId === "string" ? params.slotId : undefined;
+      const envelope = isRecord(params.envelope)
+        ? (params.envelope as Record<string, unknown> as any)
+        : undefined;
+      const result = await runtime.loadSave({
+        ...(slotId !== undefined ? { slotId } : {}),
+        ...(envelope !== undefined ? { envelope } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
     case "runtime.stop":
       await runtime.stop();
       statusElement.textContent = "agent runtime · stopped";

@@ -168,6 +168,43 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     }
   }
 
+  async captureSave(slotId?: string): Promise<{
+    success: boolean;
+    envelope?: Record<string, unknown>;
+    error?: string;
+  }> {
+    if (typeof this.#host.captureSave === "function") {
+      return this.#host.captureSave(slotId);
+    }
+    return { success: false, error: "Host does not support captureSave" };
+  }
+
+  async getSave(slotId?: string): Promise<{
+    success: boolean;
+    envelope?: Record<string, unknown>;
+    error?: string;
+  }> {
+    if (typeof this.#host.getSave === "function") {
+      return this.#host.getSave(slotId);
+    }
+    return { success: false, error: "Host does not support getSave" };
+  }
+
+  async loadSave(params: {
+    slotId?: string;
+    envelope?: Record<string, unknown>;
+  }): Promise<{
+    success: boolean;
+    slotId?: string;
+    schemaVersion?: number;
+    error?: string;
+  }> {
+    if (typeof this.#host.loadSave === "function") {
+      return this.#host.loadSave(params);
+    }
+    return { success: false, error: "Host does not support loadSave" };
+  }
+
   async snapshot(): Promise<RuntimeSnapshot> {
     const query = await this.#host.query();
     const byEntityId: Record<string, unknown> = {};
