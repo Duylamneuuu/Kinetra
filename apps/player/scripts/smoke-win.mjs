@@ -48,7 +48,7 @@ const acceptanceTestFile = join(
   "..",
   "..",
   "packages",
-  "verification",
+  "mcp-server",
   "dist",
   "test",
   "real-mcp-acceptance.test.js",

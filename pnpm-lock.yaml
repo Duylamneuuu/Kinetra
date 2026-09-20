@@ -165,9 +165,9 @@ importers:
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../audio
-      '@kinetra/mcp-server':
-        specifier: workspace:*
-        version: link:../mcp-server
+      electron:
+        specifier: 38.0.0
+        version: 38.0.0
 
 packages:
 

@@ -7,9 +7,8 @@ import {
   isPackagedExecutableAvailable,
   KinetraAgentService,
   resolvePackagedExecutable,
-} from "@kinetra/mcp-server";
-
-import type { AcceptanceManifest, AcceptanceReport } from "../src/types.js";
+} from "../src/index.js";
+import type { AcceptanceManifest, AcceptanceReport } from "@kinetra/verification";
 
 const sceneId = stableId("scene", "p8-mcp-acceptance");
 const boxId = stableId("entity", "p8-mcp-box");
@@ -121,7 +120,7 @@ test(
   { skip: process.platform !== "win32", timeout: 60_000 },
   async () => {
     const service = new KinetraAgentService(fixtureProject());
-    const report = await service.runAcceptance({
+    const report: AcceptanceReport = await service.runAcceptance({
       manifest: passingManifest("runtime"),
       target: "runtime",
     });
@@ -155,7 +154,7 @@ test(
   { skip: process.platform !== "win32", timeout: 60_000 },
   async () => {
     const service = new KinetraAgentService(fixtureProject());
-    const report = await service.runAcceptance({
+    const report: AcceptanceReport = await service.runAcceptance({
       manifest: failingManifest("runtime"),
       target: "runtime",
     });
@@ -198,7 +197,7 @@ test(
     );
 
     const service = new KinetraAgentService(fixtureProject());
-    const report = await service.runAcceptance({
+    const report: AcceptanceReport = await service.runAcceptance({
       manifest: passingManifest("packaged"),
       target: "packaged",
     });
@@ -237,7 +236,7 @@ test(
   },
   async () => {
     const service = new KinetraAgentService(fixtureProject());
-    const report = await service.runAcceptance({
+    const report: AcceptanceReport = await service.runAcceptance({
       manifest: failingManifest("packaged"),
       target: "packaged",
     });
@@ -270,21 +269,21 @@ test(
     const service = new KinetraAgentService(fixtureProject());
 
     // Call 1: PASS
-    const rep1 = await service.runAcceptance({
+    const rep1: AcceptanceReport = await service.runAcceptance({
       manifest: passingManifest("runtime"),
       target: "runtime",
     });
     assert.equal(rep1.passed, true);
 
     // Call 2: FAIL
-    const rep2 = await service.runAcceptance({
+    const rep2: AcceptanceReport = await service.runAcceptance({
       manifest: failingManifest("runtime"),
       target: "runtime",
     });
     assert.equal(rep2.passed, false);
 
     // Call 3: PASS again
-    const rep3 = await service.runAcceptance({
+    const rep3: AcceptanceReport = await service.runAcceptance({
       manifest: passingManifest("runtime"),
       target: "runtime",
     });
