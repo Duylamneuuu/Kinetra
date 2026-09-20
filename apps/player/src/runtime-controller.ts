@@ -787,6 +787,12 @@ export class PlayerRuntimeController {
           return { success: false, error };
         }
 
+        if (!this.#scripts.canPrepareTransactionalRestore(entityId)) {
+          const error = `Script on entity "${entityId}" does not support transactional state restoration`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
         const validation = this.#scripts.validateScriptRestoreState(
           entityId,
           entry.gameplay,

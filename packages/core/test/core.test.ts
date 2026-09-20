@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ScriptHost, SceneLifecycle, instantiatePrefab, ScriptRegistry, PlayerControllerScript } from "../src/index.js";
+import { ScriptHost, SceneLifecycle, instantiatePrefab, ScriptRegistry, PlayerControllerScript, type PreparedScriptRestore } from "../src/index.js";
 
 test("script lifecycle is deterministic and tears down in reverse order",async()=>{
   const log:string[]=[];
@@ -464,11 +464,21 @@ test("ScriptHost handles adversarial script mutating before throw with rollback 
     getState() {
       return { value: this.value };
     }
-    restoreState(state: Record<string, unknown>) {
-      this.value = state.value as number;
-      if (state.throwAfterMutation) {
-        throw new Error("Adversarial throw AFTER mutation");
-      }
+    prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+      const oldValue = this.value;
+      const nextValue = state.value as number;
+      const throwAfterMutation = Boolean(state.throwAfterMutation);
+      return {
+        commit: () => {
+          this.value = nextValue;
+          if (throwAfterMutation) {
+            throw new Error("Adversarial throw AFTER mutation");
+          }
+        },
+        rollback: () => {
+          this.value = oldValue;
+        },
+      };
     }
   }
 
@@ -518,14 +528,24 @@ test("ScriptHost rollback failure propagates error when rollback throws", async 
 
   class BrokenRollbackScript {
     value = 1;
+    throwOnRollback = false;
     getState() {
       return { value: this.value };
     }
-    restoreState(state: Record<string, unknown>) {
-      if (state.throwInRollback) {
-        throw new Error("Rollback throw");
-      }
-      this.value = state.value as number;
+    prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+      const oldValue = this.value;
+      const nextValue = state.value as number;
+      return {
+        commit: () => {
+          this.value = nextValue;
+        },
+        rollback: () => {
+          if (this.throwOnRollback) {
+            throw new Error("Unrecoverable rollback error");
+          }
+          this.value = oldValue;
+        },
+      };
     }
   }
 
@@ -541,27 +561,61 @@ test("ScriptHost rollback failure propagates error when rollback throws", async 
 
   await host.startAll();
 
-  // First change state and mark prior snapshot
-  const prep = await host.prepareScriptRestore("broken", { value: 2 });
+  const prep = await host.prepareScriptRestore("broken", { value: 99 });
   await prep.commit();
-  assert.equal(script.value, 2);
+  assert.equal(script.value, 99);
 
-  // Now create a prepared restore where priorState will throw in rollback
-  script.restoreState = (state: Record<string, unknown>) => {
-    if (state.value === 2) {
-      throw new Error("Unrecoverable rollback error");
-    }
-    script.value = state.value as number;
-  };
-
-  const prep2 = await host.prepareScriptRestore("broken", { value: 99 });
+  script.throwOnRollback = true;
   // If rollback is called, it must not be silently swallowed
   await assert.rejects(
     async () => {
-      await prep2.rollback();
+      await prep.rollback();
     },
     /Unrecoverable rollback error/,
   );
+
+  await host.destroyAll();
+});
+
+test("ScriptHost rejects legacy-only restoreState in prepareScriptRestore but permits direct restoreScriptState", async () => {
+  const host = new ScriptHost();
+
+  class LegacyScript {
+    value = 1;
+    getState() {
+      return { value: this.value };
+    }
+    restoreState(state: Record<string, unknown>) {
+      this.value = state.value as number;
+    }
+  }
+
+  host.register({
+    id: "legacy",
+    context: {
+      entityId: "legacy",
+      sceneId: "main",
+    },
+    script: new LegacyScript(),
+  });
+
+  await host.startAll();
+
+  assert.equal(host.canRestoreScriptState("legacy"), true);
+  assert.equal(host.canPrepareTransactionalRestore("legacy"), false);
+
+  // Transactional preparation must be rejected
+  await assert.rejects(
+    async () => {
+      await host.prepareScriptRestore("legacy", { value: 2 });
+    },
+    /does not support transactional state restoration/,
+  );
+
+  // Legacy direct restore still works non-transactionally
+  const directResult = await host.restoreScriptState("legacy", { value: 42 });
+  assert.equal(directResult, true);
+  assert.equal(host.getExecutionState("legacy")?.state?.value, 42);
 
   await host.destroyAll();
 });

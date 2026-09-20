@@ -1,12 +1,19 @@
-import type { GameScript, ScriptRegistry } from "@kinetra/core";
+import type { GameScript, ScriptRegistry, PreparedScriptRestore } from "@kinetra/core";
 
 export class ReadOnlyScript implements GameScript {
   onCreate(): void {}
 }
 
 export class ThrowingRestoreScript implements GameScript {
-  restoreState(): void {
-    throw new Error("Intentional commit failure in restoreState");
+  prepareRestoreState(): PreparedScriptRestore {
+    return {
+      commit: () => {
+        throw new Error("Intentional commit failure in prepareRestoreState");
+      },
+      rollback: () => {
+        // safe no-op
+      },
+    };
   }
 }
 
@@ -26,10 +33,35 @@ export class AdversarialMutationScript implements GameScript {
     return { valid: true };
   }
 
+  prepareRestoreState(state: Record<string, unknown>): PreparedScriptRestore {
+    const oldValue = this.value;
+    const nextValue = state.value as number;
+    const throwAfterMutation = Boolean(state.throwAfterMutation);
+
+    return {
+      commit: () => {
+        this.value = nextValue;
+        if (throwAfterMutation) {
+          throw new Error("Adversarial throw AFTER mutation");
+        }
+      },
+      rollback: () => {
+        this.value = oldValue;
+      },
+    };
+  }
+}
+
+export class LegacyRestoreScript implements GameScript {
+  legacyValue = 100;
+
+  getState(): Record<string, unknown> {
+    return { legacyValue: this.legacyValue };
+  }
+
   restoreState(state: Record<string, unknown>): void {
-    this.value = state.value as number;
-    if (state.throwAfterMutation) {
-      throw new Error("Adversarial throw AFTER mutation");
+    if (typeof state.legacyValue === "number") {
+      this.legacyValue = state.legacyValue;
     }
   }
 }
@@ -38,4 +70,5 @@ export function registerSaveLoadTestFixtures(registry: ScriptRegistry): void {
   registry.register("ReadOnlyScript", () => new ReadOnlyScript());
   registry.register("ThrowingRestoreScript", () => new ThrowingRestoreScript());
   registry.register("AdversarialMutationScript", () => new AdversarialMutationScript());
+  registry.register("LegacyRestoreScript", () => new LegacyRestoreScript());
 }

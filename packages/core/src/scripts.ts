@@ -302,6 +302,11 @@ export class ScriptHost {
     );
   }
 
+  canPrepareTransactionalRestore(id: string): boolean {
+    const entry = this.#entries.get(id);
+    return !!entry && typeof entry.script.prepareRestoreState === "function";
+  }
+
   async prepareScriptRestore(
     id: string,
     state: Record<string, unknown>,
@@ -315,25 +320,9 @@ export class ScriptHost {
       return await entry.script.prepareRestoreState(state, entry.context);
     }
 
-    if (typeof entry.script.restoreState === "function") {
-      const priorState =
-        typeof entry.script.getState === "function"
-          ? structuredClone(entry.script.getState())
-          : undefined;
-
-      return {
-        commit: async () => {
-          await entry.script.restoreState!(state, entry.context);
-        },
-        rollback: async () => {
-          if (priorState !== undefined && typeof entry.script.restoreState === "function") {
-            await entry.script.restoreState(priorState, entry.context);
-          }
-        },
-      };
-    }
-
-    throw new Error(`Script "${id}" does not support state restoration`);
+    throw new Error(
+      `Script "${id}" does not support transactional state restoration`,
+    );
   }
 
   validateScriptRestoreState(
@@ -384,15 +373,16 @@ export class ScriptHost {
   async restoreScriptState(id: string, state: Record<string, unknown>): Promise<boolean> {
     const entry = this.#entries.get(id);
     if (!entry) return false;
-    if (
-      typeof entry.script.prepareRestoreState !== "function" &&
-      typeof entry.script.restoreState !== "function"
-    ) {
-      return false;
+    if (typeof entry.script.prepareRestoreState === "function") {
+      const prepared = await entry.script.prepareRestoreState(state, entry.context);
+      await prepared.commit();
+      return true;
     }
-    const prepared = await this.prepareScriptRestore(id, state);
-    await prepared.commit();
-    return true;
+    if (typeof entry.script.restoreState === "function") {
+      await entry.script.restoreState(state, entry.context);
+      return true;
+    }
+    return false;
   }
 
   getAllExecutionStates(): ScriptExecutionState[] {

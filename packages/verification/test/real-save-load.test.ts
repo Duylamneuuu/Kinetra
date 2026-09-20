@@ -17,6 +17,7 @@ const lightId = stableId("entity", "p6-light-save-load");
 const readOnlyNpcId = stableId("entity", "p6-readonly-npc");
 const throwingEntityId = stableId("entity", "p6-throwing-entity");
 const adversarialEntityId = stableId("entity", "p6-adversarial-entity");
+const legacyNpcId = stableId("entity", "p6-legacy-npc");
 
 function saveLoadFixtureProject(): ProjectDocument {
   return {
@@ -129,6 +130,20 @@ function saveLoadAtomicityFixtureProject(): ProjectDocument {
               },
               Transform: {
                 position: [1, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+              },
+            },
+          },
+          {
+            id: legacyNpcId,
+            name: "LegacyNpc",
+            components: {
+              Script: {
+                scriptId: "LegacyRestoreScript",
+              },
+              Transform: {
+                position: [7, 0, 0],
                 rotation: [0, 0, 0],
                 scale: [1, 1, 1],
               },
@@ -537,6 +552,7 @@ test(
       let npc = (snapshot.state.byName as Record<string, any>)?.ReadOnlyNpc;
       let throwing = (snapshot.state.byName as Record<string, any>)?.ThrowingEntity;
       let adv = (snapshot.state.byName as Record<string, any>)?.AdversarialEntity;
+      let legacyNpc = (snapshot.state.byName as Record<string, any>)?.LegacyNpc;
 
       assert.equal(hero.position[0], 0);
       assert.equal(hero.gameplay?.state?.moveCount, 0);
@@ -545,6 +561,8 @@ test(
       assert.equal(throwing.position[0], -5);
       assert.equal(adv.position[0], 1);
       assert.equal(adv.gameplay?.state?.value, 5);
+      assert.equal(legacyNpc.position[0], 7);
+      assert.equal(legacyNpc.gameplay?.state?.legacyValue, 100);
 
       // --- Case 0: Adversarial mutation-before-throw test ---
       // initial script state: value = 5, position.x = 1
@@ -664,6 +682,37 @@ test(
       npc = (snapshot.state.byName as Record<string, any>)?.ReadOnlyNpc;
       assert.equal(npc.position[0], 5, "ReadOnlyNpc position must remain 5 (not 50)");
 
+      // --- Case 2C: Legacy-only script restoration rejected in atomic save.load ---
+      const legacyScriptSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case2c-legacy",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [legacyNpcId]: {
+              position: [70, 0, 0],
+              gameplay: { legacyValue: 999 },
+            },
+          },
+        },
+      };
+
+      const case2cResult = await host.loadSave({ envelope: legacyScriptSave });
+      assert.equal(case2cResult.success, false, "Load with gameplay for legacy-only script must fail in atomic save.load");
+      assert.ok(
+        case2cResult.error?.includes("does not support transactional state restoration"),
+        `Expected error to include 'does not support transactional state restoration', got: ${case2cResult.error}`,
+      );
+
+      // Assert zero mutation
+      snapshot = await probe.snapshot();
+      legacyNpc = (snapshot.state.byName as Record<string, any>)?.LegacyNpc;
+      assert.equal(legacyNpc.position[0], 7, "LegacyNpc position must remain 7 (not 70)");
+      assert.equal(legacyNpc.gameplay?.state?.legacyValue, 100, "LegacyNpc legacyValue must remain 100 (not 999)");
+      assert.equal(snapshot.running, true, "Runtime must remain running");
+
       // --- Case 3: Restoration commit throws (with automatic rollback) ---
       // Save requests: Hero position.x = 10, ThrowingEntity position.x = 25 and throwing gameplay
       const throwingSave = {
@@ -704,7 +753,7 @@ test(
       // Verify structured logs contain the expected failure phases
       const logs = await probe.logs();
       const failLogs = logs.filter(l => l.message === "save.restoreFailed");
-      assert.ok(failLogs.length >= 5, "Must log save.restoreFailed for each failure");
+      assert.ok(failLogs.length >= 6, "Must log save.restoreFailed for each failure");
       assert.ok(failLogs.some(l => l.data?.phase === "preparation"), "Must log preparation phase failures");
       assert.ok(failLogs.some(l => l.data?.phase === "commit"), "Must log commit phase failure on throw");
 
