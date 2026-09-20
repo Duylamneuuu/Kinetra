@@ -245,6 +245,7 @@ export class AcceptanceRunner {
   async run(manifest:AcceptanceManifest):Promise<AcceptanceReport>{
     if(manifest.schemaVersion!==1) throw new Error("Unsupported acceptance manifest schema");
     const started=new Date();
+    const startedPerf=performance.now();
     const steps:StepResult[]=[];
     let runtimeStarted=false;
 
@@ -264,10 +265,16 @@ export class AcceptanceRunner {
             durationMs:performance.now()-before,
           });
         }catch(error){
+          const message=error instanceof Error?error.message:String(error);
           steps.push({
-            index,type:step.type,passed:false,
+            index,
+            type:step.type,
+            passed:false,
             durationMs:performance.now()-before,
-            message:error instanceof Error?error.message:String(error),
+            message,
+            error:message,
+            ...(step.type==="assert.equal"?{expected:step.expected}:{}),
+            ...(step.type==="assert.near"?{expected:step.expected}:{}),
           });
           break;
         }
@@ -283,13 +290,25 @@ export class AcceptanceRunner {
     }
 
     const finished=new Date();
+    const durationMs=performance.now()-startedPerf;
+    const failedSteps=steps.filter((step)=>!step.passed);
+    const failureReason=failedSteps.length>0?failedSteps[0]?.message:undefined;
+
     return{
       suite:manifest.suite,
       target:manifest.target,
       passed:steps.length===manifest.steps.length&&steps.every(step=>step.passed),
+      durationMs,
       startedAt:started.toISOString(),
       finishedAt:finished.toISOString(),
       steps,
+      failedSteps,
+      ...(failureReason!==undefined?{failureReason}:{}),
+      observations:{
+        totalSteps:manifest.steps.length,
+        executedSteps:steps.length,
+        target:manifest.target,
+      },
     };
   }
 }

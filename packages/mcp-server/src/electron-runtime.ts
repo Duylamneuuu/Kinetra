@@ -37,7 +37,7 @@ interface PendingRequest {
 export interface ElectronRuntimeHostOptions {
   electronExecutable?: string;
   playerEntry?: string;
-  runtimeExecutable?: string;
+  runtimeExecutable?: string | undefined;
   requestTimeoutMs?: number;
   saveDir?: string;
 }
@@ -105,7 +105,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
       options.playerEntry ?? defaultPlayerEntry();
 
     this.runtimeExecutable =
-      options.runtimeExecutable ?? process.env.KINETRA_RUNTIME_EXECUTABLE;
+      "runtimeExecutable" in options
+        ? options.runtimeExecutable
+        : process.env.KINETRA_RUNTIME_EXECUTABLE;
 
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.saveDir = options.saveDir;
@@ -314,6 +316,24 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async enableTestScriptFixtures(preset: string): Promise<void> {
     await this.#ensureProcess();
     await this.#request("testHarness.enableTestFixtures", { preset });
+  }
+
+  getResolvedExecutable(): string {
+    return this.runtimeExecutable ?? this.electronExecutable;
+  }
+
+  isPackagedTarget(): boolean {
+    return this.runtimeExecutable !== undefined;
+  }
+
+  async getHostInfo(): Promise<{
+    isPackaged: boolean;
+    execPath: string;
+    platform: string;
+    arch: string;
+  }> {
+    await this.#ensureProcess();
+    return this.#request("runtime.hostInfo", {});
   }
 
   async close(): Promise<void> {

@@ -251,13 +251,20 @@ export interface StepResult {
   passed:boolean;
   durationMs:number;
   message?:string;
+  error?:string;
+  expected?:unknown;
+  actual?:unknown;
 }
 
 export interface AcceptanceReport {
   suite:string;
   target:AcceptanceManifest["target"];
   passed:boolean;
+  durationMs?:number;
   startedAt:string;
   finishedAt:string;
   steps:StepResult[];
+  failedSteps?:StepResult[];
+  failureReason?:string;
+  observations?:Record<string,unknown>;
 }

@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 
-import type { ComponentMap, JsonObject } from "@kinetra/project-model";
+import type { ComponentMap, JsonObject, ProjectDocument } from "@kinetra/project-model";
+import type { AcceptanceManifest } from "@kinetra/verification";
 
 import type { KinetraAgentService } from "./service.js";
 
@@ -372,6 +373,47 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         }
 
         return success(frame);
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "test.runAcceptance",
+    {
+      description:
+        "Execute a Kinetra AcceptanceManifest against the real Electron runtime (target=\"runtime\") or packaged Windows executable (target=\"packaged\"), returning a complete machine-readable pass/fail report with step evidence.",
+      inputSchema: z.object({
+        manifest: z.object({
+          schemaVersion: z.literal(1),
+          suite: z.string().min(1),
+          seed: z.number().int().default(0),
+          target: z.enum(["runtime", "packaged"]).default("runtime"),
+          steps: z.array(z.record(z.string(), z.unknown())),
+        }),
+        target: z.enum(["runtime", "packaged"]).optional(),
+        project: z.record(z.string(), z.unknown()).optional(),
+        timeoutMs: z.number().int().positive().optional(),
+        testScriptPreset: z.string().optional(),
+      }),
+    },
+    async (input) => {
+      try {
+        const report = await service.runAcceptance({
+          manifest: input.manifest as unknown as AcceptanceManifest,
+          ...(input.target !== undefined ? { target: input.target } : {}),
+          ...(input.project !== undefined
+            ? { project: input.project as unknown as ProjectDocument }
+            : {}),
+          ...(input.timeoutMs !== undefined
+            ? { timeoutMs: input.timeoutMs }
+            : {}),
+          ...(input.testScriptPreset !== undefined
+            ? { testScriptPreset: input.testScriptPreset }
+            : {}),
+        });
+        return success(report);
       } catch (error) {
         return failure(error);
       }

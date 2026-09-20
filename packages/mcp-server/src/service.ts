@@ -12,12 +12,32 @@ import {
 } from "@kinetra/project-model";
 
 import {
+  AcceptanceRunner,
+  KinetraRuntimeProbe,
+  type AcceptanceManifest,
+  type AcceptanceReport,
+} from "@kinetra/verification";
+
+import { ElectronRuntimeHost } from "./electron-runtime.js";
+import {
+  resolvePackagedExecutable,
+  InfrastructureError,
+} from "./packaged-resolver.js";
+import {
   LocalRuntimeHost,
   type RuntimeHost,
   type RuntimeInputEvent,
   type RuntimeQuery,
 } from "./runtime.js";
 import { FileProjectStore, type ProjectStore } from "./store.js";
+
+export interface RunAcceptanceInput {
+  manifest: AcceptanceManifest;
+  target?: "runtime" | "packaged";
+  project?: ProjectDocument;
+  timeoutMs?: number;
+  testScriptPreset?: string;
+}
 
 export interface SceneCreateInput {
   name: string;
@@ -260,6 +280,93 @@ export class KinetraAgentService {
 
   async readRuntimeLogs(sinceSequence = 0) {
     return this.runtime.readLogs(sinceSequence);
+  }
+
+  async runAcceptance(input: RunAcceptanceInput): Promise<AcceptanceReport> {
+    if (!input.manifest || typeof input.manifest !== "object") {
+      throw new InfrastructureError(
+        "AcceptanceManifest is required",
+        "INVALID_MANIFEST",
+      );
+    }
+    if (input.manifest.schemaVersion !== 1) {
+      throw new InfrastructureError(
+        `Unsupported acceptance manifest schemaVersion: ${String(input.manifest.schemaVersion)}`,
+        "UNSUPPORTED_SCHEMA_VERSION",
+      );
+    }
+
+    const target = input.target ?? input.manifest.target ?? "runtime";
+    if (target !== "runtime" && target !== "packaged") {
+      throw new InfrastructureError(
+        `Invalid target "${String(target)}". Must be "runtime" or "packaged".`,
+        "INVALID_TARGET",
+      );
+    }
+
+    const project = input.project ?? (this.bus.snapshot().project as ProjectDocument);
+    if (!project || !Array.isArray(project.scenes)) {
+      throw new InfrastructureError(
+        "A valid ProjectDocument is required to run acceptance tests",
+        "INVALID_PROJECT",
+      );
+    }
+
+    let host: ElectronRuntimeHost;
+    let resolvedExecutable: string | undefined;
+
+    if (target === "packaged") {
+      const resolution = resolvePackagedExecutable();
+      resolvedExecutable = resolution.path;
+      host = new ElectronRuntimeHost({
+        runtimeExecutable: resolution.path,
+        requestTimeoutMs: input.timeoutMs ?? 30_000,
+      });
+    } else {
+      host = new ElectronRuntimeHost({
+        runtimeExecutable: undefined,
+        requestTimeoutMs: input.timeoutMs ?? 30_000,
+      });
+      resolvedExecutable = host.electronExecutable;
+    }
+
+    const probe = new KinetraRuntimeProbe({
+      host,
+      project,
+      initialRevision: this.bus.revision,
+      closeOnStop: false,
+      ...(input.testScriptPreset ? { testScriptPreset: input.testScriptPreset } : {}),
+    });
+
+    const runner = new AcceptanceRunner(probe);
+    const effectiveManifest: AcceptanceManifest = {
+      ...input.manifest,
+      target,
+    };
+
+    try {
+      const report = await runner.run(effectiveManifest);
+
+      // Collect structured process-level observations proving executed target
+      let hostInfo: Record<string, unknown> | undefined;
+      try {
+        hostInfo = await host.getHostInfo();
+      } catch {
+        // Process may already have stopped or closed
+      }
+
+      report.observations = {
+        ...report.observations,
+        target,
+        resolvedExecutable,
+        ...(hostInfo ? { hostInfo } : {}),
+      };
+
+      return report;
+    } finally {
+      await probe.close().catch(() => {});
+      await host.close().catch(() => {});
+    }
   }
 
   async #execute(command: EngineCommand): Promise<CommandResult> {
