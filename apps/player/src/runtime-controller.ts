@@ -15,7 +15,9 @@ import {
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
+  type PreparedScriptRestore,
 } from "@kinetra/core";
+import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -143,6 +145,24 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function isEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) {
+    return false;
+  }
+  const keysA = Object.keys(a as object).sort();
+  const keysB = Object.keys(b as object).sort();
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    const key = keysA[i]!;
+    if (key !== keysB[i]) return false;
+    if (!isEqualJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export class PlayerRuntimeController {
   readonly renderer: THREE.WebGLRenderer;
 
@@ -179,14 +199,6 @@ export class PlayerRuntimeController {
     );
 
     this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
-    this.#scriptRegistry.register("ReadOnlyScript", () => ({
-      onCreate: () => {},
-    }));
-    this.#scriptRegistry.register("ThrowingRestoreScript", () => ({
-      restoreState: () => {
-        throw new Error("Intentional commit failure in restoreState");
-      },
-    }));
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
@@ -206,6 +218,13 @@ export class PlayerRuntimeController {
     this.#scriptRegistry.register(scriptId, factory);
   }
 
+  enableTestScriptFixtures(preset: "save-load-atomicity"): void {
+    if (preset === "save-load-atomicity") {
+      registerSaveLoadTestFixtures(this.#scriptRegistry);
+      this.#log("info", "testHarness.fixturesEnabled", { preset });
+    }
+  }
+
   registerAsset(assetId: string, data: Uint8Array | string): void {
     const bytes = typeof data === "string" ? base64ToUint8Array(data) : data;
     this.#assetRegistry.set(assetId, bytes);
@@ -219,8 +238,15 @@ export class PlayerRuntimeController {
     project: ProjectDocument,
     sceneId: string,
     projectRevision: number,
-    options?: { assets?: Record<string, string>; stepped?: boolean },
+    options?: {
+      assets?: Record<string, string>;
+      stepped?: boolean;
+      testScriptPreset?: string;
+    },
   ): Promise<PlayerRuntimeQueryResult> {
+    if (options?.testScriptPreset === "save-load-atomicity") {
+      this.enableTestScriptFixtures("save-load-atomicity");
+    }
     assertValidProject(project);
     await this.stop();
     this.#stepped = options?.stepped ?? false;
@@ -610,6 +636,9 @@ export class PlayerRuntimeController {
     slotId?: string;
     schemaVersion?: number;
     error?: string;
+    phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
+    rolledBack?: boolean;
+    atomicityViolation?: boolean;
   }> {
     if (!this.#runtime) {
       const error = "Cannot load save: Runtime is not running";
@@ -682,7 +711,7 @@ export class PlayerRuntimeController {
 
     interface PreparedScript {
       entityId: string;
-      state: Record<string, unknown>;
+      restore: PreparedScriptRestore;
     }
 
     const preparedTransforms: PreparedTransform[] = [];
@@ -768,14 +797,19 @@ export class PlayerRuntimeController {
           return { success: false, error };
         }
 
+        const preparedRestore = await this.#scripts.prepareScriptRestore(
+          entityId,
+          entry.gameplay,
+        );
+
         preparedScripts.push({
           entityId,
-          state: structuredClone(entry.gameplay),
+          restore: preparedRestore,
         });
       }
     }
 
-    // Phase 4: Commit with Rollback Safety Net
+    // Phase 4: Transactional Commit with Strict Invariant Verification
     const rollbackTransforms: Array<{
       obj: THREE.Object3D;
       position: [number, number, number];
@@ -786,16 +820,21 @@ export class PlayerRuntimeController {
       rotation: [p.obj.rotation.x, p.obj.rotation.y, p.obj.rotation.z],
     }));
 
-    const rollbackScripts: Array<{
-      entityId: string;
-      state?: Record<string, unknown> | undefined;
-    }> = preparedScripts.map((p) => {
+    const priorScriptStates = new Map<string, Record<string, unknown> | undefined>();
+    for (const p of preparedScripts) {
       const exec = this.#scripts.getExecutionState(p.entityId);
-      return {
-        entityId: p.entityId,
-        state: exec?.state ? structuredClone(exec.state) : undefined,
-      };
-    });
+      priorScriptStates.set(
+        p.entityId,
+        exec?.state ? (structuredClone(exec.state) as Record<string, unknown>) : undefined,
+      );
+    }
+
+    const committedRestores: Array<{
+      entityId: string;
+      restore: PreparedScriptRestore;
+    }> = [];
+
+    let rollbackError: string | undefined;
 
     try {
       // 1. Commit all prepared transforms
@@ -818,54 +857,117 @@ export class PlayerRuntimeController {
 
       // 2. Commit all prepared script states
       for (const prep of preparedScripts) {
-        const success = await this.#scripts.restoreScriptState(
-          prep.entityId,
-          prep.state,
-        );
-        if (!success) {
-          throw new Error(
-            `restoreScriptState failed to apply state for entity "${prep.entityId}"`,
-          );
+        try {
+          await prep.restore.commit();
+          committedRestores.push(prep);
+        } catch (scriptErr) {
+          // Even if this script threw during commit, it may have partially mutated state.
+          // Rollback this script immediately as well:
+          try {
+            await prep.restore.rollback();
+          } catch (rbErr) {
+            const rbMsg =
+              rbErr instanceof Error ? rbErr.message : String(rbErr);
+            rollbackError = rollbackError
+              ? `${rollbackError}; ${rbMsg}`
+              : rbMsg;
+          }
+          throw scriptErr;
         }
       }
     } catch (commitErr) {
-      // Rollback every modified transform
-      for (const rollback of rollbackTransforms) {
-        rollback.obj.position.set(
-          rollback.position[0],
-          rollback.position[1],
-          rollback.position[2],
-        );
-        rollback.obj.rotation.set(
-          rollback.rotation[0],
-          rollback.rotation[1],
-          rollback.rotation[2],
-        );
+      const rawCommitError =
+        commitErr instanceof Error ? commitErr.message : String(commitErr);
+
+      // 1. Rollback all modified transforms
+      try {
+        for (const rollback of rollbackTransforms) {
+          rollback.obj.position.set(
+            rollback.position[0],
+            rollback.position[1],
+            rollback.position[2],
+          );
+          rollback.obj.rotation.set(
+            rollback.rotation[0],
+            rollback.rotation[1],
+            rollback.rotation[2],
+          );
+        }
+      } catch (err) {
+        rollbackError = err instanceof Error ? err.message : String(err);
       }
 
-      // Rollback every modified script state
-      for (const rollback of rollbackScripts) {
-        if (rollback.state) {
-          try {
-            await this.#scripts.restoreScriptState(
-              rollback.entityId,
-              rollback.state,
-            );
-          } catch {
-            // best-effort rollback
+      // 2. Rollback all committed scripts in reverse order
+      for (const committed of [...committedRestores].reverse()) {
+        try {
+          await committed.restore.rollback();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          rollbackError = rollbackError ? `${rollbackError}; ${msg}` : msg;
+        }
+      }
+
+      // 3. Strict post-rollback verification:
+      // Verify transforms
+      for (const rollback of rollbackTransforms) {
+        if (
+          rollback.obj.position.x !== rollback.position[0] ||
+          rollback.obj.position.y !== rollback.position[1] ||
+          rollback.obj.position.z !== rollback.position[2] ||
+          rollback.obj.rotation.x !== rollback.rotation[0] ||
+          rollback.obj.rotation.y !== rollback.rotation[1] ||
+          rollback.obj.rotation.z !== rollback.rotation[2]
+        ) {
+          rollbackError = rollbackError
+            ? `${rollbackError}; Transform position/rotation did not match pre-transaction snapshot`
+            : "Transform position/rotation did not match pre-transaction snapshot";
+        }
+      }
+
+      // Verify script states
+      for (const [entityId, priorState] of priorScriptStates.entries()) {
+        const currentExec = this.#scripts.getExecutionState(entityId);
+        const currentState = currentExec?.state;
+        if (priorState !== undefined) {
+          if (!isEqualJson(currentState, priorState)) {
+            const mismatchMsg = `Script state for entity "${entityId}" did not match pre-transaction snapshot (expected ${JSON.stringify(priorState)}, got ${JSON.stringify(currentState)})`;
+            rollbackError = rollbackError ? `${rollbackError}; ${mismatchMsg}` : mismatchMsg;
           }
         }
       }
 
-      const rawError =
-        commitErr instanceof Error ? commitErr.message : String(commitErr);
-      const error = `Commit failed and was rolled back: ${rawError}`;
+      if (rollbackError) {
+        const error = `Rollback failed: atomicity invariant violated: ${rollbackError} (original commit error: ${rawCommitError})`;
+        this.#log("error", "save.restoreFailed", {
+          slotId,
+          phase: "rollback",
+          rolledBack: false,
+          atomicityViolation: true,
+          error,
+        });
+        return {
+          success: false,
+          phase: "rollback",
+          rolledBack: false,
+          atomicityViolation: true,
+          error,
+        };
+      }
+
+      // Rollback verified complete and identical to pre-load state
+      const error = `Commit failed and was rolled back: ${rawCommitError}`;
       this.#log("error", "save.restoreFailed", {
         slotId,
         phase: "commit",
+        rolledBack: true,
         error,
       });
-      return { success: false, error };
+      return {
+        success: false,
+        phase: "commit",
+        rolledBack: true,
+        error,
+      };
     }
 
     this.renderOnce();

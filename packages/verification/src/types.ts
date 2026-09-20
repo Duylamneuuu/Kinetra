@@ -119,6 +119,7 @@ export interface RuntimeProbeHost {
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
+  enableTestScriptFixtures?(preset: string): Promise<void>;
 }
 
 export interface RuntimeProbe {

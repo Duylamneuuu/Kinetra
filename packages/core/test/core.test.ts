@@ -414,5 +414,157 @@ test("ScriptHost rejects restoration for scripts that do not implement restoreSt
   await host.destroyAll();
 });
 
+test("ScriptHost prepareScriptRestore supports two-phase commit and rollback for PlayerControllerScript", async () => {
+  const host = new ScriptHost();
+  const script = new PlayerControllerScript();
+
+  host.register({
+    id: "hero",
+    scriptId: "PlayerController",
+    context: {
+      entityId: "hero",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Phase 3: prepare
+  const prepared = await host.prepareScriptRestore("hero", {
+    moveCount: 10,
+    jumpCount: 5,
+    lastAction: "player.jump",
+  });
+
+  // Verification: preparation does NOT mutate live state
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  // Phase 4: commit
+  await prepared.commit();
+  assert.deepEqual(script.getState(), {
+    moveCount: 10,
+    jumpCount: 5,
+    lastAction: "player.jump",
+  });
+
+  // Rollback restores previous state
+  await prepared.rollback();
+  assert.deepEqual(script.getState(), { moveCount: 0, jumpCount: 0 });
+
+  await host.destroyAll();
+});
+
+test("ScriptHost handles adversarial script mutating before throw with rollback restoring pre-transaction state", async () => {
+  const host = new ScriptHost();
+
+  class AdversarialScript {
+    value = 5;
+    getState() {
+      return { value: this.value };
+    }
+    restoreState(state: Record<string, unknown>) {
+      this.value = state.value as number;
+      if (state.throwAfterMutation) {
+        throw new Error("Adversarial throw AFTER mutation");
+      }
+    }
+  }
+
+  const script = new AdversarialScript();
+  host.register({
+    id: "adv",
+    context: {
+      entityId: "adv",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  // Prepare restore with throwAfterMutation: true
+  const prepared = await host.prepareScriptRestore("adv", {
+    value: 99,
+    throwAfterMutation: true,
+  });
+
+  // Preparation does not mutate live state
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  // Commit executes mutation and then throws
+  await assert.rejects(
+    async () => {
+      await prepared.commit();
+    },
+    /Adversarial throw AFTER mutation/,
+  );
+
+  // Notice mutation occurred before throw (value is 99)
+  assert.equal(script.value, 99);
+
+  // Rollback restores value back to 5
+  await prepared.rollback();
+  assert.equal(script.value, 5);
+  assert.deepEqual(script.getState(), { value: 5 });
+
+  await host.destroyAll();
+});
+
+test("ScriptHost rollback failure propagates error when rollback throws", async () => {
+  const host = new ScriptHost();
+
+  class BrokenRollbackScript {
+    value = 1;
+    getState() {
+      return { value: this.value };
+    }
+    restoreState(state: Record<string, unknown>) {
+      if (state.throwInRollback) {
+        throw new Error("Rollback throw");
+      }
+      this.value = state.value as number;
+    }
+  }
+
+  const script = new BrokenRollbackScript();
+  host.register({
+    id: "broken",
+    context: {
+      entityId: "broken",
+      sceneId: "main",
+    },
+    script,
+  });
+
+  await host.startAll();
+
+  // First change state and mark prior snapshot
+  const prep = await host.prepareScriptRestore("broken", { value: 2 });
+  await prep.commit();
+  assert.equal(script.value, 2);
+
+  // Now create a prepared restore where priorState will throw in rollback
+  script.restoreState = (state: Record<string, unknown>) => {
+    if (state.value === 2) {
+      throw new Error("Unrecoverable rollback error");
+    }
+    script.value = state.value as number;
+  };
+
+  const prep2 = await host.prepareScriptRestore("broken", { value: 99 });
+  // If rollback is called, it must not be silently swallowed
+  await assert.rejects(
+    async () => {
+      await prep2.rollback();
+    },
+    /Unrecoverable rollback error/,
+  );
+
+  await host.destroyAll();
+});
+
 
 

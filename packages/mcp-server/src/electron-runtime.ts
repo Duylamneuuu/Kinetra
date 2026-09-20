@@ -261,6 +261,11 @@ export class ElectronRuntimeHost implements RuntimeHost {
     }>("save.load", params);
   }
 
+  async enableTestScriptFixtures(preset: string): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("testHarness.enableTestFixtures", { preset });
+  }
+
   async close(): Promise<void> {
     const child = this.#child;
     const socket = this.#socket;

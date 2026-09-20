@@ -16,6 +16,7 @@ const cameraId = stableId("entity", "p6-camera-save-load");
 const lightId = stableId("entity", "p6-light-save-load");
 const readOnlyNpcId = stableId("entity", "p6-readonly-npc");
 const throwingEntityId = stableId("entity", "p6-throwing-entity");
+const adversarialEntityId = stableId("entity", "p6-adversarial-entity");
 
 function saveLoadFixtureProject(): ProjectDocument {
   return {
@@ -76,6 +77,21 @@ function saveLoadFixtureProject(): ProjectDocument {
               },
             },
           },
+        ],
+      },
+    ],
+  };
+}
+
+function saveLoadAtomicityFixtureProject(): ProjectDocument {
+  const base = saveLoadFixtureProject();
+  return {
+    ...base,
+    scenes: [
+      {
+        ...base.scenes[0]!,
+        entities: [
+          ...base.scenes[0]!.entities,
           {
             id: readOnlyNpcId,
             name: "ReadOnlyNpc",
@@ -99,6 +115,20 @@ function saveLoadFixtureProject(): ProjectDocument {
               },
               Transform: {
                 position: [-5, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+              },
+            },
+          },
+          {
+            id: adversarialEntityId,
+            name: "AdversarialEntity",
+            components: {
+              Script: {
+                scriptId: "AdversarialMutationScript",
+              },
+              Transform: {
+                position: [1, 0, 0],
                 rotation: [0, 0, 0],
                 scale: [1, 1, 1],
               },
@@ -491,9 +521,10 @@ test(
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
       host,
-      project: () => saveLoadFixtureProject(),
+      project: () => saveLoadAtomicityFixtureProject(),
       initialRevision: 1,
       closeOnStop: false,
+      testScriptPreset: "save-load-atomicity",
     });
 
     try {
@@ -505,12 +536,51 @@ test(
       let camera = (snapshot.state.byName as Record<string, any>)?.MainCamera;
       let npc = (snapshot.state.byName as Record<string, any>)?.ReadOnlyNpc;
       let throwing = (snapshot.state.byName as Record<string, any>)?.ThrowingEntity;
+      let adv = (snapshot.state.byName as Record<string, any>)?.AdversarialEntity;
 
       assert.equal(hero.position[0], 0);
       assert.equal(hero.gameplay?.state?.moveCount, 0);
       assert.equal(camera.position[1], 2);
       assert.equal(npc.position[0], 5);
       assert.equal(throwing.position[0], -5);
+      assert.equal(adv.position[0], 1);
+      assert.equal(adv.gameplay?.state?.value, 5);
+
+      // --- Case 0: Adversarial mutation-before-throw test ---
+      // initial script state: value = 5, position.x = 1
+      // save requests: position.x = 20, value = 99, throwAfterMutation = true
+      const adversarialSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case0-adversarial",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [adversarialEntityId]: {
+              position: [20, 0, 0],
+              gameplay: {
+                value: 99,
+                throwAfterMutation: true,
+              },
+            },
+          },
+        },
+      };
+
+      const case0Result = await host.loadSave({ envelope: adversarialSave });
+      assert.equal(case0Result.success, false, "Load with adversarial mutation-throw must fail");
+      assert.ok(
+        case0Result.error?.includes("Commit failed and was rolled back"),
+        `Expected error to include 'Commit failed and was rolled back', got: ${case0Result.error}`,
+      );
+
+      // Post-failure structured query verification:
+      snapshot = await probe.snapshot();
+      adv = (snapshot.state.byName as Record<string, any>)?.AdversarialEntity;
+      assert.equal(adv.position[0], 1, "Adversarial entity position.x must remain 1 after failed load");
+      assert.equal(adv.gameplay?.state?.value, 5, "Adversarial entity script value must remain 5 after failed load");
+      assert.equal(snapshot.running, true, "Runtime must remain running and healthy");
 
       // --- Case 1: Malformed gameplay state (e.g. moveCount = "INVALID") ---
       // Save requests: Hero position.x = 10 and corrupt gameplay state
@@ -634,7 +704,7 @@ test(
       // Verify structured logs contain the expected failure phases
       const logs = await probe.logs();
       const failLogs = logs.filter(l => l.message === "save.restoreFailed");
-      assert.ok(failLogs.length >= 4, "Must log save.restoreFailed for each failure");
+      assert.ok(failLogs.length >= 5, "Must log save.restoreFailed for each failure");
       assert.ok(failLogs.some(l => l.data?.phase === "preparation"), "Must log preparation phase failures");
       assert.ok(failLogs.some(l => l.data?.phase === "commit"), "Must log commit phase failure on throw");
 

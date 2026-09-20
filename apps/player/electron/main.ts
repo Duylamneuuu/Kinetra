@@ -226,6 +226,7 @@ async function handleBridgeRequest(
     case "save.capture":
     case "save.get":
     case "save.load":
+    case "testHarness.enableTestFixtures":
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {

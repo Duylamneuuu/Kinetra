@@ -17,6 +17,7 @@ export interface KinetraRuntimeProbeOptions {
   assets?:
     | Record<string, string>
     | (() => Record<string, string> | Promise<Record<string, string>>);
+  testScriptPreset?: string;
 }
 
 export class KinetraRuntimeProbe implements RuntimeProbe {
@@ -30,6 +31,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     | Record<string, string>
     | (() => Record<string, string> | Promise<Record<string, string>>)
     | undefined;
+  readonly #testScriptPreset: string | undefined;
   #currentSceneId: string | undefined;
 
   constructor(options: KinetraRuntimeProbeOptions) {
@@ -38,6 +40,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     this.#initialRevision = options.initialRevision ?? 0;
     this.#closeOnStop = options.closeOnStop ?? false;
     this.#assets = options.assets;
+    this.#testScriptPreset = options.testScriptPreset;
   }
 
   async start(sceneId: string, _seed: number): Promise<void> {
@@ -52,6 +55,12 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         : this.#assets;
 
     this.#currentSceneId = sceneId;
+    if (
+      this.#testScriptPreset &&
+      typeof this.#host.enableTestScriptFixtures === "function"
+    ) {
+      await this.#host.enableTestScriptFixtures(this.#testScriptPreset);
+    }
     await this.#host.start(
       project,
       sceneId,

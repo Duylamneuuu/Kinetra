@@ -62,6 +62,7 @@ export interface RuntimeHost {
   registerAsset?(assetId: string, dataBase64: string): Promise<void>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
   stopAnimation?(entityId: string): Promise<unknown>;
+  enableTestScriptFixtures?(preset: string): Promise<void>;
 }
 
 export class LocalRuntimeHost implements RuntimeHost {
