@@ -179,6 +179,14 @@ export class PlayerRuntimeController {
     );
 
     this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
+    this.#scriptRegistry.register("ReadOnlyScript", () => ({
+      onCreate: () => {},
+    }));
+    this.#scriptRegistry.register("ThrowingRestoreScript", () => ({
+      restoreState: () => {
+        throw new Error("Intentional commit failure in restoreState");
+      },
+    }));
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
@@ -605,7 +613,7 @@ export class PlayerRuntimeController {
   }> {
     if (!this.#runtime) {
       const error = "Cannot load save: Runtime is not running";
-      this.#log("error", "save.restoreFailed", { error });
+      this.#log("error", "save.restoreFailed", { phase: "validation", error });
       return { success: false, error };
     }
 
@@ -614,11 +622,11 @@ export class PlayerRuntimeController {
 
     if (!rawEnvelope) {
       const error = `Save document not found for slot "${slotId}"`;
-      this.#log("error", "save.restoreFailed", { slotId, error });
+      this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
       return { success: false, error };
     }
 
-    // Stage 1: Validation
+    // Phase 1: Validation
     if (
       typeof rawEnvelope !== "object" ||
       rawEnvelope === null ||
@@ -627,11 +635,11 @@ export class PlayerRuntimeController {
       (rawEnvelope as any).data === null
     ) {
       const error = "Invalid save envelope structure";
-      this.#log("error", "save.restoreFailed", { slotId, error });
+      this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
       return { success: false, error };
     }
 
-    // Stage 2: Migration
+    // Phase 2: Migration
     let migratedEnvelope: SaveEnvelope<GameplaySaveData>;
     try {
       migratedEnvelope = this.#saveMigrator.migrate<GameplaySaveData>(
@@ -639,15 +647,16 @@ export class PlayerRuntimeController {
       );
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      this.#log("error", "save.restoreFailed", { slotId, error });
+      this.#log("error", "save.restoreFailed", { slotId, phase: "migration", error });
       return { success: false, error };
     }
 
-    // Stage 3: Scene matching and entities format verification
+    // Phase 3: Preparation & Target Validation (Preflight: apply nothing if any check fails)
     if (migratedEnvelope.data?.sceneId !== this.#runtime.sceneId) {
       const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${this.#runtime.sceneId}"`;
       this.#log("error", "save.restoreFailed", {
         slotId,
+        phase: "preparation",
         saveSceneId: migratedEnvelope.data?.sceneId,
         activeSceneId: this.#runtime.sceneId,
         error,
@@ -657,15 +666,27 @@ export class PlayerRuntimeController {
 
     if (
       !migratedEnvelope.data?.entities ||
-      typeof migratedEnvelope.data.entities !== "object"
+      typeof migratedEnvelope.data.entities !== "object" ||
+      Array.isArray(migratedEnvelope.data.entities)
     ) {
       const error = "Save contains invalid entities record";
-      this.#log("error", "save.restoreFailed", { slotId, error });
+      this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
       return { success: false, error };
     }
 
-    // Stage 4: Stage mutations and verify all target entities
-    const stagedMutations: Array<() => Promise<void> | void> = [];
+    interface PreparedTransform {
+      obj: THREE.Object3D;
+      position?: [number, number, number];
+      rotation?: [number, number, number];
+    }
+
+    interface PreparedScript {
+      entityId: string;
+      state: Record<string, unknown>;
+    }
+
+    const preparedTransforms: PreparedTransform[] = [];
+    const preparedScripts: PreparedScript[] = [];
 
     for (const [entityId, entry] of Object.entries(
       migratedEnvelope.data.entities,
@@ -673,9 +694,12 @@ export class PlayerRuntimeController {
       const obj = this.#runtime.getObject(entityId);
       if (!obj) {
         const error = `Entity "${entityId}" from save does not exist in active scene`;
-        this.#log("error", "save.restoreFailed", { slotId, entityId, error });
+        this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
         return { success: false, error };
       }
+
+      let prepPos: [number, number, number] | undefined;
+      let prepRot: [number, number, number] | undefined;
 
       if (entry.position) {
         if (
@@ -684,13 +708,10 @@ export class PlayerRuntimeController {
           entry.position.some((v) => typeof v !== "number" || !Number.isFinite(v))
         ) {
           const error = `Invalid position coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, error });
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return { success: false, error };
         }
-        const [x, y, z] = entry.position;
-        stagedMutations.push(() => {
-          obj.position.set(x, y, z);
-        });
+        prepPos = [entry.position[0], entry.position[1], entry.position[2]];
       }
 
       if (entry.rotation) {
@@ -700,31 +721,151 @@ export class PlayerRuntimeController {
           entry.rotation.some((v) => typeof v !== "number" || !Number.isFinite(v))
         ) {
           const error = `Invalid rotation coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, error });
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return { success: false, error };
         }
-        const [rx, ry, rz] = entry.rotation;
-        stagedMutations.push(() => {
-          obj.rotation.set(rx, ry, rz);
+        prepRot = [entry.rotation[0], entry.rotation[1], entry.rotation[2]];
+      }
+
+      if (prepPos || prepRot) {
+        preparedTransforms.push({
+          obj,
+          ...(prepPos ? { position: prepPos } : {}),
+          ...(prepRot ? { rotation: prepRot } : {}),
         });
       }
 
       if (entry.gameplay) {
-        if (typeof entry.gameplay !== "object" || entry.gameplay === null) {
+        if (
+          typeof entry.gameplay !== "object" ||
+          entry.gameplay === null ||
+          Array.isArray(entry.gameplay)
+        ) {
           const error = `Invalid gameplay payload for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, error });
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return { success: false, error };
         }
-        const stateToRestore = structuredClone(entry.gameplay);
-        stagedMutations.push(async () => {
-          await this.#scripts.restoreScriptState(entityId, stateToRestore);
+
+        if (!this.#scripts.hasScript(entityId)) {
+          const error = `Entity "${entityId}" has gameplay save state but no active script`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        if (!this.#scripts.canRestoreScriptState(entityId)) {
+          const error = `Script on entity "${entityId}" does not support state restoration`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        const validation = this.#scripts.validateScriptRestoreState(
+          entityId,
+          entry.gameplay,
+        );
+        if (!validation.valid) {
+          const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
+
+        preparedScripts.push({
+          entityId,
+          state: structuredClone(entry.gameplay),
         });
       }
     }
 
-    // Stage 5: Apply all staged mutations atomically
-    for (const mutate of stagedMutations) {
-      await mutate();
+    // Phase 4: Commit with Rollback Safety Net
+    const rollbackTransforms: Array<{
+      obj: THREE.Object3D;
+      position: [number, number, number];
+      rotation: [number, number, number];
+    }> = preparedTransforms.map((p) => ({
+      obj: p.obj,
+      position: [p.obj.position.x, p.obj.position.y, p.obj.position.z],
+      rotation: [p.obj.rotation.x, p.obj.rotation.y, p.obj.rotation.z],
+    }));
+
+    const rollbackScripts: Array<{
+      entityId: string;
+      state?: Record<string, unknown> | undefined;
+    }> = preparedScripts.map((p) => {
+      const exec = this.#scripts.getExecutionState(p.entityId);
+      return {
+        entityId: p.entityId,
+        state: exec?.state ? structuredClone(exec.state) : undefined,
+      };
+    });
+
+    try {
+      // 1. Commit all prepared transforms
+      for (const prep of preparedTransforms) {
+        if (prep.position) {
+          prep.obj.position.set(
+            prep.position[0],
+            prep.position[1],
+            prep.position[2],
+          );
+        }
+        if (prep.rotation) {
+          prep.obj.rotation.set(
+            prep.rotation[0],
+            prep.rotation[1],
+            prep.rotation[2],
+          );
+        }
+      }
+
+      // 2. Commit all prepared script states
+      for (const prep of preparedScripts) {
+        const success = await this.#scripts.restoreScriptState(
+          prep.entityId,
+          prep.state,
+        );
+        if (!success) {
+          throw new Error(
+            `restoreScriptState failed to apply state for entity "${prep.entityId}"`,
+          );
+        }
+      }
+    } catch (commitErr) {
+      // Rollback every modified transform
+      for (const rollback of rollbackTransforms) {
+        rollback.obj.position.set(
+          rollback.position[0],
+          rollback.position[1],
+          rollback.position[2],
+        );
+        rollback.obj.rotation.set(
+          rollback.rotation[0],
+          rollback.rotation[1],
+          rollback.rotation[2],
+        );
+      }
+
+      // Rollback every modified script state
+      for (const rollback of rollbackScripts) {
+        if (rollback.state) {
+          try {
+            await this.#scripts.restoreScriptState(
+              rollback.entityId,
+              rollback.state,
+            );
+          } catch {
+            // best-effort rollback
+          }
+        }
+      }
+
+      const rawError =
+        commitErr instanceof Error ? commitErr.message : String(commitErr);
+      const error = `Commit failed and was rolled back: ${rawError}`;
+      this.#log("error", "save.restoreFailed", {
+        slotId,
+        phase: "commit",
+        error,
+      });
+      return { success: false, error };
     }
 
     this.renderOnce();

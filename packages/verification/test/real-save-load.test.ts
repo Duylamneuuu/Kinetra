@@ -14,6 +14,8 @@ const sceneId = stableId("scene", "p6-save-load-scene");
 const heroEntityId = stableId("entity", "p6-hero-save-load");
 const cameraId = stableId("entity", "p6-camera-save-load");
 const lightId = stableId("entity", "p6-light-save-load");
+const readOnlyNpcId = stableId("entity", "p6-readonly-npc");
+const throwingEntityId = stableId("entity", "p6-throwing-entity");
 
 function saveLoadFixtureProject(): ProjectDocument {
   return {
@@ -71,6 +73,34 @@ function saveLoadFixtureProject(): ProjectDocument {
               },
               Transform: {
                 position: [3, 5, 4],
+              },
+            },
+          },
+          {
+            id: readOnlyNpcId,
+            name: "ReadOnlyNpc",
+            components: {
+              Script: {
+                scriptId: "ReadOnlyScript",
+              },
+              Transform: {
+                position: [5, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+              },
+            },
+          },
+          {
+            id: throwingEntityId,
+            name: "ThrowingEntity",
+            components: {
+              Script: {
+                scriptId: "ThrowingRestoreScript",
+              },
+              Transform: {
+                position: [-5, 0, 0],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
               },
             },
           },
@@ -445,6 +475,168 @@ test(
       const logs = await probe.logs();
       const failLogs = logs.filter(l => l.message === "save.restoreFailed");
       assert.ok(failLogs.length >= 3);
+
+      await host.stop();
+    } finally {
+      await probe.close();
+      await host.close();
+    }
+  },
+);
+
+test(
+  "all-or-nothing save restoration atomicity: malformed gameplay, unsupported script, and commit throw apply zero mutations and rollback",
+  { skip: process.platform !== "win32", timeout: 60_000 },
+  async () => {
+    const host = createTestHost();
+    const probe = new KinetraRuntimeProbe({
+      host,
+      project: () => saveLoadFixtureProject(),
+      initialRevision: 1,
+      closeOnStop: false,
+    });
+
+    try {
+      await probe.start(sceneId, 1);
+
+      // Verify baseline initial states
+      let snapshot = await probe.snapshot();
+      let hero = (snapshot.state.byName as Record<string, any>)?.Hero;
+      let camera = (snapshot.state.byName as Record<string, any>)?.MainCamera;
+      let npc = (snapshot.state.byName as Record<string, any>)?.ReadOnlyNpc;
+      let throwing = (snapshot.state.byName as Record<string, any>)?.ThrowingEntity;
+
+      assert.equal(hero.position[0], 0);
+      assert.equal(hero.gameplay?.state?.moveCount, 0);
+      assert.equal(camera.position[1], 2);
+      assert.equal(npc.position[0], 5);
+      assert.equal(throwing.position[0], -5);
+
+      // --- Case 1: Malformed gameplay state (e.g. moveCount = "INVALID") ---
+      // Save requests: Hero position.x = 10 and corrupt gameplay state
+      const malformedSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case1-malformed",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [heroEntityId]: {
+              position: [10, 0, 0],
+              gameplay: {
+                moveCount: "INVALID",
+                jumpCount: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const case1Result = await host.loadSave({ envelope: malformedSave });
+      assert.equal(case1Result.success, false, "Load with malformed gameplay state must fail");
+      assert.ok(case1Result.error?.includes("moveCount must be a finite number"));
+
+      // Assert ZERO partial mutation: Hero position is still 0, not 10!
+      snapshot = await probe.snapshot();
+      hero = (snapshot.state.byName as Record<string, any>)?.Hero;
+      assert.equal(hero.position[0], 0, "Hero position must remain 0 (no partial transform apply)");
+      assert.equal(hero.gameplay?.state?.moveCount, 0, "Hero moveCount must remain 0");
+      assert.equal(snapshot.running, true, "Runtime must remain running");
+
+      // --- Case 2A: Script restoration unsupported (entity without script) ---
+      const noScriptSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case2a-noscript",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [cameraId]: {
+              position: [0, 99, 5],
+              gameplay: { someKey: 123 },
+            },
+          },
+        },
+      };
+
+      const case2aResult = await host.loadSave({ envelope: noScriptSave });
+      assert.equal(case2aResult.success, false, "Load with gameplay for scriptless entity must fail");
+      assert.ok(case2aResult.error?.includes("has gameplay save state but no active script"));
+
+      snapshot = await probe.snapshot();
+      camera = (snapshot.state.byName as Record<string, any>)?.MainCamera;
+      assert.equal(camera.position[1], 2, "Camera position must remain 2 (not 99)");
+
+      // --- Case 2B: Script restoration unsupported (script does not implement restoreState) ---
+      const unsupportedScriptSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case2b-unsupported",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [readOnlyNpcId]: {
+              position: [50, 0, 0],
+              gameplay: { score: 999 },
+            },
+          },
+        },
+      };
+
+      const case2bResult = await host.loadSave({ envelope: unsupportedScriptSave });
+      assert.equal(case2bResult.success, false, "Load with gameplay for unsupported script must fail");
+      assert.ok(case2bResult.error?.includes("does not support state restoration"));
+
+      snapshot = await probe.snapshot();
+      npc = (snapshot.state.byName as Record<string, any>)?.ReadOnlyNpc;
+      assert.equal(npc.position[0], 5, "ReadOnlyNpc position must remain 5 (not 50)");
+
+      // --- Case 3: Restoration commit throws (with automatic rollback) ---
+      // Save requests: Hero position.x = 10, ThrowingEntity position.x = 25 and throwing gameplay
+      const throwingSave = {
+        schemaVersion: 2,
+        gameVersion: "0.1.0",
+        slotId: "case3-throwing",
+        savedAt: new Date().toISOString(),
+        data: {
+          sceneId,
+          entities: {
+            [heroEntityId]: {
+              position: [10, 0, 0],
+            },
+            [throwingEntityId]: {
+              position: [25, 0, 0],
+              gameplay: { trigger: true },
+            },
+          },
+        },
+      };
+
+      const case3Result = await host.loadSave({ envelope: throwingSave });
+      assert.equal(case3Result.success, false, "Load where commit throws must fail");
+      assert.ok(
+        case3Result.error?.includes("Commit failed and was rolled back"),
+        `Expected error to include 'Commit failed and was rolled back', got: ${case3Result.error}`,
+      );
+
+      // Assert rollback restored all transforms and state to exact pre-load state
+      snapshot = await probe.snapshot();
+      hero = (snapshot.state.byName as Record<string, any>)?.Hero;
+      throwing = (snapshot.state.byName as Record<string, any>)?.ThrowingEntity;
+
+      assert.equal(hero.position[0], 0, "Hero position must be rolled back to 0 (not left at 10)");
+      assert.equal(throwing.position[0], -5, "ThrowingEntity position must be rolled back to -5 (not left at 25)");
+      assert.equal(snapshot.running, true, "Runtime must remain running and healthy");
+
+      // Verify structured logs contain the expected failure phases
+      const logs = await probe.logs();
+      const failLogs = logs.filter(l => l.message === "save.restoreFailed");
+      assert.ok(failLogs.length >= 4, "Must log save.restoreFailed for each failure");
+      assert.ok(failLogs.some(l => l.data?.phase === "preparation"), "Must log preparation phase failures");
+      assert.ok(failLogs.some(l => l.data?.phase === "commit"), "Must log commit phase failure on throw");
 
       await host.stop();
     } finally {

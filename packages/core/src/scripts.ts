@@ -24,6 +24,10 @@ export interface GameScript {
   onStop?(context: GameScriptContext): void | Promise<void>;
   onDestroy?(context: GameScriptContext): void | Promise<void>;
   getState?(): Record<string, unknown>;
+  validateRestoreState?(
+    state: Record<string, unknown>,
+    context?: GameScriptContext,
+  ): boolean | { valid: boolean; error?: string };
   restoreState?(state: Record<string, unknown>, context?: GameScriptContext): void | Promise<void>;
 }
 
@@ -276,6 +280,57 @@ export class ScriptHost {
     };
   }
 
+  hasScript(id: string): boolean {
+    return this.#entries.has(id);
+  }
+
+  canRestoreScriptState(id: string): boolean {
+    const entry = this.#entries.get(id);
+    return !!entry && typeof entry.script.restoreState === "function";
+  }
+
+  validateScriptRestoreState(
+    id: string,
+    state: Record<string, unknown>,
+  ): { valid: boolean; error?: string } {
+    const entry = this.#entries.get(id);
+    if (!entry) {
+      return { valid: false, error: `Script "${id}" is not registered` };
+    }
+    if (typeof entry.script.restoreState !== "function") {
+      return {
+        valid: false,
+        error: `Script "${id}" does not support state restoration`,
+      };
+    }
+    if (typeof entry.script.validateRestoreState === "function") {
+      try {
+        const result = entry.script.validateRestoreState(state, entry.context);
+        if (typeof result === "boolean") {
+          return result
+            ? { valid: true }
+            : { valid: false, error: `Script "${id}" rejected state payload` };
+        }
+        if (typeof result === "object" && result !== null) {
+          return {
+            valid: Boolean(result.valid),
+            ...(result.error ? { error: result.error } : {}),
+          };
+        }
+        return {
+          valid: false,
+          error: `Script "${id}" returned invalid validation response`,
+        };
+      } catch (err) {
+        return {
+          valid: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+    return { valid: true };
+  }
+
   async restoreScriptState(id: string, state: Record<string, unknown>): Promise<boolean> {
     const entry = this.#entries.get(id);
     if (!entry) return false;
@@ -348,7 +403,35 @@ export class PlayerControllerScript implements GameScript {
     };
   }
 
+  validateRestoreState(
+    state: Record<string, unknown>,
+  ): { valid: boolean; error?: string } {
+    if (typeof state !== "object" || state === null || Array.isArray(state)) {
+      return { valid: false, error: "Gameplay state must be a non-null object" };
+    }
+    if ("moveCount" in state) {
+      if (typeof state.moveCount !== "number" || !Number.isFinite(state.moveCount)) {
+        return { valid: false, error: "moveCount must be a finite number" };
+      }
+    }
+    if ("jumpCount" in state) {
+      if (typeof state.jumpCount !== "number" || !Number.isFinite(state.jumpCount)) {
+        return { valid: false, error: "jumpCount must be a finite number" };
+      }
+    }
+    if ("lastAction" in state && state.lastAction !== undefined) {
+      if (typeof state.lastAction !== "string") {
+        return { valid: false, error: "lastAction must be a string if defined" };
+      }
+    }
+    return { valid: true };
+  }
+
   restoreState(state: Record<string, unknown>): void {
+    const validation = this.validateRestoreState(state);
+    if (!validation.valid) {
+      throw new Error(`Cannot restore invalid PlayerController state: ${validation.error}`);
+    }
     if (typeof state.moveCount === "number") {
       this.moveCount = state.moveCount;
     }

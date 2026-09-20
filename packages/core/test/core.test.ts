@@ -356,10 +356,63 @@ test("ScriptHost and PlayerControllerScript support restoreState", async () => {
     lastAction: "player.jump",
   });
 
-  // Restoring non-existent script returns false
-  assert.equal(await host.restoreScriptState("nonexistent", {}), false);
+  // Verification of canRestoreScriptState and validateScriptRestoreState
+  assert.equal(host.hasScript("hero_script"), true);
+  assert.equal(host.hasScript("nonexistent"), false);
+  assert.equal(host.canRestoreScriptState("hero_script"), true);
+  assert.equal(host.canRestoreScriptState("nonexistent"), false);
+
+  // Validation passes on valid payload
+  const validRes = host.validateScriptRestoreState("hero_script", { moveCount: 1, jumpCount: 1 });
+  assert.equal(validRes.valid, true);
+
+  // Validation fails on corrupt fields
+  const corruptMove = host.validateScriptRestoreState("hero_script", { moveCount: "CORRUPT" });
+  assert.equal(corruptMove.valid, false);
+  assert.ok(corruptMove.error?.includes("moveCount must be a finite number"));
+
+  const corruptJump = host.validateScriptRestoreState("hero_script", { jumpCount: null as any });
+  assert.equal(corruptJump.valid, false);
+  assert.ok(corruptJump.error?.includes("jumpCount must be a finite number"));
+
+  // Validation fails on non-existent script
+  const nonExistentRes = host.validateScriptRestoreState("nonexistent", { moveCount: 1 });
+  assert.equal(nonExistentRes.valid, false);
+
+  // Direct script restoreState throws on invalid payload
+  assert.throws(
+    () => script.restoreState({ moveCount: "INVALID" as any }),
+    /Cannot restore invalid PlayerController state/,
+  );
 
   await host.destroyAll();
 });
+
+test("ScriptHost rejects restoration for scripts that do not implement restoreState", async () => {
+  const host = new ScriptHost();
+  host.register({
+    id: "readonly_script",
+    scriptId: "ReadOnlyScript",
+    context: {
+      entityId: "npc",
+      sceneId: "main",
+    },
+    script: {
+      onCreate: () => {},
+    },
+  });
+
+  await host.startAll();
+  assert.equal(host.hasScript("readonly_script"), true);
+  assert.equal(host.canRestoreScriptState("readonly_script"), false);
+
+  const val = host.validateScriptRestoreState("readonly_script", { someKey: 123 });
+  assert.equal(val.valid, false);
+  assert.ok(val.error?.includes("does not support state restoration"));
+
+  assert.equal(await host.restoreScriptState("readonly_script", { someKey: 123 }), false);
+  await host.destroyAll();
+});
+
 
 
