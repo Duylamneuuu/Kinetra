@@ -51,6 +51,28 @@ export class MemoryStorage implements KeyValueStorage {
   async delete(key:string){this.#values.delete(key);}
 }
 
+export interface PlatformStorageBridge {
+  storageGet(key: string): Promise<string | undefined>;
+  storageSet(key: string, value: string): Promise<void>;
+  storageDelete(key: string): Promise<void>;
+}
+
+export class IpcKeyValueStorage implements KeyValueStorage {
+  constructor(private readonly bridge: PlatformStorageBridge) {}
+
+  async get(key: string): Promise<string | undefined> {
+    return this.bridge.storageGet(key);
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    await this.bridge.storageSet(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.bridge.storageDelete(key);
+  }
+}
+
 export class JsonDocumentStore<T>{
   constructor(private readonly storage:KeyValueStorage,private readonly prefix:string){}
 

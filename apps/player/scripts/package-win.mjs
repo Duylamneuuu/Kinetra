@@ -20,7 +20,7 @@ const appPaths = await packager({
   electronVersion: "38.0.0",
   overwrite: true,
   asar: true,
-  prune: true,
+  prune: false,
 });
 
 if (appPaths.length !== 1) {
