@@ -14,6 +14,8 @@ const runtimeBridgeMode =
   process.env.KINETRA_RUNTIME_BRIDGE_STDIO === "1" ||
   process.argv.includes("--runtime-bridge-stdio");
 
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 interface BridgeRequest {
   id: string;
   method: string;
@@ -219,6 +221,10 @@ async function handleBridgeRequest(
     case "asset.register":
     case "animation.play":
     case "animation.stop":
+    case "audio.play":
+    case "audio.stop":
+    case "audio.setBusGain":
+    case "audio.setBusMuted":
     case "navigation.bake":
     case "navigation.load":
     case "navigation.closestPoint":

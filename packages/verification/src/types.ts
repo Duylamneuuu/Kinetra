@@ -79,6 +79,7 @@ export interface RuntimeProbeHost {
       };
     }>;
     navigation?: Record<string, unknown>;
+    audio?: Record<string, unknown>;
   }>;
   injectInput(event: {
     action: string;
@@ -116,6 +117,16 @@ export interface RuntimeProbeHost {
   }): Promise<unknown>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
   stopAnimation?(entityId: string): Promise<unknown>;
+  playAudio?(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<unknown>;
+  stopAudio?(params?: { playbackId?: string; entityId?: string }): Promise<unknown>;
+  setAudioBusGain?(busId: string, gain: number): Promise<unknown>;
+  setAudioBusMuted?(busId: string, muted: boolean): Promise<unknown>;
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
@@ -151,6 +162,16 @@ export interface RuntimeProbe {
   }): Promise<void>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<void>;
   stopAnimation?(entityId: string): Promise<void>;
+  playAudio?(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<void>;
+  stopAudio?(params?: { playbackId?: string; entityId?: string }): Promise<void>;
+  setAudioBusGain?(busId: string, gain: number): Promise<void>;
+  setAudioBusMuted?(busId: string, muted: boolean): Promise<void>;
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
@@ -163,6 +184,29 @@ export type AcceptanceStep =
   | { type: "asset.register"; assetId: string; dataBase64: string }
   | { type: "animation.play"; entityId: string; clip: string; loop?: boolean }
   | { type: "animation.stop"; entityId: string }
+  | {
+      type: "audio.play";
+      assetId: string;
+      bus?: string;
+      loop?: boolean;
+      gain?: number;
+      entityId?: string;
+    }
+  | {
+      type: "audio.stop";
+      playbackId?: string;
+      entityId?: string;
+    }
+  | {
+      type: "audio.setBusGain";
+      busId: string;
+      gain: number;
+    }
+  | {
+      type: "audio.setBusMuted";
+      busId: string;
+      muted: boolean;
+    }
   | {
       type: "navigation.bake";
       positions?: number[];

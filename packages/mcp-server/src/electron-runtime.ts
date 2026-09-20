@@ -172,6 +172,47 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return this.#request<RuntimeQueryResult>("animation.stop", { entityId });
   }
 
+  async playAudio(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("audio.play", params);
+  }
+
+  async stopAudio(params: {
+    playbackId?: string;
+    entityId?: string;
+  } = {}): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("audio.stop", params);
+  }
+
+  async setAudioBusGain(
+    busId: string,
+    gain: number,
+  ): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("audio.setBusGain", {
+      busId,
+      gain,
+    });
+  }
+
+  async setAudioBusMuted(
+    busId: string,
+    muted: boolean,
+  ): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("audio.setBusMuted", {
+      busId,
+      muted,
+    });
+  }
+
   async bakeNavigation(params: {
     positions?: number[];
     indices?: number[];

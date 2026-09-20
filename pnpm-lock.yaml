@@ -17,6 +17,9 @@ importers:
 
   apps/player:
     dependencies:
+      '@kinetra/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
       '@kinetra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -156,6 +159,9 @@ importers:
       '@kinetra/asset-pipeline':
         specifier: workspace:*
         version: link:../asset-pipeline
+      '@kinetra/audio':
+        specifier: workspace:*
+        version: link:../audio
       '@kinetra/mcp-server':
         specifier: workspace:*
         version: link:../mcp-server

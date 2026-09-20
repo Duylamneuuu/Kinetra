@@ -106,6 +106,53 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
     }
 
+    case "audio.play": {
+      const assetId = requireString(params.assetId, "assetId");
+      const bus = typeof params.bus === "string" ? params.bus : undefined;
+      const loop = typeof params.loop === "boolean" ? params.loop : undefined;
+      const gain = typeof params.gain === "number" ? params.gain : undefined;
+      const entityId =
+        typeof params.entityId === "string" ? params.entityId : undefined;
+      const result = await runtime.playAudio({
+        assetId,
+        ...(bus !== undefined ? { bus } : {}),
+        ...(loop !== undefined ? { loop } : {}),
+        ...(gain !== undefined ? { gain } : {}),
+        ...(entityId !== undefined ? { entityId } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "audio.stop": {
+      const playbackId =
+        typeof params.playbackId === "string" ? params.playbackId : undefined;
+      const entityId =
+        typeof params.entityId === "string" ? params.entityId : undefined;
+      const result = runtime.stopAudio({
+        ...(playbackId !== undefined ? { playbackId } : {}),
+        ...(entityId !== undefined ? { entityId } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "audio.setBusGain": {
+      const busId = requireString(params.busId, "busId");
+      if (typeof params.gain !== "number" || !Number.isFinite(params.gain)) {
+        throw new TypeError("audio.setBusGain requires finite number gain");
+      }
+      runtime.setAudioBusGain(busId, params.gain);
+      return runtime.query();
+    }
+
+    case "audio.setBusMuted": {
+      const busId = requireString(params.busId, "busId");
+      if (typeof params.muted !== "boolean") {
+        throw new TypeError("audio.setBusMuted requires boolean muted");
+      }
+      runtime.setAudioBusMuted(busId, params.muted);
+      return runtime.query();
+    }
+
     case "navigation.bake": {
       const positions = Array.isArray(params.positions)
         ? (params.positions as number[])

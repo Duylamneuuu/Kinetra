@@ -62,6 +62,16 @@ export interface RuntimeHost {
   registerAsset?(assetId: string, dataBase64: string): Promise<void>;
   playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
   stopAnimation?(entityId: string): Promise<unknown>;
+  playAudio?(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<unknown>;
+  stopAudio?(params?: { playbackId?: string; entityId?: string }): Promise<unknown>;
+  setAudioBusGain?(busId: string, gain: number): Promise<unknown>;
+  setAudioBusMuted?(busId: string, muted: boolean): Promise<unknown>;
   enableTestScriptFixtures?(preset: string): Promise<void>;
 }
 
