@@ -6,6 +6,9 @@ declare global {
       setFullscreen(value: boolean): Promise<{ fullscreen: boolean }>;
       getWindowState(): Promise<{ fullscreen: boolean }>;
       getUserDataPath(): Promise<string>;
+      storageGet(key: string): Promise<string | undefined>;
+      storageSet(key: string, value: string): Promise<void>;
+      storageDelete(key: string): Promise<void>;
     };
     kinetraRuntimeBridge?: {
       onCommand(

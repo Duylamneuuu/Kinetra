@@ -23,6 +23,15 @@ const platformApi = {
   getUserDataPath(): Promise<string> {
     return ipcRenderer.invoke("kinetra:platform:user-data-path");
   },
+  storageGet(key: string): Promise<string | undefined> {
+    return ipcRenderer.invoke("kinetra:storage:get", key);
+  },
+  storageSet(key: string, value: string): Promise<void> {
+    return ipcRenderer.invoke("kinetra:storage:set", key, value);
+  },
+  storageDelete(key: string): Promise<void> {
+    return ipcRenderer.invoke("kinetra:storage:delete", key);
+  },
 };
 
 const runtimeBridge = {

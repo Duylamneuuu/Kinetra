@@ -25,6 +25,7 @@ import {
 import {
   JsonDocumentStore,
   MemoryStorage,
+  IpcKeyValueStorage,
   SaveMigrator,
   createGameplaySaveMigrator,
   CURRENT_SAVE_SCHEMA_VERSION,
@@ -203,8 +204,15 @@ export class PlayerRuntimeController {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     this.#saveMigrator = createGameplaySaveMigrator();
+    const platform =
+      typeof window !== "undefined" ? window.kinetraPlatform : undefined;
+    const storage =
+      platform && typeof platform.storageGet === "function"
+        ? new IpcKeyValueStorage(platform)
+        : new MemoryStorage();
+
     this.#saveStore = new JsonDocumentStore<SaveEnvelope<GameplaySaveData>>(
-      new MemoryStorage(),
+      storage,
       "saves",
     );
 
@@ -687,7 +695,11 @@ export class PlayerRuntimeController {
   async getSave(
     slotId = "default",
   ): Promise<SaveEnvelope<GameplaySaveData> | undefined> {
-    return this.#saveStore.load(slotId);
+    try {
+      return await this.#saveStore.load(slotId);
+    } catch {
+      return undefined;
+    }
   }
 
   async loadSave(options?: {
@@ -709,12 +721,21 @@ export class PlayerRuntimeController {
     }
 
     const slotId = options?.slotId ?? "default";
-    const rawEnvelope = options?.envelope ?? (await this.#saveStore.load(slotId));
+    let rawEnvelope = options?.envelope;
+    if (!rawEnvelope) {
+      try {
+        rawEnvelope = await this.#saveStore.load(slotId);
+      } catch (err) {
+        const error = `Failed to read save document for slot "${slotId}": ${err instanceof Error ? err.message : String(err)}`;
+        this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
+        return { success: false, slotId, error, phase: "validation" };
+      }
+    }
 
     if (!rawEnvelope) {
       const error = `Save document not found for slot "${slotId}"`;
       this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, error };
+      return { success: false, slotId, error, phase: "validation" };
     }
 
     // Phase 1: Validation

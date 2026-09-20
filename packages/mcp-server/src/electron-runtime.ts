@@ -39,6 +39,7 @@ export interface ElectronRuntimeHostOptions {
   playerEntry?: string;
   runtimeExecutable?: string;
   requestTimeoutMs?: number;
+  saveDir?: string;
 }
 
 function findRepositoryRoot(): string {
@@ -84,6 +85,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
   readonly playerEntry: string;
   readonly runtimeExecutable: string | undefined;
   readonly requestTimeoutMs: number;
+  readonly saveDir: string | undefined;
 
   #child: ChildProcessWithoutNullStreams | undefined;
   #server: Server | undefined;
@@ -106,6 +108,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       options.runtimeExecutable ?? process.env.KINETRA_RUNTIME_EXECUTABLE;
 
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+    this.saveDir = options.saveDir;
   }
 
   async start(
@@ -292,6 +295,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
     slotId?: string;
     schemaVersion?: number;
     error?: string;
+    phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
+    rolledBack?: boolean;
+    atomicityViolation?: boolean;
   }> {
     await this.#ensureProcess();
     return this.#request<{
@@ -299,6 +305,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
       slotId?: string;
       schemaVersion?: number;
       error?: string;
+      phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
+      rolledBack?: boolean;
+      atomicityViolation?: boolean;
     }>("save.load", params);
   }
 
@@ -396,12 +405,18 @@ export class ElectronRuntimeHost implements RuntimeHost {
     const electronEnv: NodeJS.ProcessEnv = {
       ...process.env,
       KINETRA_RUNTIME_BRIDGE_PIPE: pipePath,
+      ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
     };
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
     const executable = this.runtimeExecutable ?? this.electronExecutable;
-    const args = this.runtimeExecutable ? [] : [this.playerEntry];
+    const args = this.runtimeExecutable
+      ? (this.saveDir ? [`--save-dir=${this.saveDir}`] : [])
+      : [
+          this.playerEntry,
+          ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
+        ];
 
     const child = spawn(executable, args, {
       stdio: ["pipe", "pipe", "pipe"],

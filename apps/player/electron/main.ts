@@ -3,6 +3,7 @@ import { connect, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { FileKeyValueStorage } from "./file-storage.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -384,6 +385,49 @@ ipcMain.handle("kinetra:window:set-fullscreen", (_event, value: unknown) => {
 ipcMain.handle("kinetra:platform:user-data-path", () =>
   app.getPath("userData"),
 );
+
+let fileStorage: FileKeyValueStorage | undefined;
+function getFileStorage(): FileKeyValueStorage {
+  if (!fileStorage) {
+    const saveDirArg = process.argv
+      .find((arg) => arg.startsWith("--save-dir="))
+      ?.slice("--save-dir=".length);
+    const saveRootDir =
+      process.env.KINETRA_SAVE_DIR ||
+      saveDirArg ||
+      join(app.getPath("userData"), "saves");
+    fileStorage = new FileKeyValueStorage(saveRootDir);
+  }
+  return fileStorage;
+}
+
+ipcMain.handle("kinetra:storage:get", async (_event, key: unknown) => {
+  if (typeof key !== "string") {
+    throw new TypeError("Storage key must be a string");
+  }
+  return getFileStorage().get(key);
+});
+
+ipcMain.handle(
+  "kinetra:storage:set",
+  async (_event, key: unknown, value: unknown) => {
+    if (typeof key !== "string") {
+      throw new TypeError("Storage key must be a string");
+    }
+    if (typeof value !== "string") {
+      throw new TypeError("Storage value must be a string");
+    }
+    await getFileStorage().set(key, value);
+  },
+);
+
+ipcMain.handle("kinetra:storage:delete", async (_event, key: unknown) => {
+  if (typeof key !== "string") {
+    throw new TypeError("Storage key must be a string");
+  }
+  await getFileStorage().delete(key);
+});
+
 
 app.whenReady().then(async () => {
   if (runtimeBridgeMode) {

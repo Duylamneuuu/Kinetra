@@ -21,7 +21,7 @@ Legend:
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
 | P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
-| P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration, hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
+| P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | CORE MERGED | Acceptance manifest/runner, semantic steps, structured state/log/metric checks, screenshot hash primitive and process-smoke primitive are on main. Runtime/MCP/package wiring remains. |
 | P9 distribution/Steam | WIP | PR #28 contains release/signing/SteamPipe contracts. Real signing/upload is intentionally outside repo-only proof. |
@@ -89,6 +89,12 @@ What exists:
 - scene lifecycle;
 - action-based input + remapping;
 - versioned save migration/store contracts;
+- engine-owned file-backed desktop save storage (`FileKeyValueStorage`) with atomic sibling temp writes and Windows backoff;
+- renderer IPC storage bridge (`IpcKeyValueStorage`) keeping filesystem paths outside renderer and project JSON;
+- isolated test storage root (`KINETRA_SAVE_DIR` / `--save-dir=`);
+- strict storage key validation and path traversal protection;
+- multi-process save persistence (Process A saves -> terminates -> fresh Process B restores and continues gameplay);
+- file-backed schema migration (v1 -> v2) and corrupt file/missing slot resilience;
 - hierarchical audio buses (@kinetra/audio) with truthful gain/mute computation;
 - deterministic synthetic WAV generation (`createSyntheticWav`);
 - real Web Audio decoding and playback in Electron player runtime via Kinetra assetId;
@@ -100,7 +106,6 @@ What exists:
 
 Still missing:
 - integrated runtime UI layer;
-- file-backed desktop save adapter;
 - end-to-end game loop proof.
 
 ### Verification
@@ -132,7 +137,7 @@ What has meaningful proof:
 - packaged Windows executable (`KinetraGame.exe`) smoke test and runtime bridge compatibility.
 
 What remains:
-- complex model/mesh loading through asset pipeline into player runtime.
+- none for core P2 runtime bridge scope (real GLB asset loading is proven).
 
 ### Physics (P7 Slice 1)
 
@@ -176,7 +181,7 @@ Superseded by `feat/p2-real-runtime-bridge`. Proven on Windows with deterministi
 ### PR #26 — P7 Rapier/Recast
 
 Old exploratory branch with failing tests around character-controller queries and Recast extents.
-Superseded in part by `feat/p7-rapier-physics-slice`, which fixed the character-controller spatial query pipeline initialization and proved deterministic Rapier simulation in the real Electron player runtime. Recast navigation remains to be ported cleanly in a subsequent vertical slice.
+Superseded by `feat/p7-rapier-physics-slice` (Rapier physics) and `feat/p7-recast-navigation-slice` (Recast navigation), both of which are now proven in the real Electron player runtime.
 
 ### PR #28 — P9 distribution contracts
 
