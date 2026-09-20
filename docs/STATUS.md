@@ -89,7 +89,7 @@ What exists:
 - scene lifecycle;
 - action-based input + remapping;
 - versioned save migration/store contracts;
-- engine-owned file-backed desktop save storage (`FileKeyValueStorage`) with atomic sibling temp writes and Windows backoff;
+- engine-owned file-backed desktop save storage (`FileKeyValueStorage`) with crash-resistant atomic replacement of completed temp files (fsync before rename) and bounded Windows retry;
 - renderer IPC storage bridge (`IpcKeyValueStorage`) keeping filesystem paths outside renderer and project JSON;
 - isolated test storage root (`KINETRA_SAVE_DIR` / `--save-dir=`);
 - strict storage key validation and path traversal protection;

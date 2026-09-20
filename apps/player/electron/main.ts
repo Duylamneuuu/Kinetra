@@ -3,7 +3,7 @@ import { connect, type Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { FileKeyValueStorage } from "./file-storage.js";
+import { FileKeyValueStorage } from "@kinetra/save-state/file";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

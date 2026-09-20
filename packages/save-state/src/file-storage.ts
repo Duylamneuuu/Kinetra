@@ -1,24 +1,38 @@
 import {
-  copyFile,
   mkdir,
+  open,
   readFile,
   rename,
   unlink,
-  writeFile,
 } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import type { KeyValueStorage } from "./index.js";
 
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
 
+export interface FileStorageOptions {
+  /** Optional custom replacement primitive, primarily for deterministic testing */
+  renameFile?: (sourcePath: string, targetPath: string) => Promise<void>;
+  /** Max retry attempts on rename failure before giving up (default 3) */
+  renameRetryAttempts?: number;
+  /** Backoff delay per retry attempt in ms (default 10) */
+  retryDelayMs?: number;
+}
+
 export class FileKeyValueStorage implements KeyValueStorage {
   readonly rootDir: string;
+  readonly #renameFile: (sourcePath: string, targetPath: string) => Promise<void>;
+  readonly #retryAttempts: number;
+  readonly #retryDelayMs: number;
 
-  constructor(rootDir: string) {
+  constructor(rootDir: string, options: FileStorageOptions = {}) {
     if (!rootDir || typeof rootDir !== "string") {
       throw new TypeError("FileKeyValueStorage rootDir must be a non-empty string");
     }
     this.rootDir = resolve(rootDir);
+    this.#renameFile = options.renameFile ?? rename;
+    this.#retryAttempts = options.renameRetryAttempts ?? 3;
+    this.#retryDelayMs = options.retryDelayMs ?? 10;
   }
 
   resolveFilePath(key: string): string {
@@ -68,33 +82,42 @@ export class FileKeyValueStorage implements KeyValueStorage {
     const filePath = this.resolveFilePath(key);
     await mkdir(this.rootDir, { recursive: true });
 
-    // Atomic write via sibling temporary file + rename replacement
+    // Crash-resistant atomic replacement of completed temp files
     const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
 
-    await writeFile(tempPath, value, "utf8");
-
+    // 1. Open temp handle, write full contents, sync/flush, and close
+    const handle = await open(tempPath, "w");
     try {
-      await rename(tempPath, filePath);
-    } catch {
-      // On Windows NTFS, transient locks by antivirus or file monitors can cause rename to fail.
-      // Retry with short backoff, then fall back to copyFile + unlink.
-      let replaced = false;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        await new Promise((resolveWait) => setTimeout(resolveWait, attempt * 10));
-        try {
-          await rename(tempPath, filePath);
-          replaced = true;
-          break;
-        } catch {
-          // Continue to next attempt
-        }
-      }
+      await handle.writeFile(value, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
 
-      if (!replaced) {
-        await copyFile(tempPath, filePath);
-        await unlink(tempPath).catch(() => {});
+    // 2. Attempt atomic rename/replace with bounded retry on Windows NTFS
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= this.#retryAttempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolveWait) =>
+          setTimeout(resolveWait, attempt * this.#retryDelayMs),
+        );
+      }
+      try {
+        await this.#renameFile(tempPath, filePath);
+        return;
+      } catch (err) {
+        lastError = err;
       }
     }
+
+    // 3. If atomic replacement fails after bounded retry, clean up temp file safely and throw.
+    // The existing final save document remains completely untouched (never partially overwritten).
+    await unlink(tempPath).catch(() => {});
+    throw (
+      lastError instanceof Error
+        ? lastError
+        : new Error(`Failed to atomically replace save file "${filePath}"`)
+    );
   }
 
   async delete(key: string): Promise<void> {

@@ -105,3 +105,48 @@ test("FileKeyValueStorage performs atomic replacement when overwriting", async (
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("FileKeyValueStorage preserves old save and cleans up temp file when replacement fails", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "kinetra-save-fail-test-"));
+
+  try {
+    const originalPayload = JSON.stringify({ version: 1, state: "VALID_SAVE_A" });
+    const storage = new FileKeyValueStorage(tempDir);
+
+    // Initial save
+    await storage.set("slot-fail-test", originalPayload);
+    assert.equal(await storage.get("slot-fail-test"), originalPayload);
+
+    // Storage configured with a renameFile primitive that always throws to simulate replacement failure
+    const failingStorage = new FileKeyValueStorage(tempDir, {
+      renameRetryAttempts: 1,
+      retryDelayMs: 5,
+      renameFile: async () => {
+        throw new Error("EPERM: simulated atomic replacement lock failure");
+      },
+    });
+
+    const newPayload = JSON.stringify({ version: 2, state: "CORRUPT_NEW_SAVE" });
+
+    // Expect set() to reject with the simulated failure
+    await assert.rejects(
+      () => failingStorage.set("slot-fail-test", newPayload),
+      /EPERM: simulated atomic replacement lock failure/,
+    );
+
+    // INVARIANT 1: The old valid save file still exists and matches VALID_SAVE_A exactly
+    const afterFailedSet = await storage.get("slot-fail-test");
+    assert.equal(afterFailedSet, originalPayload, "Old valid save must remain untouched");
+
+    // INVARIANT 2: No partially written or temporary files remain in storage directory
+    const files = await readdir(tempDir);
+    assert.deepEqual(
+      files,
+      ["slot-fail-test.json"],
+      "Temporary files must be safely cleaned up and only original save remains",
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
