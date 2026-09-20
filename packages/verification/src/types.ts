@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ProjectDocument } from "@kinetra/project-model";
 
 export interface RuntimeInput {
@@ -177,73 +178,197 @@ export interface RuntimeProbe {
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
 }
 
-export type AcceptanceStep =
-  | { type: "runtime.start"; sceneId: string; assets?: Record<string, string> }
-  | { type: "runtime.stop" }
-  | { type: "runtime.step"; steps?: number; deltaSeconds?: number }
-  | { type: "asset.register"; assetId: string; dataBase64: string }
-  | { type: "animation.play"; entityId: string; clip: string; loop?: boolean }
-  | { type: "animation.stop"; entityId: string }
-  | {
-      type: "audio.play";
-      assetId: string;
-      bus?: string;
-      loop?: boolean;
-      gain?: number;
-      entityId?: string;
-    }
-  | {
-      type: "audio.stop";
-      playbackId?: string;
-      entityId?: string;
-    }
-  | {
-      type: "audio.setBusGain";
-      busId: string;
-      gain: number;
-    }
-  | {
-      type: "audio.setBusMuted";
-      busId: string;
-      muted: boolean;
-    }
-  | {
-      type: "navigation.bake";
-      positions?: number[];
-      indices?: number[];
-      config?: Record<string, unknown>;
-    }
-  | { type: "navigation.load"; dataBase64: string }
-  | {
-      type: "navigation.closestPoint";
-      position: [number, number, number];
-      halfExtents?: [number, number, number];
-    }
-  | {
-      type: "navigation.computePath";
-      start: [number, number, number];
-      end: [number, number, number];
-      halfExtents?: [number, number, number];
-    }
-  | { type: "save.capture"; slotId?: string }
-  | { type: "save.load"; slotId?: string; envelope?: Record<string, unknown> }
-  | ({type:"input"}&RuntimeInput)
-  | {type:"wait";milliseconds:number}
-  | {type:"assert.equal";path:string;expected:unknown}
-  | {type:"assert.near";path:string;expected:number;tolerance:number}
-  | {type:"assert.logAbsent";minimumLevel:"warning"|"error";messageIncludes?:string}
-  | {type:"assert.metricMax";metric:string;max:number}
-  | {type:"assert.metricMin";metric:string;min:number}
-  | {type:"assert.screenshotSha256";sha256:string}
-  | {type:"assert.screenshotValidPng";minBytes?:number};
+export const runtimeStartStepSchema = z.object({
+  type: z.literal("runtime.start"),
+  sceneId: z.string().min(1),
+  assets: z.record(z.string(), z.string()).optional(),
+}).strict();
 
-export interface AcceptanceManifest {
-  schemaVersion:1;
-  suite:string;
-  seed:number;
-  target:"runtime"|"packaged";
-  steps:AcceptanceStep[];
-}
+export const runtimeStopStepSchema = z.object({
+  type: z.literal("runtime.stop"),
+}).strict();
+
+export const runtimeStepStepSchema = z.object({
+  type: z.literal("runtime.step"),
+  steps: z.number().int().positive().optional(),
+  deltaSeconds: z.number().positive().optional(),
+}).strict();
+
+export const assetRegisterStepSchema = z.object({
+  type: z.literal("asset.register"),
+  assetId: z.string().min(1),
+  dataBase64: z.string().min(1),
+}).strict();
+
+export const animationPlayStepSchema = z.object({
+  type: z.literal("animation.play"),
+  entityId: z.string().min(1),
+  clip: z.string().min(1),
+  loop: z.boolean().optional(),
+}).strict();
+
+export const animationStopStepSchema = z.object({
+  type: z.literal("animation.stop"),
+  entityId: z.string().min(1),
+}).strict();
+
+export const audioPlayStepSchema = z.object({
+  type: z.literal("audio.play"),
+  assetId: z.string().min(1),
+  bus: z.string().min(1).optional(),
+  loop: z.boolean().optional(),
+  gain: z.number().optional(),
+  entityId: z.string().min(1).optional(),
+}).strict();
+
+export const audioStopStepSchema = z.object({
+  type: z.literal("audio.stop"),
+  playbackId: z.string().min(1).optional(),
+  entityId: z.string().min(1).optional(),
+}).strict();
+
+export const audioSetBusGainStepSchema = z.object({
+  type: z.literal("audio.setBusGain"),
+  busId: z.string().min(1),
+  gain: z.number(),
+}).strict();
+
+export const audioSetBusMutedStepSchema = z.object({
+  type: z.literal("audio.setBusMuted"),
+  busId: z.string().min(1),
+  muted: z.boolean(),
+}).strict();
+
+export const navigationBakeStepSchema = z.object({
+  type: z.literal("navigation.bake"),
+  positions: z.array(z.number()).optional(),
+  indices: z.array(z.number()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+export const navigationLoadStepSchema = z.object({
+  type: z.literal("navigation.load"),
+  dataBase64: z.string().min(1),
+}).strict();
+
+export const navigationClosestPointStepSchema = z.object({
+  type: z.literal("navigation.closestPoint"),
+  position: z.tuple([z.number(), z.number(), z.number()]),
+  halfExtents: z.tuple([z.number(), z.number(), z.number()]).optional(),
+}).strict();
+
+export const navigationComputePathStepSchema = z.object({
+  type: z.literal("navigation.computePath"),
+  start: z.tuple([z.number(), z.number(), z.number()]),
+  end: z.tuple([z.number(), z.number(), z.number()]),
+  halfExtents: z.tuple([z.number(), z.number(), z.number()]).optional(),
+}).strict();
+
+export const saveCaptureStepSchema = z.object({
+  type: z.literal("save.capture"),
+  slotId: z.string().min(1).optional(),
+}).strict();
+
+export const saveLoadStepSchema = z.object({
+  type: z.literal("save.load"),
+  slotId: z.string().min(1).optional(),
+  envelope: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+
+export const inputStepSchema = z.object({
+  type: z.literal("input"),
+  action: z.string().min(1),
+  phase: z.enum(["press", "release", "hold"]),
+  value: z.union([z.number(), z.tuple([z.number(), z.number()])]).optional(),
+  durationMs: z.number().nonnegative().optional(),
+}).strict();
+
+export const waitStepSchema = z.object({
+  type: z.literal("wait"),
+  milliseconds: z.number().nonnegative(),
+}).strict();
+
+export const assertEqualStepSchema = z.object({
+  type: z.literal("assert.equal"),
+  path: z.string().min(1),
+  expected: z.unknown(),
+}).strict();
+
+export const assertNearStepSchema = z.object({
+  type: z.literal("assert.near"),
+  path: z.string().min(1),
+  expected: z.number(),
+  tolerance: z.number().nonnegative(),
+}).strict();
+
+export const assertLogAbsentStepSchema = z.object({
+  type: z.literal("assert.logAbsent"),
+  minimumLevel: z.enum(["warning", "error"]),
+  messageIncludes: z.string().optional(),
+}).strict();
+
+export const assertMetricMaxStepSchema = z.object({
+  type: z.literal("assert.metricMax"),
+  metric: z.string().min(1),
+  max: z.number(),
+}).strict();
+
+export const assertMetricMinStepSchema = z.object({
+  type: z.literal("assert.metricMin"),
+  metric: z.string().min(1),
+  min: z.number(),
+}).strict();
+
+export const assertScreenshotSha256StepSchema = z.object({
+  type: z.literal("assert.screenshotSha256"),
+  sha256: z.string().min(1),
+}).strict();
+
+export const assertScreenshotValidPngStepSchema = z.object({
+  type: z.literal("assert.screenshotValidPng"),
+  minBytes: z.number().int().positive().optional(),
+}).strict();
+
+export const acceptanceStepSchema = z.discriminatedUnion("type", [
+  runtimeStartStepSchema,
+  runtimeStopStepSchema,
+  runtimeStepStepSchema,
+  assetRegisterStepSchema,
+  animationPlayStepSchema,
+  animationStopStepSchema,
+  audioPlayStepSchema,
+  audioStopStepSchema,
+  audioSetBusGainStepSchema,
+  audioSetBusMutedStepSchema,
+  navigationBakeStepSchema,
+  navigationLoadStepSchema,
+  navigationClosestPointStepSchema,
+  navigationComputePathStepSchema,
+  saveCaptureStepSchema,
+  saveLoadStepSchema,
+  inputStepSchema,
+  waitStepSchema,
+  assertEqualStepSchema,
+  assertNearStepSchema,
+  assertLogAbsentStepSchema,
+  assertMetricMaxStepSchema,
+  assertMetricMinStepSchema,
+  assertScreenshotSha256StepSchema,
+  assertScreenshotValidPngStepSchema,
+]);
+
+export type AcceptanceStep = z.infer<typeof acceptanceStepSchema>;
+
+export const acceptanceManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  suite: z.string().min(1),
+  seed: z.number().int().default(0),
+  target: z.enum(["runtime", "packaged"]).default("runtime"),
+  steps: z.array(acceptanceStepSchema),
+}).strict();
+
+export type AcceptanceManifest = z.infer<typeof acceptanceManifestSchema>;
+export type AcceptanceManifestInput = z.input<typeof acceptanceManifestSchema>;
 
 export interface StepResult {
   index:number;

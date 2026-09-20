@@ -71,6 +71,8 @@ test("acceptance stops at first failed proof and returns machine-readable failur
   assert.equal(report.passed,false);
   assert.equal(report.steps.length,2);
   assert.match(report.steps[1]?.message??"",/Expected/);
+  assert.equal(report.steps[1]?.expected, 99);
+  assert.equal(report.steps[1]?.actual, 0);
 });
 
 test("assert.screenshotValidPng validates PNG magic header and minBytes", async () => {
