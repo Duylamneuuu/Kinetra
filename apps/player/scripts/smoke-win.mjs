@@ -96,3 +96,30 @@ if (arenaRun.status !== 0) {
 
 console.log("Packaged Windows arena tests passed successfully.");
 
+const shellTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-game-shell.test.js",
+);
+
+console.log("Running real packaged game shell test suite...");
+const shellRun = spawnSync(process.execPath, ["--test", shellTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (shellRun.status !== 0) {
+  throw new Error(`Packaged game shell test failed with exit code ${String(shellRun.status)}`);
+}
+
+console.log("Packaged Windows game shell tests passed successfully.");
+

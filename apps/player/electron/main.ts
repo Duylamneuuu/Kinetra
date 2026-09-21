@@ -223,6 +223,8 @@ async function handleBridgeRequest(
 
     case "runtime.start":
     case "runtime.stop":
+    case "runtime.pause":
+    case "runtime.resume":
     case "runtime.query":
     case "runtime.injectInput":
     case "runtime.readLogs":
@@ -393,6 +395,10 @@ ipcMain.handle("kinetra:window:set-fullscreen", (_event, value: unknown) => {
 ipcMain.handle("kinetra:platform:user-data-path", () =>
   app.getPath("userData"),
 );
+
+ipcMain.handle("kinetra:app:quit", () => {
+  app.quit();
+});
 
 let fileStorage: FileKeyValueStorage | undefined;
 function getFileStorage(): FileKeyValueStorage {

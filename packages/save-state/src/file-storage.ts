@@ -40,8 +40,12 @@ export class FileKeyValueStorage implements KeyValueStorage {
       throw new TypeError("Storage key must be a non-empty string");
     }
 
-    // Strip prefix if formatted as "prefix:key" (e.g. "saves:slot-a" -> "slot-a")
-    const cleanKey = key.startsWith("saves:") ? key.slice("saves:".length) : key;
+    // Strip or map prefix if formatted as "prefix:key" (e.g. "saves:slot-a" -> "slot-a", "settings:user" -> "settings_user")
+    const cleanKey = key.startsWith("saves:")
+      ? key.slice("saves:".length)
+      : key.startsWith("settings:")
+        ? `settings_${key.slice("settings:".length)}`
+        : key;
 
     if (!SAFE_KEY_PATTERN.test(cleanKey)) {
       throw new Error(

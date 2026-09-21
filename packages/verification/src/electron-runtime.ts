@@ -39,6 +39,8 @@ export interface RuntimeQueryResult {
   sceneId?: string;
   projectRevision?: number;
   entities: RuntimeEntityState[];
+  state?: Record<string, unknown>;
+  shell?: { mode: string; isPaused: boolean };
 }
 
 export interface RuntimeInputEvent {
@@ -199,6 +201,24 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async query(query: RuntimeQuery = {}): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("runtime.query", query);
+  }
+
+  async pause(): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("runtime.pause", {});
+  }
+
+  async resume(): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("runtime.resume", {});
+  }
+
+  async request<T = unknown>(
+    method: string,
+    params: Record<string, unknown> = {},
+  ): Promise<T> {
+    await this.#ensureProcess();
+    return this.#request<T>(method, params);
   }
 
   async injectInput(event: RuntimeInputEvent): Promise<void> {

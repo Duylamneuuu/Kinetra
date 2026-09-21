@@ -5,7 +5,9 @@ import {
   arenaAudioAssets,
 } from "@kinetra/reference-game";
 
+import { SettingsStore } from "@kinetra/save-state";
 import { PlayerRuntimeController } from "./runtime-controller.js";
+import { GameShellController } from "./shell.js";
 import "./style.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -19,6 +21,9 @@ if (!canvas || !status || !fullscreenButton) {
 
 const statusElement = status;
 const runtime = new PlayerRuntimeController(canvas);
+const settingsStore = new SettingsStore(runtime.getStorage());
+const shell = new GameShellController(runtime, settingsStore);
+void shell.init();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,6 +80,8 @@ async function handleRuntimeCommand(request: {
         stepped,
         ...(testScriptPreset !== undefined ? { testScriptPreset } : {}),
       });
+      shell.setMode("playing");
+      shell.updateFromRuntime();
       statusElement.textContent =
         `agent runtime · scene ${sceneId} · revision ${projectRevision}`;
       return result;
@@ -87,11 +94,24 @@ async function handleRuntimeCommand(request: {
       return { registered: true, assetId };
     }
 
+    case "runtime.pause": {
+      runtime.pause();
+      shell.setMode("paused");
+      return runtime.query();
+    }
+
+    case "runtime.resume": {
+      runtime.resume();
+      shell.setMode("playing");
+      return runtime.query();
+    }
+
     case "runtime.step": {
       const steps = typeof params.steps === "number" ? params.steps : 1;
       const deltaSeconds =
         typeof params.deltaSeconds === "number" ? params.deltaSeconds : 1 / 60;
       runtime.step(steps, deltaSeconds);
+      shell.updateFromRuntime();
       return runtime.query();
     }
 
@@ -247,6 +267,8 @@ async function handleRuntimeCommand(request: {
 
     case "runtime.stop":
       await runtime.stop();
+      shell.setMode("mainMenu");
+      await shell.refreshContinueAvailable();
       statusElement.textContent = "agent runtime · stopped";
       return { stopped: true };
 
@@ -400,16 +422,12 @@ const demoProject: ProjectDocument = {
   ],
 };
 
-const defaultArenaProject = createArenaProject();
-void runtime.start(defaultArenaProject, ARENA_SCENE_ID, 0, {
-  assets: arenaAudioAssets,
-});
-
 let lastTime = performance.now();
 function frame(now: number): void {
   const deltaSeconds = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
   lastTime = now;
   runtime.frame(deltaSeconds);
+  shell.updateFromRuntime();
   requestAnimationFrame(frame);
 }
 

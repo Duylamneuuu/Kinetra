@@ -7,15 +7,144 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
     />
-    <title>Kinetra Player</title>
+    <title>Kinetra Arena</title>
   </head>
   <body>
     <canvas id="game" aria-label="Kinetra player viewport"></canvas>
-    <section id="hud">
-      <strong>Kinetra Player</strong>
+
+    <!-- MAIN MENU OVERLAY -->
+    <div id="view-main-menu" class="shell-overlay">
+      <div class="shell-modal menu-card">
+        <h1 class="shell-title">Kinetra Arena</h1>
+        <p class="shell-subtitle">3D Survival Vertical Slice</p>
+        <div class="menu-actions">
+          <button id="btn-new-game" class="shell-btn primary" type="button">New Game</button>
+          <button id="btn-continue" class="shell-btn" type="button" disabled>Continue</button>
+          <button id="btn-menu-settings" class="shell-btn" type="button">Settings</button>
+          <button id="btn-quit" class="shell-btn danger" type="button">Quit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAMEPLAY HUD OVERLAY -->
+    <div id="view-hud" class="shell-overlay hud-layer hidden">
+      <div class="hud-top">
+        <div class="hud-badge health-badge">
+          <span class="hud-label">HP</span>
+          <span id="hud-hp-val" class="hud-val">3 / 3</span>
+        </div>
+        <div class="hud-badge objective-badge">
+          <span class="hud-label">Objective:</span>
+          <span id="hud-objective-val" class="hud-val">Reach the exit</span>
+        </div>
+        <div class="hud-badge status-badge">
+          <span class="hud-label">Status:</span>
+          <span id="hud-status-val" class="hud-val">Playing</span>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <button id="btn-hud-pause" class="shell-btn small" type="button">Pause [Esc]</button>
+      </div>
+    </div>
+
+    <!-- PAUSE MENU OVERLAY -->
+    <div id="view-pause" class="shell-overlay modal-layer hidden">
+      <div class="shell-modal menu-card">
+        <h2 class="shell-title">Game Paused</h2>
+        <div class="menu-actions">
+          <button id="btn-pause-resume" class="shell-btn primary" type="button">Resume</button>
+          <button id="btn-pause-settings" class="shell-btn" type="button">Settings</button>
+          <button id="btn-pause-restart" class="shell-btn" type="button">Restart</button>
+          <button id="btn-pause-main-menu" class="shell-btn danger" type="button">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS OVERLAY -->
+    <div id="view-settings" class="shell-overlay modal-layer hidden">
+      <div class="shell-modal settings-card">
+        <h2 class="shell-title">Settings</h2>
+        <div class="settings-group">
+          <div class="setting-label-row">
+            <label for="setting-master-gain">Master Volume</label>
+            <span id="val-master-gain" class="setting-val-display">100%</span>
+          </div>
+          <input type="range" id="setting-master-gain" min="0" max="1" step="0.05" value="1.0" />
+        </div>
+        <div class="settings-group">
+          <div class="setting-label-row">
+            <label for="setting-sfx-gain">SFX Volume</label>
+            <span id="val-sfx-gain" class="setting-val-display">100%</span>
+          </div>
+          <input type="range" id="setting-sfx-gain" min="0" max="1" step="0.05" value="1.0" />
+        </div>
+        <div class="settings-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="setting-fullscreen" />
+            <span>Fullscreen Mode</span>
+          </label>
+        </div>
+        <div class="settings-group bindings-group">
+          <h3 class="bindings-header">Input Bindings (Core Actions)</h3>
+          <div class="bindings-list">
+            <div class="binding-row">
+              <span class="binding-action">Move Forward</span>
+              <span id="binding-move-forward" class="binding-key">W / ArrowUp</span>
+            </div>
+            <div class="binding-row">
+              <span class="binding-action">Move Backward</span>
+              <span id="binding-move-backward" class="binding-key">S / ArrowDown</span>
+            </div>
+            <div class="binding-row">
+              <span class="binding-action">Move Left</span>
+              <span id="binding-move-left" class="binding-key">A / ArrowLeft</span>
+            </div>
+            <div class="binding-row">
+              <span class="binding-action">Move Right</span>
+              <span id="binding-move-right" class="binding-key">D / ArrowRight</span>
+            </div>
+            <div class="binding-row">
+              <span class="binding-action">Pause Game</span>
+              <span id="binding-pause" class="binding-key">Escape / Start</span>
+            </div>
+          </div>
+        </div>
+        <div class="menu-actions">
+          <button id="btn-settings-back" class="shell-btn primary" type="button">Back</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- WIN SCREEN OVERLAY -->
+    <div id="view-win" class="shell-overlay modal-layer hidden">
+      <div class="shell-modal result-card win-card">
+        <h1 class="shell-title victory-title">VICTORY</h1>
+        <p class="shell-subtitle">You navigated the arena and reached the exit!</p>
+        <div class="menu-actions">
+          <button id="btn-win-restart" class="shell-btn primary" type="button">Play Again</button>
+          <button id="btn-win-main-menu" class="shell-btn" type="button">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOSE SCREEN OVERLAY -->
+    <div id="view-lose" class="shell-overlay modal-layer hidden">
+      <div class="shell-modal result-card lose-card">
+        <h1 class="shell-title defeat-title">DEFEAT</h1>
+        <p class="shell-subtitle">Health reduced to 0 by hostile arena enemy.</p>
+        <div class="menu-actions">
+          <button id="btn-lose-restart" class="shell-btn primary" type="button">Retry</button>
+          <button id="btn-lose-main-menu" class="shell-btn" type="button">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBTLE STATUS FOOTER -->
+    <section id="hud" class="debug-footer">
       <span id="status">booting</span>
-      <button id="fullscreen" type="button">Toggle fullscreen</button>
+      <button id="fullscreen" type="button" style="display:none">Toggle fullscreen</button>
     </section>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

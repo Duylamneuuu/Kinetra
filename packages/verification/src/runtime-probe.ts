@@ -244,6 +244,18 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     return { success: false, error: "Host does not support loadSave" };
   }
 
+  async pause(): Promise<void> {
+    if (typeof this.#host.pause === "function") {
+      await this.#host.pause();
+    }
+  }
+
+  async resume(): Promise<void> {
+    if (typeof this.#host.resume === "function") {
+      await this.#host.resume();
+    }
+  }
+
   async snapshot(): Promise<RuntimeSnapshot> {
     const query = await this.#host.query();
     const byEntityId: Record<string, unknown> = {};
@@ -259,6 +271,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     return {
       running: query.running,
       ...(sceneId !== undefined ? { sceneId } : {}),
+      ...(query.shell !== undefined ? { shell: query.shell } : {}),
       state: {
         ...(query.projectRevision !== undefined
           ? { projectRevision: query.projectRevision }
@@ -270,6 +283,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         ...(query.audio ? { audio: query.audio } : {}),
         ...(query.gameplay ? { gameplay: query.gameplay } : {}),
         ...(query.game ? { game: query.game } : {}),
+        ...(query.shell ? { shell: query.shell } : {}),
       },
     };
   }
