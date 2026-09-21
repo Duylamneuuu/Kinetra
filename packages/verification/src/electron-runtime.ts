@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -92,6 +92,7 @@ export interface ElectronRuntimeHostOptions {
   runtimeExecutable?: string | undefined;
   requestTimeoutMs?: number;
   saveDir?: string;
+  userDataDir?: string;
 }
 
 function findRepositoryRoot(): string {
@@ -143,11 +144,13 @@ export class ElectronRuntimeHost implements RuntimeHost {
   readonly runtimeExecutable: string | undefined;
   readonly requestTimeoutMs: number;
   readonly saveDir: string | undefined;
+  readonly userDataDir: string | undefined;
 
   #child: ChildProcessWithoutNullStreams | undefined;
   #server: Server | undefined;
   #socket: Socket | undefined;
   #pipePath: string | undefined;
+  #ownedUserDataDir: string | undefined;
   #pending = new Map<string, PendingRequest>();
   #nextRequestId = 1;
   #readyPromise: Promise<void> | undefined;
@@ -168,6 +171,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.saveDir = options.saveDir;
+    this.userDataDir = options.userDataDir;
   }
 
   async start(
@@ -446,10 +450,30 @@ export class ElectronRuntimeHost implements RuntimeHost {
       child.stderr.destroy();
 
       if (!child.killed) {
+        try {
+          if (process.platform === "win32" && child.pid) {
+            spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+              windowsHide: true,
+              stdio: "ignore",
+            });
+          }
+        } catch {
+          // ignore
+        }
         child.kill();
       }
 
       child.unref();
+    }
+
+    if (this.#ownedUserDataDir) {
+      const dirToRemove = this.#ownedUserDataDir;
+      this.#ownedUserDataDir = undefined;
+      try {
+        rmSync(dirToRemove, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
     }
 
     this.#readyPromise = undefined;
@@ -497,9 +521,16 @@ export class ElectronRuntimeHost implements RuntimeHost {
       server.listen(pipePath, resolveListen);
     });
 
+    const effectiveUserDataDir =
+      this.userDataDir ?? join(tmpdir(), `kinetra-ud-${randomUUID()}`);
+    if (!this.userDataDir) {
+      this.#ownedUserDataDir = effectiveUserDataDir;
+    }
+
     const electronEnv: NodeJS.ProcessEnv = {
       ...process.env,
       KINETRA_RUNTIME_BRIDGE_PIPE: pipePath,
+      KINETRA_USER_DATA_DIR: effectiveUserDataDir,
       ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
     };
 
@@ -507,10 +538,14 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     const executable = this.runtimeExecutable ?? this.electronExecutable;
     const args = this.runtimeExecutable
-      ? (this.saveDir ? [`--save-dir=${this.saveDir}`] : [])
+      ? [
+          ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
+          `--user-data-dir=${effectiveUserDataDir}`,
+        ]
       : [
           this.playerEntry,
           ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
+          `--user-data-dir=${effectiveUserDataDir}`,
         ];
 
     const child = spawn(executable, args, {

@@ -15,6 +15,15 @@ const runtimeBridgeMode =
   process.env.KINETRA_RUNTIME_BRIDGE_STDIO === "1" ||
   process.argv.includes("--runtime-bridge-stdio");
 
+const userDataDirArg =
+  process.env.KINETRA_USER_DATA_DIR ||
+  process.argv
+    .find((arg) => arg.startsWith("--user-data-dir="))
+    ?.slice("--user-data-dir=".length);
+if (userDataDirArg) {
+  app.setPath("userData", userDataDirArg);
+}
+
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 interface BridgeRequest {
@@ -349,7 +358,7 @@ function attachBridgeInput(
   });
 
   if (closeQuitsApp) {
-    lines.once("close", () => app.quit());
+    lines.once("close", () => app.exit(0));
   }
 }
 

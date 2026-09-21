@@ -117,7 +117,9 @@ export class GameShellController {
     this.#settings = await this.#settingsStore.load();
     this.#applySettings();
     await this.refreshContinueAvailable();
-    this.setMode("mainMenu");
+    if (this.#currentMode === "mainMenu") {
+      this.setMode("mainMenu");
+    }
   }
 
   getMode(): GameShellMode {

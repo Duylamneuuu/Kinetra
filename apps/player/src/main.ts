@@ -23,7 +23,6 @@ const statusElement = status;
 const runtime = new PlayerRuntimeController(canvas);
 const settingsStore = new SettingsStore(runtime.getStorage());
 const shell = new GameShellController(runtime, settingsStore);
-void shell.init();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -337,6 +336,7 @@ async function handleRuntimeCommand(request: {
   }
 }
 
+await shell.init();
 window.kinetraRuntimeBridge?.onCommand(handleRuntimeCommand);
 
 const demoProject: ProjectDocument = {
