@@ -396,6 +396,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         manifest: acceptanceManifestSchema,
         target: z.enum(["runtime", "packaged"]).optional(),
         project: z.record(z.string(), z.unknown()).optional(),
+        assets: z.record(z.string(), z.string()).optional(),
         timeoutMs: z.number().int().min(1_000).max(180_000).optional(),
       }).strict(),
     },
@@ -410,6 +411,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
           ...(input.project !== undefined
             ? { project: input.project as unknown as ProjectDocument }
             : {}),
+          ...(input.assets !== undefined ? { assets: input.assets } : {}),
           ...(input.timeoutMs !== undefined
             ? { timeoutMs: input.timeoutMs }
             : {}),

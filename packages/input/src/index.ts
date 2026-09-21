@@ -47,6 +47,22 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       ],
     },
     {
+      id: "player.moveForward",
+      type: "axis",
+      bindings: [
+        { kind: "key", code: "ArrowUp", scale: 1 },
+        { kind: "key", code: "KeyW", scale: 1 },
+      ],
+    },
+    {
+      id: "player.moveBackward",
+      type: "axis",
+      bindings: [
+        { kind: "key", code: "ArrowDown", scale: 1 },
+        { kind: "key", code: "KeyS", scale: 1 },
+      ],
+    },
+    {
       id: "player.jump",
       type: "button",
       bindings: [

@@ -268,6 +268,8 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         byName,
         ...(query.navigation ? { navigation: query.navigation } : {}),
         ...(query.audio ? { audio: query.audio } : {}),
+        ...(query.gameplay ? { gameplay: query.gameplay } : {}),
+        ...(query.game ? { game: query.game } : {}),
       },
     };
   }

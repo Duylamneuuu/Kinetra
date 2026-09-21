@@ -25,7 +25,7 @@ Legend:
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
 | P9 distribution/Steam | WIP | PR #28 contains release/signing/SteamPipe contracts. Real signing/upload is intentionally outside repo-only proof. |
-| P10 reference game | NOT STARTED | Placeholder/issue only. Do not build until P2/P7/P8 integration is stable. |
+| P10 reference game | PLAYABLE CORE SLICE PROVEN | Reference game vertical slice ("Kinetra Arena") authored as standard project data (@kinetra/reference-game). Real Electron runtime boots directly into arena scene with NavMesh, player, hostile enemy, goal. Semantic input (player.moveRight/Left/Forward/Backward) controls player (3 HP). Hostile enemy uses Recast pathfinding to navigate around central obstacle, chase player, and inflict damage. Deterministic WIN state (reaching goal triggers audio and won status) and LOSE state (HP reaches 0 triggers audio and lost status). Real deterministic synthetic audio played via assetId. Multi-process persistence (Process A saves -> terminates -> fresh Process B restores and finishes game). Proven via AcceptanceRunner and MCP test.runAcceptance against dev Electron and packaged Windows executable (KinetraGame.exe) with structured step evidence on failure. Broader game polish, UI, and additional levels remain open. |
 
 ## Merged subsystem notes
 
@@ -175,6 +175,28 @@ What has meaningful proof:
 Still missing:
 - crowd agent steering / crowd simulation;
 - dynamic obstacle avoidance / tile cache.
+
+### Reference game (P10 Slice 1)
+
+What has meaningful proof:
+- complete reference game vertical slice authored as standard Kinetra project data (`@kinetra/reference-game`);
+- real Electron runtime boots directly into arena scene (`scene_arena`);
+- player controllable via 3D semantic input (`player.moveRight`, `player.moveLeft`, `player.moveForward`, `player.moveBackward`) starting with 3 HP;
+- script-owned gameplay transforms: Script-owned gameplay transforms are synchronized to Rapier only when a physics body exists. Arena Slice 1 Player/Enemy are currently script-owned transforms;
+- arena environment with perimeter walls, central obstacle, and real Recast NavMesh;
+- hostile enemy using Recast pathfinding to navigate around obstacle, chase player, and inflict damage within 1.6m range with cooldown;
+- deterministic WIN state (reaching goal changes status to `won`) and LOSE state (health reduced to 0 changes status to `lost`);
+- real deterministic synthetic audio playback via assetId (`asset_arena_sfx_hit`, `asset_arena_sfx_win`, `asset_arena_sfx_lose`);
+- multi-process save persistence (Process A saves intermediate progress -> terminates -> fresh Process B restores state and completes game);
+- automated `AcceptanceManifest` execution against both dev Electron runtime and packaged Windows executable (`KinetraGame.exe`) via MCP `test.runAcceptance`;
+- deliberate failure producing structured machine-readable step evidence and clean zero-leak teardown.
+
+Not yet implemented:
+- game UI / HUD;
+- settings menus / pause screens;
+- multiple levels / procedural rooms;
+- weapons / inventory;
+- complex enemy behavior trees or AI perception models.
 
 ## Open implementation references
 
