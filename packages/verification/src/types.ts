@@ -81,6 +81,8 @@ export interface RuntimeProbeHost {
     }>;
     navigation?: Record<string, unknown>;
     audio?: Record<string, unknown>;
+    gameplay?: Record<string, unknown>;
+    game?: Record<string, unknown>;
   }>;
   injectInput(event: {
     action: string;

@@ -1,4 +1,9 @@
 import type { ProjectDocument } from "@kinetra/project-model";
+import {
+  createArenaProject,
+  ARENA_SCENE_ID,
+  arenaAudioAssets,
+} from "@kinetra/reference-game";
 
 import { PlayerRuntimeController } from "./runtime-controller.js";
 import "./style.css";
@@ -395,7 +400,10 @@ const demoProject: ProjectDocument = {
   ],
 };
 
-void runtime.start(demoProject, "scene_player_demo", 0);
+const defaultArenaProject = createArenaProject();
+void runtime.start(defaultArenaProject, ARENA_SCENE_ID, 0, {
+  assets: arenaAudioAssets,
+});
 
 let lastTime = performance.now();
 function frame(now: number): void {

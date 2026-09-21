@@ -9,11 +9,47 @@ export interface GameScriptTransform {
   translate(delta: [number, number, number]): void;
 }
 
+export interface GameScriptSceneQuery {
+  getEntityTransform(entityId: string): [number, number, number] | undefined;
+  findEntityByName?(name: string): { entityId: string; name: string } | undefined;
+}
+
+export interface GameScriptNavigationService {
+  computePath(
+    start: [number, number, number],
+    end: [number, number, number],
+    halfExtents?: [number, number, number],
+  ): {
+    success: boolean;
+    status: "complete" | "failed" | "partial";
+    pointCount: number;
+    points: Array<[number, number, number]>;
+  };
+  closestPoint?(
+    position: [number, number, number],
+    halfExtents?: [number, number, number],
+  ): [number, number, number];
+}
+
+export interface GameScriptAudioService {
+  play(options: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<{ success: boolean; playbackId?: string; error?: string }>;
+}
+
 export interface GameScriptContext {
   readonly entityId: string;
   readonly sceneId: string;
   readonly input?: GameScriptInputReader;
   readonly transform?: GameScriptTransform;
+  readonly scene?: GameScriptSceneQuery;
+  readonly navigation?: GameScriptNavigationService;
+  readonly audio?: GameScriptAudioService;
+  emit?(event: string, payload?: unknown): void;
   log?(level: "debug" | "info" | "warning" | "error", category: string, data?: Record<string, unknown>): void;
 }
 
@@ -26,6 +62,7 @@ export interface GameScript {
   onCreate?(context: GameScriptContext): void | Promise<void>;
   onStart?(context: GameScriptContext): void | Promise<void>;
   onUpdate?(context: GameScriptContext, deltaSeconds: number): void;
+  onEvent?(event: string, payload?: unknown, context?: GameScriptContext): void;
   onStop?(context: GameScriptContext): void | Promise<void>;
   onDestroy?(context: GameScriptContext): void | Promise<void>;
   getState?(): Record<string, unknown>;
@@ -186,6 +223,25 @@ export class ScriptHost {
             id: entry.id,
             scriptId: entry.scriptId,
             phase: "onUpdate",
+            error: entry.error,
+          });
+        }
+      }
+    }
+  }
+
+  emit(event: string, payload?: unknown): void {
+    for (const entry of this.#ordered()) {
+      if (entry.lifecycleState === "started") {
+        try {
+          entry.script.onEvent?.(event, payload, entry.context);
+        } catch (err) {
+          entry.lifecycleState = "error";
+          entry.error = err instanceof Error ? err.message : String(err);
+          entry.context.log?.("error", "script.error", {
+            id: entry.id,
+            scriptId: entry.scriptId,
+            phase: "onEvent",
             error: entry.error,
           });
         }

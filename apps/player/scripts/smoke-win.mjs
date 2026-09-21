@@ -54,9 +54,13 @@ const acceptanceTestFile = join(
   "real-mcp-acceptance.test.js",
 );
 
-console.log("Running real packaged acceptance suite...");
+console.log("Running real packaged acceptance suite (MCP test.runAcceptance)...");
 const testRun = spawnSync(process.execPath, ["--test", acceptanceTestFile], {
   stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
 });
 
 if (testRun.status !== 0) {
@@ -64,3 +68,31 @@ if (testRun.status !== 0) {
 }
 
 console.log("Packaged Windows acceptance tests passed successfully.");
+
+const arenaTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-arena.test.js",
+);
+
+console.log("Running real packaged arena test suite...");
+const arenaRun = spawnSync(process.execPath, ["--test", arenaTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (arenaRun.status !== 0) {
+  throw new Error(`Packaged arena test failed with exit code ${String(arenaRun.status)}`);
+}
+
+console.log("Packaged Windows arena tests passed successfully.");
+

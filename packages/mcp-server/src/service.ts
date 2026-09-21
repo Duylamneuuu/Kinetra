@@ -37,6 +37,7 @@ export interface RunAcceptanceInput {
   project?: ProjectDocument;
   timeoutMs?: number;
   testScriptPreset?: string;
+  assets?: Record<string, string>;
 }
 
 export interface SceneCreateInput {
@@ -336,6 +337,7 @@ export class KinetraAgentService {
       initialRevision: this.bus.revision,
       closeOnStop: false,
       ...(input.testScriptPreset ? { testScriptPreset: input.testScriptPreset } : {}),
+      ...(input.assets ? { assets: input.assets } : {}),
     });
 
     const runner = new AcceptanceRunner(probe);

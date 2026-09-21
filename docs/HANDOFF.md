@@ -129,11 +129,11 @@ Do not start crowds/LOD/perf extras first.
 
 ### 4. Wire P8 acceptance runner into the runtime/MCP
 
-The acceptance package exists as a core. The important missing step is using it against the actual runtime and packaged executable.
+P8 MCP acceptance execution (`test.runAcceptance`) and packaged-runtime verification are proven against dev Electron and `KinetraGame.exe`.
 
-### 5. Only then build the first reference game
+### 5. Reference game (P10 Slice 1 Proven)
 
-The reference game should be modest and deliberately force the systems to integrate.
+The first bounded reference-game vertical slice ("Kinetra Arena") is proven on top of P2, P6, P7, and P8 against both dev Electron and packaged `KinetraGame.exe`. It verifies the autonomous loop: author -> run -> observe -> test -> fix -> package -> verify packaged build.
 
 ## Completion definition
 

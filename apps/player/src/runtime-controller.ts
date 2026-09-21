@@ -23,6 +23,11 @@ import {
   DEFAULT_PLAYER_INPUT_MAP,
 } from "@kinetra/input";
 import {
+  ArenaPlayerController,
+  ArenaEnemyController,
+  ArenaGameManager,
+} from "@kinetra/reference-game";
+import {
   JsonDocumentStore,
   MemoryStorage,
   IpcKeyValueStorage,
@@ -127,6 +132,8 @@ export interface PlayerRuntimeQueryResult {
   entities: PlayerRuntimeEntityState[];
   navigation?: PlayerRuntimeNavigationState;
   audio?: AudioRuntimeState;
+  gameplay?: Record<string, unknown>;
+  game?: Record<string, unknown>;
 }
 
 export interface PlayerRuntimeInput {
@@ -194,6 +201,7 @@ export class PlayerRuntimeController {
   #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
   #saveMigrator: SaveMigrator;
   #audio: PlayerAudioController = new PlayerAudioController();
+  #lifecycleQueue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -217,6 +225,9 @@ export class PlayerRuntimeController {
     );
 
     this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
+    this.#scriptRegistry.register("ArenaPlayerController", () => new ArenaPlayerController());
+    this.#scriptRegistry.register("ArenaEnemyController", () => new ArenaEnemyController());
+    this.#scriptRegistry.register("ArenaGameManager", () => new ArenaGameManager());
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
@@ -262,11 +273,50 @@ export class PlayerRuntimeController {
       testScriptPreset?: string;
     },
   ): Promise<PlayerRuntimeQueryResult> {
+    const queue = this.#lifecycleQueue;
+    let releaseLock!: () => void;
+    this.#lifecycleQueue = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    try {
+      await queue;
+      return await this.#doStart(project, sceneId, projectRevision, options);
+    } finally {
+      releaseLock();
+    }
+  }
+
+  async stop(): Promise<void> {
+    const queue = this.#lifecycleQueue;
+    let releaseLock!: () => void;
+    this.#lifecycleQueue = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+
+    try {
+      await queue;
+      return await this.#doStop();
+    } finally {
+      releaseLock();
+    }
+  }
+
+  async #doStart(
+    project: ProjectDocument,
+    sceneId: string,
+    projectRevision: number,
+    options?: {
+      assets?: Record<string, string>;
+      stepped?: boolean;
+      testScriptPreset?: string;
+    },
+  ): Promise<PlayerRuntimeQueryResult> {
     if (options?.testScriptPreset === "save-load-atomicity") {
       this.enableTestScriptFixtures("save-load-atomicity");
     }
     assertValidProject(project);
-    await this.stop();
+    await this.#doStop();
     this.#stepped = options?.stepped ?? false;
 
     if (options?.assets) {
@@ -308,6 +358,37 @@ export class PlayerRuntimeController {
       this.#syncTransformsFromPhysics();
     } catch (error) {
       console.error("Physics initialization error:", error);
+    }
+
+    // Initialize NavMesh if present on any entity
+    for (const entity of scene.entities) {
+      const navComp =
+        typeof entity.components.NavMesh === "object" && entity.components.NavMesh !== null
+          ? (entity.components.NavMesh as Record<string, unknown>)
+          : undefined;
+
+      if (navComp) {
+        try {
+          if (typeof navComp.dataBase64 === "string") {
+            await this.loadNavigation(navComp.dataBase64);
+            break;
+          } else if (Array.isArray(navComp.positions) && Array.isArray(navComp.indices)) {
+            await this.bakeNavigation({
+              positions: navComp.positions as number[],
+              indices: navComp.indices as number[],
+              ...(typeof navComp.config === "object" && navComp.config !== null
+                ? { config: navComp.config as Record<string, unknown> }
+                : {}),
+            });
+            break;
+          }
+        } catch (error) {
+          this.#log("error", "navigation.initFailed", {
+            entityId: entity.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     // Initialize scripts for entities with Script component
@@ -354,6 +435,13 @@ export class PlayerRuntimeController {
                   if (obj) {
                     obj.position.set(pos[0], pos[1], pos[2]);
                   }
+                  if (this.#physics?.hasBody(entityId)) {
+                    this.#physics.setBodyTranslation(
+                      entityId,
+                      { x: pos[0], y: pos[1], z: pos[2] },
+                      true,
+                    );
+                  }
                 },
                 translate: (delta: [number, number, number]) => {
                   const obj = this.#runtime?.getObject(entityId);
@@ -361,8 +449,46 @@ export class PlayerRuntimeController {
                     obj.position.x += delta[0];
                     obj.position.y += delta[1];
                     obj.position.z += delta[2];
+                    if (this.#physics?.hasBody(entityId)) {
+                      this.#physics.setBodyTranslation(
+                        entityId,
+                        { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                        true,
+                      );
+                    }
                   }
                 },
+              },
+              scene: {
+                getEntityTransform: (targetId: string) => {
+                  const obj = this.#runtime?.getObject(targetId);
+                  return obj ? [obj.position.x, obj.position.y, obj.position.z] : undefined;
+                },
+                findEntityByName: (name: string) => {
+                  if (!this.#runtime) return undefined;
+                  for (const [id, obj] of this.#runtime.objects()) {
+                    if (obj.name === name) {
+                      return { entityId: id, name };
+                    }
+                  }
+                  return undefined;
+                },
+              },
+              navigation: {
+                computePath: (start, end, halfExtents) => {
+                  return this.computePath(start, end, halfExtents);
+                },
+                closestPoint: (pos, halfExtents) => {
+                  return this.closestPoint(pos, halfExtents);
+                },
+              },
+              audio: {
+                play: async (options) => {
+                  return await this.playAudio(options);
+                },
+              },
+              emit: (event, payload) => {
+                this.#scripts.emit(event, payload);
               },
               log: (level, category, data) => {
                 this.#log(level, category, data);
@@ -394,7 +520,7 @@ export class PlayerRuntimeController {
     return this.query();
   }
 
-  async stop(): Promise<void> {
+  async #doStop(): Promise<void> {
     this.#audio.reset();
     await this.#scripts.destroyAll();
     this.#scripts = new ScriptHost();
@@ -787,6 +913,7 @@ export class PlayerRuntimeController {
     }
 
     interface PreparedTransform {
+      entityId: string;
       obj: THREE.Object3D;
       position?: [number, number, number];
       rotation?: [number, number, number];
@@ -841,6 +968,7 @@ export class PlayerRuntimeController {
 
       if (prepPos || prepRot) {
         preparedTransforms.push({
+          entityId,
           obj,
           ...(prepPos ? { position: prepPos } : {}),
           ...(prepRot ? { rotation: prepRot } : {}),
@@ -900,10 +1028,12 @@ export class PlayerRuntimeController {
 
     // Phase 4: Transactional Commit with Strict Invariant Verification
     const rollbackTransforms: Array<{
+      entityId: string;
       obj: THREE.Object3D;
       position: [number, number, number];
       rotation: [number, number, number];
     }> = preparedTransforms.map((p) => ({
+      entityId: p.entityId,
       obj: p.obj,
       position: [p.obj.position.x, p.obj.position.y, p.obj.position.z],
       rotation: [p.obj.rotation.x, p.obj.rotation.y, p.obj.rotation.z],
@@ -934,6 +1064,13 @@ export class PlayerRuntimeController {
             prep.position[1],
             prep.position[2],
           );
+          if (this.#physics?.hasBody(prep.entityId)) {
+            this.#physics.setBodyTranslation(
+              prep.entityId,
+              { x: prep.position[0], y: prep.position[1], z: prep.position[2] },
+              true,
+            );
+          }
         }
         if (prep.rotation) {
           prep.obj.rotation.set(
@@ -981,6 +1118,13 @@ export class PlayerRuntimeController {
             rollback.rotation[1],
             rollback.rotation[2],
           );
+          if (this.#physics?.hasBody(rollback.entityId)) {
+            this.#physics.setBodyTranslation(
+              rollback.entityId,
+              { x: rollback.position[0], y: rollback.position[1], z: rollback.position[2] },
+              true,
+            );
+          }
         }
       } catch (err) {
         rollbackError = err instanceof Error ? err.message : String(err);
@@ -1142,6 +1286,18 @@ export class PlayerRuntimeController {
 
     entities.sort((left, right) => left.entityId.localeCompare(right.entityId));
 
+    let activeSession: Record<string, unknown> | undefined;
+    for (const entity of entities) {
+      if (
+        entity.gameplay?.state &&
+        typeof entity.gameplay.state.session === "object" &&
+        entity.gameplay.state.session !== null
+      ) {
+        activeSession = entity.gameplay.state.session as Record<string, unknown>;
+        break;
+      }
+    }
+
     return {
       running: true,
       sceneId: this.#runtime.sceneId,
@@ -1151,6 +1307,9 @@ export class PlayerRuntimeController {
       entities,
       navigation: structuredClone(this.#navigationState),
       audio: this.#audio.getState(),
+      ...(activeSession
+        ? { gameplay: { session: activeSession }, game: activeSession }
+        : {}),
     };
   }
 

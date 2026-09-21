@@ -9,6 +9,11 @@ import {
   resolvePackagedExecutable,
 } from "../src/index.js";
 import type { AcceptanceManifest, AcceptanceReport } from "@kinetra/verification";
+import {
+  createArenaProject,
+  ARENA_SCENE_ID,
+  arenaAudioAssets,
+} from "@kinetra/reference-game";
 
 const sceneId = stableId("scene", "p8-mcp-acceptance");
 const boxId = stableId("entity", "p8-mcp-box");
@@ -556,6 +561,78 @@ test(
         errorText,
         /Project validation failed|schemaVersion|scenes/i,
         `Expected project validation failure, got: ${errorText}`,
+      );
+    } finally {
+      await client.close();
+    }
+  },
+);
+
+test(
+  "Scenario K: PACKAGED ARENA WIN — MCP tool test.runAcceptance executes reference game against real KinetraGame.exe",
+  {
+    skip:
+      process.platform !== "win32" ||
+      !isPackagedExecutableAvailable(),
+    timeout: 90_000,
+  },
+  async () => {
+    const resolution = resolvePackagedExecutable();
+    assert.ok(
+      resolution.path.endsWith("KinetraGame.exe"),
+      `Expected KinetraGame.exe, got: ${resolution.path}`,
+    );
+
+    const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
+
+    const arenaManifest: AcceptanceManifest = {
+      schemaVersion: 1,
+      suite: "arena-packaged-win",
+      seed: 42,
+      target: "packaged",
+      steps: [
+        { type: "runtime.start", sceneId: ARENA_SCENE_ID },
+        { type: "assert.equal", path: "running", expected: true },
+        { type: "assert.equal", path: "sceneId", expected: ARENA_SCENE_ID },
+        { type: "assert.equal", path: "state.navigation.hasNavMesh", expected: true },
+        { type: "assert.equal", path: "state.game.status", expected: "playing" },
+        { type: "assert.equal", path: "state.game.playerHealth", expected: 3 },
+        { type: "input", action: "player.moveRight", phase: "hold", value: 1 },
+        { type: "runtime.step", steps: 10 },
+        { type: "assert.equal", path: "state.byName.Player.position.0", expected: 5 },
+        { type: "assert.equal", path: "state.game.goalReached", expected: true },
+        { type: "assert.equal", path: "state.game.status", expected: "won" },
+        { type: "assert.screenshotValidPng" },
+        { type: "runtime.stop" },
+      ],
+    };
+
+    try {
+      const result = await client.callTool("test.runAcceptance", {
+        manifest: arenaManifest,
+        target: "packaged",
+        project: createArenaProject(),
+        assets: arenaAudioAssets,
+      });
+
+      assert.notEqual(result.isError, true, "Tool call must not return isError");
+      assert.ok(result.content.length > 0);
+
+      const report = JSON.parse(result.content[0]?.text ?? "{}") as AcceptanceReport;
+      assert.equal(report.passed, true, `Report must pass: ${report.failureReason}`);
+      assert.equal(report.suite, "arena-packaged-win");
+      assert.equal(report.target, "packaged");
+      assert.equal(report.observations?.target, "packaged");
+
+      const hostInfo = report.observations?.hostInfo as
+        | { isPackaged?: boolean; execPath?: string }
+        | undefined;
+      assert.ok(hostInfo !== undefined);
+      assert.equal(hostInfo.isPackaged, true);
+      assert.ok(
+        typeof hostInfo.execPath === "string" &&
+          /KinetraGame\.exe$/i.test(hostInfo.execPath),
+        `Expected execPath to end with KinetraGame.exe, got: ${hostInfo.execPath}`,
       );
     } finally {
       await client.close();
