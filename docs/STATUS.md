@@ -24,7 +24,7 @@ Legend:
 | P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
-| P10 reference game | GAME SHELL & CONTROLLER SLICE PROVEN | Reference game vertical slice ("Kinetra Arena") with complete player-facing shell: Boot -> Main Menu -> Play -> HUD -> Pause -> Settings -> Resume -> Win / Lose -> Return to Menu. Standard DOM/CSS overlay in apps/player without external UI frameworks. Truthful state projection from authoritative runtime scripts (ArenaGameManager, ArenaPlayerController). Pause freezes simulation (transforms, health, physics, input blocked). Settings persistence (masterGain, sfxGain, fullscreen, rebindings) across process restarts via engine-owned storage root (`settings_<key>.json`). Gamepad snapshot provider (deadzone 0.15, directional half-axes, buttons) verified without hardware via FakeGamepadSnapshotProvider. Multi-process Continue and restart. Real valid PNG capture verified for Main Menu, HUD, Pause, Victory, and Defeat screens across dev Electron and packaged Windows executable (KinetraGame.exe). |
+| P10 reference game | GAMEPLAY LOOP EXPANSION PROVEN | Reference game vertical slice ("Kinetra Arena") expanded with a small, repeatable gameplay loop: Main Menu -> Start Run -> Explore Arena -> Complete Objectives (Security Console, Power Core) -> Lockdown Survival Challenge -> Escape Goal -> Victory / Defeat. Explicit run status (`run.status: "idle" | "active" | "completed" | "failed"`), 3 structured deterministic objectives (`obj_activate_terminal`, `obj_retrieve_core`, `obj_survive_escape`), HUD projecting active objective and completed count, lockdown challenge with 1.6x enemy speed boost, multi-process save/restore preserving exact player position, health, objective progress, and challenge state. Full test suite passing against dev Electron and packaged Windows binary (`KinetraGame.exe`). |
 
 ## Merged subsystem notes
 
@@ -175,24 +175,29 @@ Still missing:
 - crowd agent steering / crowd simulation;
 - dynamic obstacle avoidance / tile cache.
 
-### Reference game (P10 Slice 1)
+### Reference game (P10 Slice 1, Slice 2 & Slice 3)
 
 What has meaningful proof:
 - complete reference game vertical slice authored as standard Kinetra project data (`@kinetra/reference-game`);
-- real Electron runtime boots directly into arena scene (`scene_arena`);
-- player controllable via 3D semantic input (`player.moveRight`, `player.moveLeft`, `player.moveForward`, `player.moveBackward`) starting with 3 HP;
-- script-owned gameplay transforms: Script-owned gameplay transforms are synchronized to Rapier only when a physics body exists. Arena Slice 1 Player/Enemy are currently script-owned transforms;
-- arena environment with perimeter walls, central obstacle, and real Recast NavMesh;
+- real Electron runtime boots directly into main menu shell with standard DOM/CSS overlay (`apps/player`);
+- player controllable via 3D semantic input (`player.moveRight`, `player.moveLeft`, `player.moveForward`, `player.moveBackward`) and Gamepad snapshot provider;
+- script-owned gameplay transforms synchronized with scene graph and Rapier physics;
+- arena environment with perimeter walls, central obstacle, security console, power core, exit goal, and real Recast NavMesh;
 - hostile enemy using Recast pathfinding to navigate around obstacle, chase player, and inflict damage within 1.6m range with cooldown;
-- deterministic WIN state (reaching goal changes status to `won`) and LOSE state (health reduced to 0 changes status to `lost`);
+- repeatable gameplay loop: Main Menu -> Start Run -> Explore Arena -> Complete Objectives -> Lockdown Challenge -> Escape Goal -> Victory / Defeat;
+- explicit run status (`run.status: "idle" | "active" | "completed" | "failed"`);
+- 3 deterministic objectives tracked as structured runtime state: `obj_activate_terminal` (Security Console), `obj_retrieve_core` (Power Core), `obj_survive_escape` (Exit Goal);
+- HUD projection: displays player HP, current active objective description, and completed count `(completed/total)`;
+- Lockdown Survival Challenge: triggered upon Power Core retrieval, boosting enemy speed by 1.6x (`0.8 -> 1.28`), logged via `gameplay.challengeStarted` event, with explicit challenge status (`idle`, `active`, `completed`, `failed`);
+- Pause & Settings: `game.pause` freezes simulation, physics, and input; persistent audio and keybinding settings across process restarts;
+- deterministic WIN state (`run.status == "completed"`, `status == "won"`) and LOSE state (`run.status == "failed"`, `status == "lost"`);
 - real deterministic synthetic audio playback via assetId (`asset_arena_sfx_hit`, `asset_arena_sfx_win`, `asset_arena_sfx_lose`);
-- multi-process save persistence (Process A saves intermediate progress -> terminates -> fresh Process B restores state and completes game);
+- multi-process save & restore persistence across process boundaries: Process A saves intermediate run progress -> terminates -> Process B restores exact player position, health, objective progress, and challenge state, finishing the run;
 - automated `AcceptanceManifest` execution against both dev Electron runtime and packaged Windows executable (`KinetraGame.exe`) via MCP `test.runAcceptance`;
+- real valid PNG capture for Main Menu, HUD, Objective 1, Objective 2, Victory, and Defeat states;
 - deliberate failure producing structured machine-readable step evidence and clean zero-leak teardown.
 
 Not yet implemented:
-- game UI / HUD;
-- settings menus / pause screens;
 - multiple levels / procedural rooms;
 - weapons / inventory;
 - complex enemy behavior trees or AI perception models.

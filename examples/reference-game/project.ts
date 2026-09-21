@@ -8,6 +8,8 @@ export const ARENA_ENTITY_OBSTACLE = "entity_arena_obstacle";
 export const ARENA_ENTITY_PLAYER = "entity_arena_player";
 export const ARENA_ENTITY_ENEMY = "entity_arena_enemy";
 export const ARENA_ENTITY_GOAL = "entity_arena_goal";
+export const ARENA_ENTITY_TERMINAL = "entity_arena_terminal";
+export const ARENA_ENTITY_CORE = "entity_arena_core";
 export const ARENA_ENTITY_MANAGER = "entity_arena_manager";
 export const ARENA_ENTITY_CAMERA = "entity_arena_camera";
 
@@ -153,6 +155,38 @@ export function createArenaProject(): ProjectDocument {
                 kind: "box",
                 size: [2, 0.2, 2],
                 color: "#10b981",
+              },
+            },
+          },
+          {
+            id: ARENA_ENTITY_TERMINAL,
+            name: "SecurityConsole",
+            components: {
+              Transform: {
+                position: [-5, 0.5, 2],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+              },
+              Primitive: {
+                kind: "box",
+                size: [1, 1, 1],
+                color: "#06b6d4",
+              },
+            },
+          },
+          {
+            id: ARENA_ENTITY_CORE,
+            name: "PowerCore",
+            components: {
+              Transform: {
+                position: [5, 0.5, 2],
+                rotation: [0, 0, 0],
+                scale: [1, 1, 1],
+              },
+              Primitive: {
+                kind: "box",
+                size: [0.8, 0.8, 0.8],
+                color: "#eab308",
               },
             },
           },
