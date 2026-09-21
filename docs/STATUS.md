@@ -182,6 +182,7 @@ What has meaningful proof:
 - complete reference game vertical slice authored as standard Kinetra project data (`@kinetra/reference-game`);
 - real Electron runtime boots directly into arena scene (`scene_arena`);
 - player controllable via 3D semantic input (`player.moveRight`, `player.moveLeft`, `player.moveForward`, `player.moveBackward`) starting with 3 HP;
+- script-owned gameplay transforms: Script-owned gameplay transforms are synchronized to Rapier only when a physics body exists. Arena Slice 1 Player/Enemy are currently script-owned transforms;
 - arena environment with perimeter walls, central obstacle, and real Recast NavMesh;
 - hostile enemy using Recast pathfinding to navigate around obstacle, chase player, and inflict damage within 1.6m range with cooldown;
 - deterministic WIN state (reaching goal changes status to `won`) and LOSE state (health reduced to 0 changes status to `lost`);

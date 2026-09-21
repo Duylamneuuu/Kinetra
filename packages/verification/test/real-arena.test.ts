@@ -11,6 +11,11 @@ import {
   ARENA_ENTITY_PLAYER,
   ARENA_ENTITY_ENEMY,
   ARENA_ENTITY_MANAGER,
+  ArenaPlayerController,
+  ArenaGameManager,
+  ARENA_SFX_HIT_ASSET_ID,
+  ARENA_SFX_WIN_ASSET_ID,
+  ARENA_SFX_LOSE_ASSET_ID,
 } from "@kinetra/reference-game";
 import {
   AcceptanceRunner,
@@ -18,6 +23,22 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+
+async function waitForLog(
+  probe: KinetraRuntimeProbe,
+  predicate: (log: { message: string; data?: Record<string, unknown> }) => boolean,
+  timeoutMs = 4000,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const logs = await probe.logs();
+    if (logs.some(predicate)) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return false;
+}
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
@@ -84,36 +105,112 @@ test(
         project: () => createArenaProject(),
         initialRevision: 0,
         assets: arenaAudioAssets,
-        closeOnStop: true,
+        closeOnStop: false,
       });
 
-      const manifest: AcceptanceManifest = {
-        schemaVersion: 1,
-        suite: "arena-movement-and-chase",
-        seed: 102,
-        target: "runtime",
-        steps: [
-          { type: "runtime.start", sceneId: ARENA_SCENE_ID },
-          // Initial positions
-          { type: "assert.equal", path: "state.byName.Player.position.0", expected: -5 },
-          { type: "assert.equal", path: "state.byName.Player.position.2", expected: -5 },
-          { type: "assert.equal", path: "state.byName.Enemy.position.0", expected: 5 },
-          { type: "assert.equal", path: "state.byName.Enemy.position.2", expected: 5 },
-          // Player moves forward (negative Z)
-          { type: "input", action: "player.moveForward", phase: "press", value: 1 },
-          { type: "runtime.step", steps: 1 },
-          { type: "assert.equal", path: "state.byName.Player.position.2", expected: -6 },
-          // Enemy steps toward player along NavMesh
-          { type: "runtime.step", steps: 3 },
-          { type: "assert.near", path: "state.byName.Player.gameplay.state.health", expected: 3, tolerance: 0 },
-          { type: "assert.logAbsent", minimumLevel: "error" },
-          { type: "runtime.stop" },
-        ],
-      };
+      try {
+        await probe.start(ARENA_SCENE_ID, 102);
+        const snapInit = await probe.snapshot();
+        const initialEnemy = (snapInit.state.byName as Record<string, any>)["Enemy"];
+        const initialPlayer = (snapInit.state.byName as Record<string, any>)["Player"];
+        assert.ok(initialEnemy, "Initial Enemy entity must exist in snapshot");
+        assert.ok(initialPlayer, "Initial Player entity must exist in snapshot");
 
-      const runner = new AcceptanceRunner(probe);
-      const report = await runner.run(manifest);
-      assert.equal(report.passed, true, `Movement/chase failed: ${report.failureReason}`);
+        const initialEnemyPos: [number, number, number] = initialEnemy.position;
+        const initialPlayerPos: [number, number, number] = initialPlayer.position;
+        const initialDist = Math.hypot(
+          initialEnemyPos[0] - initialPlayerPos[0],
+          initialEnemyPos[2] - initialPlayerPos[2],
+        );
+
+        // Player moves forward (negative Z)
+        await probe.input({ action: "player.moveForward", phase: "press", value: 1 });
+        await probe.step(1);
+
+        // Enemy steps toward player along NavMesh for 3 steps
+        await probe.step(3);
+
+        const snapPost = await probe.snapshot();
+        const postEnemy = (snapPost.state.byName as Record<string, any>)["Enemy"];
+        const postPlayer = (snapPost.state.byName as Record<string, any>)["Player"];
+        assert.ok(postEnemy, "Post-step Enemy entity must exist in snapshot");
+        assert.ok(postPlayer, "Post-step Player entity must exist in snapshot");
+
+        const postEnemyPos: [number, number, number] = postEnemy.position;
+        const postPlayerPos: [number, number, number] = postPlayer.position;
+        const postDist = Math.hypot(
+          postEnemyPos[0] - postPlayerPos[0],
+          postEnemyPos[2] - postPlayerPos[2],
+        );
+
+        // A. Structured navigation state
+        const lastPath = (snapPost.state.navigation as any)?.lastPath;
+        assert.ok(lastPath, "Expected state.navigation.lastPath to exist");
+        assert.equal(lastPath.success, true);
+        assert.equal(lastPath.status, "complete");
+
+        // B. Non-trivial path around central obstacle (pointCount >= 3)
+        assert.ok(
+          lastPath.pointCount >= 3,
+          `Expected lastPath.pointCount >= 3 (intermediate obstacle waypoints), got: ${lastPath.pointCount}`,
+        );
+
+        // C. Enemy actually moved and closed distance to player
+        assert.ok(
+          postEnemyPos[0] !== initialEnemyPos[0] || postEnemyPos[2] !== initialEnemyPos[2],
+          `Enemy must have moved from initial position [5, 0.5, 5], got: ${JSON.stringify(postEnemyPos)}`,
+        );
+        assert.ok(
+          postDist < initialDist,
+          `Post-step distance (${postDist}) must be less than initial distance (${initialDist})`,
+        );
+
+        // D. Enemy remains in chasing state
+        assert.equal(postEnemy.gameplay?.state?.state, "chasing");
+
+        await probe.stop();
+
+        // Also verify formal AcceptanceManifest execution through AcceptanceRunner
+        const manifest: AcceptanceManifest = {
+          schemaVersion: 1,
+          suite: "arena-movement-and-chase",
+          seed: 102,
+          target: "runtime",
+          steps: [
+            { type: "runtime.start", sceneId: ARENA_SCENE_ID },
+            // Initial positions
+            { type: "assert.equal", path: "state.byName.Player.position.0", expected: -5 },
+            { type: "assert.equal", path: "state.byName.Player.position.2", expected: -5 },
+            { type: "assert.equal", path: "state.byName.Enemy.position.0", expected: 5 },
+            { type: "assert.equal", path: "state.byName.Enemy.position.2", expected: 5 },
+            // Player moves forward (negative Z)
+            { type: "input", action: "player.moveForward", phase: "press", value: 1 },
+            { type: "runtime.step", steps: 1 },
+            { type: "assert.equal", path: "state.byName.Player.position.2", expected: -6 },
+            // Enemy steps toward player along NavMesh
+            { type: "runtime.step", steps: 3 },
+            // A. Structured navigation state proves lastPath
+            { type: "assert.equal", path: "state.navigation.lastPath.success", expected: true },
+            { type: "assert.equal", path: "state.navigation.lastPath.status", expected: "complete" },
+            // B. Non-trivial path pointCount == 3 (navigating around central obstacle)
+            { type: "assert.equal", path: "state.navigation.lastPath.pointCount", expected: 3 },
+            // C. Enemy moved along path towards player
+            { type: "assert.near", path: "state.byName.Enemy.position.0", expected: 3.51, tolerance: 0.2 },
+            { type: "assert.near", path: "state.byName.Enemy.position.2", expected: 2.41, tolerance: 0.2 },
+            // D. Confirm Enemy gameplay state remains "chasing" before attack range
+            { type: "assert.equal", path: "state.byName.Enemy.gameplay.state.state", expected: "chasing" },
+            { type: "assert.near", path: "state.byName.Player.gameplay.state.health", expected: 3, tolerance: 0 },
+            { type: "assert.logAbsent", minimumLevel: "error" },
+            { type: "runtime.stop" },
+          ],
+        };
+
+        const runner = new AcceptanceRunner(probe);
+        const report = await runner.run(manifest);
+        assert.equal(report.passed, true, `Movement/chase manifest failed: ${report.failureReason}`);
+      } finally {
+        await probe.close();
+      }
     });
 
     // -----------------------------------------------------------------------
@@ -162,6 +259,19 @@ test(
         assert.ok(
           logs.some((l) => l.message.includes("gameplay.win")),
           "Expected gameplay.win log event",
+        );
+
+        // 3. GAMEPLAY AUDIO EVENT PROOF: WIN event triggers real audio.played
+        const winAudioLogged = await waitForLog(
+          probe,
+          (l) =>
+            l.message === "audio.played" &&
+            l.data?.assetId === ARENA_SFX_WIN_ASSET_ID &&
+            l.data?.bus === "sfx",
+        );
+        assert.ok(
+          winAudioLogged,
+          `Expected audio.played log event for ${ARENA_SFX_WIN_ASSET_ID} on bus sfx`,
         );
       } finally {
         await probe.close();
@@ -226,6 +336,31 @@ test(
         assert.ok(
           logs.some((l) => l.message.includes("gameplay.lose")),
           "Expected gameplay.lose log event",
+        );
+
+        // 3. GAMEPLAY AUDIO EVENT PROOF: Attack and Lose events trigger real audio.played
+        const hitAudioLogged = await waitForLog(
+          probe,
+          (l) =>
+            l.message === "audio.played" &&
+            l.data?.assetId === ARENA_SFX_HIT_ASSET_ID &&
+            l.data?.bus === "sfx",
+        );
+        assert.ok(
+          hitAudioLogged,
+          `Expected audio.played log event for ${ARENA_SFX_HIT_ASSET_ID} on bus sfx`,
+        );
+
+        const loseAudioLogged = await waitForLog(
+          probe,
+          (l) =>
+            l.message === "audio.played" &&
+            l.data?.assetId === ARENA_SFX_LOSE_ASSET_ID &&
+            l.data?.bus === "sfx",
+        );
+        assert.ok(
+          loseAudioLogged,
+          `Expected audio.played log event for ${ARENA_SFX_LOSE_ASSET_ID} on bus sfx`,
         );
       } finally {
         await probe.close();
@@ -367,6 +502,26 @@ test(
         report.failedSteps?.[0]?.error?.includes("Expected state.game.status = \"won\", got \"playing\""),
         `Expected descriptive step assertion error, got ${report.failedSteps?.[0]?.error}`,
       );
+    });
+
+    // -----------------------------------------------------------------------
+    // Scenario 7: Health Invariant Verification
+    // -----------------------------------------------------------------------
+    await t.test("Scenario 7: health invariants enforce [0, 3] bounds on player and game manager", () => {
+      const player = new ArenaPlayerController();
+      assert.equal(player.validateRestoreState({ health: 3 }).valid, true);
+      assert.equal(player.validateRestoreState({ health: 0 }).valid, true);
+      assert.equal(player.validateRestoreState({ health: -1 }).valid, false);
+      assert.equal(player.validateRestoreState({ health: 4 }).valid, false);
+      assert.equal(player.validateRestoreState({ health: Number.NaN }).valid, false);
+
+      const manager = new ArenaGameManager();
+      assert.equal(manager.validateRestoreState({ playerHealth: 3 }).valid, true);
+      assert.equal(manager.validateRestoreState({ playerHealth: 0 }).valid, true);
+      assert.equal(manager.validateRestoreState({ playerHealth: -1 }).valid, false);
+      assert.equal(manager.validateRestoreState({ playerHealth: 4 }).valid, false);
+      assert.equal(manager.validateRestoreState({ session: { playerHealth: -0.5 } }).valid, false);
+      assert.equal(manager.validateRestoreState({ session: { playerHealth: 3.5 } }).valid, false);
     });
   },
 );

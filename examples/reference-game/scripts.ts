@@ -471,9 +471,11 @@ export class ArenaGameManager implements GameScript {
     if ("playerHealth" in sessionData) {
       if (
         typeof sessionData.playerHealth !== "number" ||
-        !Number.isFinite(sessionData.playerHealth)
+        !Number.isFinite(sessionData.playerHealth) ||
+        sessionData.playerHealth < 0 ||
+        sessionData.playerHealth > 3
       ) {
-        return { valid: false, error: "playerHealth must be a finite number" };
+        return { valid: false, error: "playerHealth must be a finite number in [0, 3]" };
       }
     }
     if ("goalReached" in sessionData) {
