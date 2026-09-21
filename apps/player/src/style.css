@@ -198,6 +198,12 @@ body {
   color: #60a5fa;
 }
 
+.hud-subval {
+  color: #93c5fd;
+  font-weight: 600;
+  font-size: 12px;
+}
+
 .status-badge {
   border-color: rgba(16, 185, 129, 0.4);
 }

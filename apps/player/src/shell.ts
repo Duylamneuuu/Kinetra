@@ -35,6 +35,7 @@ export class GameShellController {
 
   readonly #hudHpVal: HTMLElement | null;
   readonly #hudObjectiveVal: HTMLElement | null;
+  readonly #hudObjectiveCount: HTMLElement | null;
   readonly #hudStatusVal: HTMLElement | null;
   readonly #btnHudPause: HTMLButtonElement | null;
 
@@ -84,6 +85,7 @@ export class GameShellController {
 
     this.#hudHpVal = document.querySelector("#hud-hp-val");
     this.#hudObjectiveVal = document.querySelector("#hud-objective-val");
+    this.#hudObjectiveCount = document.querySelector("#hud-objective-count");
     this.#hudStatusVal = document.querySelector("#hud-status-val");
     this.#btnHudPause = document.querySelector("#btn-hud-pause");
 
@@ -247,6 +249,24 @@ export class GameShellController {
       }
       if (this.#hudStatusVal) {
         this.#hudStatusVal.textContent = status.toUpperCase();
+      }
+
+      if (Array.isArray(session.objectives)) {
+        const totalCount = session.objectives.length;
+        const completedCount = session.objectives.filter(
+          (o: unknown) => typeof o === "object" && o !== null && Boolean((o as { completed?: boolean }).completed),
+        ).length;
+        const activeObjective = (session.objectives as Array<{ description?: string; completed?: boolean }>).find(
+          (o) => !o.completed,
+        );
+        const desc = activeObjective?.description ?? "All objectives completed";
+
+        if (this.#hudObjectiveVal) {
+          this.#hudObjectiveVal.textContent = desc;
+        }
+        if (this.#hudObjectiveCount) {
+          this.#hudObjectiveCount.textContent = `(${completedCount}/${totalCount})`;
+        }
       }
 
       if (status === "won" && this.#currentMode === "playing") {

@@ -263,10 +263,29 @@ export class ArenaEnemyController implements GameScript {
     }
   }
 
+  onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
+    if (event === "gameplay.challengeStarted") {
+      const multiplier =
+        typeof payload === "object" &&
+        payload !== null &&
+        "multiplier" in payload &&
+        typeof (payload as { multiplier: unknown }).multiplier === "number"
+          ? (payload as { multiplier: number }).multiplier
+          : 1.6;
+      this.speed = Math.round(0.8 * multiplier * 100) / 100;
+      context?.log?.("info", "enemy.frenzy", {
+        entityId: context?.entityId,
+        speed: this.speed,
+        multiplier,
+      });
+    }
+  }
+
   getState(): Record<string, unknown> {
     return {
       state: this.state,
       damageCooldown: this.damageCooldown,
+      speed: this.speed,
     };
   }
 
@@ -294,6 +313,15 @@ export class ArenaEnemyController implements GameScript {
         return { valid: false, error: "damageCooldown must be a non-negative finite number" };
       }
     }
+    if ("speed" in state && state.speed !== undefined) {
+      if (
+        typeof state.speed !== "number" ||
+        !Number.isFinite(state.speed) ||
+        state.speed <= 0
+      ) {
+        return { valid: false, error: "speed must be a positive finite number" };
+      }
+    }
     return { valid: true };
   }
 
@@ -305,6 +333,7 @@ export class ArenaEnemyController implements GameScript {
 
     const priorState = this.state;
     const priorCooldown = this.damageCooldown;
+    const priorSpeed = this.speed;
 
     const nextState =
       state.state === "idle" ||
@@ -316,15 +345,19 @@ export class ArenaEnemyController implements GameScript {
       typeof state.damageCooldown === "number"
         ? state.damageCooldown
         : this.damageCooldown;
+    const nextSpeed =
+      typeof state.speed === "number" ? state.speed : this.speed;
 
     return {
       commit: () => {
         this.state = nextState;
         this.damageCooldown = nextCooldown;
+        this.speed = nextSpeed;
       },
       rollback: () => {
         this.state = priorState;
         this.damageCooldown = priorCooldown;
+        this.speed = priorSpeed;
       },
     };
   }
@@ -335,11 +368,31 @@ export class ArenaEnemyController implements GameScript {
   }
 }
 
+export type ArenaRunStatus = "idle" | "active" | "completed" | "failed";
+
+export interface ArenaObjective {
+  id: string;
+  description: string;
+  completed: boolean;
+}
+
+export interface ArenaChallengeState {
+  active: boolean;
+  status: "idle" | "active" | "completed" | "failed";
+  enemySpeedMultiplier: number;
+  alertTriggered: boolean;
+}
+
 export interface ArenaSessionState {
   status: "playing" | "won" | "lost";
   playerHealth: number;
   enemyState: string;
   goalReached: boolean;
+  run: {
+    status: ArenaRunStatus;
+  };
+  objectives: ArenaObjective[];
+  challenge: ArenaChallengeState;
 }
 
 export class ArenaGameManager implements GameScript {
@@ -347,6 +400,34 @@ export class ArenaGameManager implements GameScript {
   playerHealth = 3;
   enemyState = "chasing";
   goalReached = false;
+  runStatus: ArenaRunStatus = "active";
+  objectives: ArenaObjective[] = [
+    {
+      id: "obj_activate_terminal",
+      description: "Activate Security Console",
+      completed: false,
+    },
+    {
+      id: "obj_retrieve_core",
+      description: "Retrieve Power Core",
+      completed: false,
+    },
+    {
+      id: "obj_survive_escape",
+      description: "Survive Lockdown & Reach Extraction",
+      completed: false,
+    },
+  ];
+  challenge: ArenaChallengeState = {
+    active: false,
+    status: "idle",
+    enemySpeedMultiplier: 1.0,
+    alertTriggered: false,
+  };
+  readonly terminalPosition: [number, number, number] = [-5, 0.5, 2];
+  readonly terminalRadius = 1.8;
+  readonly corePosition: [number, number, number] = [5, 0.5, 2];
+  readonly coreRadius = 1.8;
   readonly goalPosition: [number, number, number] = [5, 0.1, -5];
   readonly goalRadius = 1.8;
 
@@ -369,11 +450,60 @@ export class ArenaGameManager implements GameScript {
       return;
     }
 
-    // Check player arrival at goal
+    // Check player interactions with objectives and goal
     const playerEntity = context.scene?.findEntityByName?.("Player");
     if (playerEntity) {
       const playerPos = context.scene?.getEntityTransform(playerEntity.entityId);
       if (playerPos) {
+        // 1. Objective 1: Security Console
+        const terminalObj = this.objectives.find((o) => o.id === "obj_activate_terminal");
+        if (terminalObj && !terminalObj.completed) {
+          const distToTerminal = Math.hypot(
+            playerPos[0] - this.terminalPosition[0],
+            playerPos[2] - this.terminalPosition[2],
+          );
+          if (distToTerminal <= this.terminalRadius) {
+            terminalObj.completed = true;
+            context.log?.("info", "objective.completed", {
+              id: "obj_activate_terminal",
+              distToTerminal,
+            });
+            context.emit?.("gameplay.objectiveCompleted", { id: "obj_activate_terminal" });
+          }
+        }
+
+        // 2. Objective 2: Power Core
+        const coreObj = this.objectives.find((o) => o.id === "obj_retrieve_core");
+        if (coreObj && !coreObj.completed) {
+          const distToCore = Math.hypot(
+            playerPos[0] - this.corePosition[0],
+            playerPos[2] - this.corePosition[2],
+          );
+          if (distToCore <= this.coreRadius) {
+            coreObj.completed = true;
+            context.log?.("info", "objective.completed", {
+              id: "obj_retrieve_core",
+              distToCore,
+            });
+            context.emit?.("gameplay.objectiveCompleted", { id: "obj_retrieve_core" });
+
+            // Start Lockdown Survival Challenge!
+            this.challenge.active = true;
+            this.challenge.status = "active";
+            this.challenge.enemySpeedMultiplier = 1.6;
+            this.challenge.alertTriggered = true;
+            context.log?.("info", "challenge.started", {
+              challenge: "lockdown",
+              multiplier: this.challenge.enemySpeedMultiplier,
+            });
+            context.emit?.("gameplay.challengeStarted", {
+              challenge: "lockdown",
+              multiplier: this.challenge.enemySpeedMultiplier,
+            });
+          }
+        }
+
+        // 3. Objective 3 / Goal arrival
         const distToGoal = Math.hypot(
           playerPos[0] - this.goalPosition[0],
           playerPos[2] - this.goalPosition[2],
@@ -381,11 +511,24 @@ export class ArenaGameManager implements GameScript {
         if (distToGoal <= this.goalRadius) {
           this.goalReached = true;
           this.status = "won";
+          this.runStatus = "completed";
+
+          const escapeObj = this.objectives.find((o) => o.id === "obj_survive_escape");
+          if (escapeObj) {
+            escapeObj.completed = true;
+          }
+
+          if (this.challenge.active) {
+            this.challenge.status = "completed";
+            this.challenge.active = false;
+          }
+
           void context.audio?.play({ assetId: ARENA_SFX_WIN_ASSET_ID, bus: "sfx" });
           context.log?.("info", "gameplay.win", {
             distToGoal,
             playerPos,
             goalPos: this.goalPosition,
+            runStatus: this.runStatus,
           });
           return;
         }
@@ -395,9 +538,15 @@ export class ArenaGameManager implements GameScript {
     // Check player health
     if (this.playerHealth <= 0) {
       this.status = "lost";
+      this.runStatus = "failed";
+      if (this.challenge.active) {
+        this.challenge.status = "failed";
+        this.challenge.active = false;
+      }
       void context.audio?.play({ assetId: ARENA_SFX_LOSE_ASSET_ID, bus: "sfx" });
       context.log?.("info", "gameplay.lose", {
         playerHealth: this.playerHealth,
+        runStatus: this.runStatus,
       });
     }
   }
@@ -413,9 +562,15 @@ export class ArenaGameManager implements GameScript {
         this.playerHealth = (payload as { health: number }).health;
         if (this.playerHealth <= 0 && this.status === "playing") {
           this.status = "lost";
+          this.runStatus = "failed";
+          if (this.challenge.active) {
+            this.challenge.status = "failed";
+            this.challenge.active = false;
+          }
           void context?.audio?.play({ assetId: ARENA_SFX_LOSE_ASSET_ID, bus: "sfx" });
           context?.log?.("info", "gameplay.lose", {
             playerHealth: this.playerHealth,
+            runStatus: this.runStatus,
           });
         }
       }
@@ -437,6 +592,11 @@ export class ArenaGameManager implements GameScript {
       playerHealth: this.playerHealth,
       enemyState: this.enemyState,
       goalReached: this.goalReached,
+      run: {
+        status: this.runStatus,
+      },
+      objectives: this.objectives.map((obj) => ({ ...obj })),
+      challenge: { ...this.challenge },
     };
     return {
       session,
@@ -444,6 +604,11 @@ export class ArenaGameManager implements GameScript {
       playerHealth: this.playerHealth,
       enemyState: this.enemyState,
       goalReached: this.goalReached,
+      run: {
+        status: this.runStatus,
+      },
+      objectives: this.objectives.map((obj) => ({ ...obj })),
+      challenge: { ...this.challenge },
     };
   }
 
@@ -483,6 +648,58 @@ export class ArenaGameManager implements GameScript {
         return { valid: false, error: "goalReached must be a boolean" };
       }
     }
+    if ("run" in sessionData && sessionData.run !== undefined) {
+      if (
+        typeof sessionData.run !== "object" ||
+        sessionData.run === null ||
+        !("status" in (sessionData.run as Record<string, unknown>)) ||
+        !["idle", "active", "completed", "failed"].includes(
+          String((sessionData.run as Record<string, unknown>).status),
+        )
+      ) {
+        return {
+          valid: false,
+          error: 'run.status must be "idle", "active", "completed", or "failed"',
+        };
+      }
+    }
+    if ("objectives" in sessionData && sessionData.objectives !== undefined) {
+      if (!Array.isArray(sessionData.objectives)) {
+        return { valid: false, error: "objectives must be an array" };
+      }
+      for (const obj of sessionData.objectives) {
+        if (
+          typeof obj !== "object" ||
+          obj === null ||
+          typeof (obj as Record<string, unknown>).id !== "string" ||
+          typeof (obj as Record<string, unknown>).description !== "string" ||
+          typeof (obj as Record<string, unknown>).completed !== "boolean"
+        ) {
+          return {
+            valid: false,
+            error: "Each objective must have id, description, and completed boolean",
+          };
+        }
+      }
+    }
+    if ("challenge" in sessionData && sessionData.challenge !== undefined) {
+      if (
+        typeof sessionData.challenge !== "object" ||
+        sessionData.challenge === null
+      ) {
+        return { valid: false, error: "challenge must be an object" };
+      }
+      const ch = sessionData.challenge as Record<string, unknown>;
+      if (typeof ch.active !== "boolean") {
+        return { valid: false, error: "challenge.active must be a boolean" };
+      }
+      if (!["idle", "active", "completed", "failed"].includes(String(ch.status))) {
+        return {
+          valid: false,
+          error: 'challenge.status must be "idle", "active", "completed", or "failed"',
+        };
+      }
+    }
     return { valid: true };
   }
 
@@ -501,6 +718,9 @@ export class ArenaGameManager implements GameScript {
     const priorHealth = this.playerHealth;
     const priorEnemyState = this.enemyState;
     const priorGoalReached = this.goalReached;
+    const priorRunStatus = this.runStatus;
+    const priorObjectives = this.objectives.map((o) => ({ ...o }));
+    const priorChallenge = { ...this.challenge };
 
     const nextStatus =
       sessionData.status === "playing" ||
@@ -521,18 +741,53 @@ export class ArenaGameManager implements GameScript {
         ? sessionData.goalReached
         : this.goalReached;
 
+    const nextRunStatus =
+      typeof sessionData.run === "object" &&
+      sessionData.run !== null &&
+      "status" in (sessionData.run as Record<string, unknown>)
+        ? ((sessionData.run as Record<string, unknown>).status as ArenaRunStatus)
+        : this.runStatus;
+
+    const nextObjectives =
+      Array.isArray(sessionData.objectives)
+        ? (sessionData.objectives as ArenaObjective[]).map((o) => ({
+            id: String(o.id),
+            description: String(o.description),
+            completed: Boolean(o.completed),
+          }))
+        : this.objectives.map((o) => ({ ...o }));
+
+    const nextChallenge =
+      typeof sessionData.challenge === "object" && sessionData.challenge !== null
+        ? {
+            active: Boolean((sessionData.challenge as Record<string, unknown>).active),
+            status: (sessionData.challenge as Record<string, unknown>).status as ArenaChallengeState["status"],
+            enemySpeedMultiplier:
+              typeof (sessionData.challenge as Record<string, unknown>).enemySpeedMultiplier === "number"
+                ? ((sessionData.challenge as Record<string, unknown>).enemySpeedMultiplier as number)
+                : this.challenge.enemySpeedMultiplier,
+            alertTriggered: Boolean((sessionData.challenge as Record<string, unknown>).alertTriggered),
+          }
+        : { ...this.challenge };
+
     return {
       commit: () => {
         this.status = nextStatus;
         this.playerHealth = nextHealth;
         this.enemyState = nextEnemyState;
         this.goalReached = nextGoalReached;
+        this.runStatus = nextRunStatus;
+        this.objectives = nextObjectives;
+        this.challenge = nextChallenge;
       },
       rollback: () => {
         this.status = priorStatus;
         this.playerHealth = priorHealth;
         this.enemyState = priorEnemyState;
         this.goalReached = priorGoalReached;
+        this.runStatus = priorRunStatus;
+        this.objectives = priorObjectives;
+        this.challenge = priorChallenge;
       },
     };
   }

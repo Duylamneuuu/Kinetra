@@ -123,3 +123,30 @@ if (shellRun.status !== 0) {
 
 console.log("Packaged Windows game shell tests passed successfully.");
 
+const loopTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-gameplay-loop.test.js",
+);
+
+console.log("Running real packaged gameplay loop test suite...");
+const loopRun = spawnSync(process.execPath, ["--test", loopTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (loopRun.status !== 0) {
+  throw new Error(`Packaged gameplay loop test failed with exit code ${String(loopRun.status)}`);
+}
+
+console.log("Packaged Windows gameplay loop tests passed successfully.");
+
