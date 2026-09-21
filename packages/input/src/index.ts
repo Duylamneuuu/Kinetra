@@ -120,6 +120,15 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       ],
     },
     {
+      id: "player.attack",
+      type: "button",
+      bindings: [
+        { kind: "key", code: "KeyF", scale: 1 },
+        { kind: "key", code: "KeyJ", scale: 1 },
+        { kind: "gamepad-button", button: 2, scale: 1 },
+      ],
+    },
+    {
       id: "game.pause",
       type: "button",
       bindings: [
