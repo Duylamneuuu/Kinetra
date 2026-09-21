@@ -12,6 +12,9 @@ import {
 export class ArenaPlayerController implements GameScript {
   health = 3;
   moveCount = 0;
+  attackCooldown = 0;
+  readonly attackCooldownDuration = 2;
+  readonly attackRange = 2.0;
   lastAction?: string | undefined;
 
   onCreate(context: GameScriptContext): void {
@@ -31,6 +34,44 @@ export class ArenaPlayerController implements GameScript {
   onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
     if (this.health <= 0) {
       return; // incapacitated
+    }
+
+    if (this.attackCooldown > 0) {
+      this.attackCooldown--;
+    }
+
+    // Handle attack input
+    const attack = context.input?.getAction("player.attack") ?? 0;
+    if (attack > 0 && this.attackCooldown <= 0) {
+      this.attackCooldown = this.attackCooldownDuration;
+      this.lastAction = "player.attack";
+
+      const playerPos = context.transform?.getPosition();
+      const enemyEntity = context.scene?.findEntityByName?.("Enemy");
+      if (playerPos && enemyEntity) {
+        const enemyPos = context.scene?.getEntityTransform(enemyEntity.entityId);
+        if (enemyPos) {
+          const dist = Math.hypot(playerPos[0] - enemyPos[0], playerPos[2] - enemyPos[2]);
+          if (dist <= this.attackRange) {
+            void context.audio?.play({ assetId: ARENA_SFX_HIT_ASSET_ID, bus: "sfx" });
+            context.emit?.("gameplay.enemyDamage", { amount: 1, attackerId: context.entityId });
+            context.log?.("info", "player.attackHit", {
+              entityId: context.entityId,
+              targetId: enemyEntity.entityId,
+              dist,
+              damage: 1,
+              cooldown: this.attackCooldown,
+            });
+          } else {
+            context.log?.("info", "player.attackMiss", {
+              entityId: context.entityId,
+              targetId: enemyEntity.entityId,
+              dist,
+              attackRange: this.attackRange,
+            });
+          }
+        }
+      }
     }
 
     let dx = 0;
@@ -100,6 +141,7 @@ export class ArenaPlayerController implements GameScript {
     return {
       health: this.health,
       moveCount: this.moveCount,
+      attackCooldown: this.attackCooldown,
       ...(this.lastAction ? { lastAction: this.lastAction } : {}),
     };
   }
@@ -129,6 +171,15 @@ export class ArenaPlayerController implements GameScript {
         return { valid: false, error: "moveCount must be a non-negative finite number" };
       }
     }
+    if ("attackCooldown" in state && state.attackCooldown !== undefined) {
+      if (
+        typeof state.attackCooldown !== "number" ||
+        !Number.isFinite(state.attackCooldown) ||
+        state.attackCooldown < 0
+      ) {
+        return { valid: false, error: "attackCooldown must be a non-negative finite number" };
+      }
+    }
     if ("lastAction" in state && state.lastAction !== undefined) {
       if (typeof state.lastAction !== "string") {
         return { valid: false, error: "lastAction must be a string" };
@@ -145,12 +196,15 @@ export class ArenaPlayerController implements GameScript {
 
     const priorHealth = this.health;
     const priorMoveCount = this.moveCount;
+    const priorCooldown = this.attackCooldown;
     const priorLastAction = this.lastAction;
 
     const nextHealth =
       typeof state.health === "number" ? state.health : this.health;
     const nextMoveCount =
       typeof state.moveCount === "number" ? state.moveCount : this.moveCount;
+    const nextCooldown =
+      typeof state.attackCooldown === "number" ? state.attackCooldown : this.attackCooldown;
     const nextLastAction =
       typeof state.lastAction === "string" ? state.lastAction : this.lastAction;
 
@@ -158,11 +212,13 @@ export class ArenaPlayerController implements GameScript {
       commit: () => {
         this.health = nextHealth;
         this.moveCount = nextMoveCount;
+        this.attackCooldown = nextCooldown;
         this.lastAction = nextLastAction;
       },
       rollback: () => {
         this.health = priorHealth;
         this.moveCount = priorMoveCount;
+        this.attackCooldown = priorCooldown;
         this.lastAction = priorLastAction;
       },
     };
@@ -175,7 +231,9 @@ export class ArenaPlayerController implements GameScript {
 }
 
 export class ArenaEnemyController implements GameScript {
-  state: "idle" | "chasing" | "attacking" = "chasing";
+  health = 3;
+  readonly maxHealth = 3;
+  state: "idle" | "chasing" | "attacking" | "defeated" = "chasing";
   damageCooldown = 0;
   targetName = "Player";
   attackRange = 1.6;
@@ -196,6 +254,10 @@ export class ArenaEnemyController implements GameScript {
   }
 
   onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
+    if (this.state === "defeated" || this.health <= 0) {
+      return; // Defeated enemies stop navigation, attacks, and state transitions
+    }
+
     if (this.damageCooldown > 0) {
       this.damageCooldown--;
     }
@@ -278,11 +340,48 @@ export class ArenaEnemyController implements GameScript {
         speed: this.speed,
         multiplier,
       });
+    } else if (event === "gameplay.enemyDamage") {
+      if (this.state === "defeated" || this.health <= 0) {
+        return;
+      }
+      const amount =
+        typeof payload === "object" &&
+        payload !== null &&
+        "amount" in payload &&
+        typeof (payload as { amount: unknown }).amount === "number"
+          ? (payload as { amount: number }).amount
+          : 1;
+
+      const previous = this.health;
+      this.health = Math.max(0, Math.min(this.maxHealth, this.health - amount));
+      context?.log?.("info", "gameplay.enemyDamaged", {
+        entityId: context?.entityId,
+        previousHealth: previous,
+        currentHealth: this.health,
+        damage: amount,
+      });
+
+      context?.emit?.("enemy.healthChanged", {
+        health: this.health,
+        previousHealth: previous,
+      });
+
+      if (this.health <= 0) {
+        this.state = "defeated";
+        context?.emit?.("enemy.defeated", { entityId: context?.entityId });
+        context?.emit?.("enemy.stateChanged", { state: "defeated" });
+        context?.log?.("info", "gameplay.enemyDefeated", {
+          entityId: context?.entityId,
+          health: this.health,
+          state: this.state,
+        });
+      }
     }
   }
 
   getState(): Record<string, unknown> {
     return {
+      health: this.health,
       state: this.state,
       damageCooldown: this.damageCooldown,
       speed: this.speed,
@@ -295,13 +394,27 @@ export class ArenaEnemyController implements GameScript {
     if (typeof state !== "object" || state === null || Array.isArray(state)) {
       return { valid: false, error: "State must be a non-null object" };
     }
+    if ("health" in state && state.health !== undefined) {
+      if (
+        typeof state.health !== "number" ||
+        !Number.isFinite(state.health) ||
+        state.health < 0 ||
+        state.health > 3
+      ) {
+        return { valid: false, error: "health must be a finite number in [0, 3]" };
+      }
+    }
     if ("state" in state) {
       if (
         state.state !== "idle" &&
         state.state !== "chasing" &&
-        state.state !== "attacking"
+        state.state !== "attacking" &&
+        state.state !== "defeated"
       ) {
-        return { valid: false, error: 'state must be "idle", "chasing", or "attacking"' };
+        return {
+          valid: false,
+          error: 'state must be "idle", "chasing", "attacking", or "defeated"',
+        };
       }
     }
     if ("damageCooldown" in state) {
@@ -331,14 +444,18 @@ export class ArenaEnemyController implements GameScript {
       throw new Error(`Invalid ArenaEnemyController state: ${validation.error}`);
     }
 
+    const priorHealth = this.health;
     const priorState = this.state;
     const priorCooldown = this.damageCooldown;
     const priorSpeed = this.speed;
 
+    const nextHealth =
+      typeof state.health === "number" ? state.health : this.health;
     const nextState =
       state.state === "idle" ||
       state.state === "chasing" ||
-      state.state === "attacking"
+      state.state === "attacking" ||
+      state.state === "defeated"
         ? state.state
         : this.state;
     const nextCooldown =
@@ -350,11 +467,13 @@ export class ArenaEnemyController implements GameScript {
 
     return {
       commit: () => {
+        this.health = nextHealth;
         this.state = nextState;
         this.damageCooldown = nextCooldown;
         this.speed = nextSpeed;
       },
       rollback: () => {
+        this.health = priorHealth;
         this.state = priorState;
         this.damageCooldown = priorCooldown;
         this.speed = priorSpeed;
@@ -386,6 +505,7 @@ export interface ArenaChallengeState {
 export interface ArenaSessionState {
   status: "playing" | "won" | "lost";
   playerHealth: number;
+  enemyHealth: number;
   enemyState: string;
   goalReached: boolean;
   run: {
@@ -398,6 +518,7 @@ export interface ArenaSessionState {
 export class ArenaGameManager implements GameScript {
   status: "playing" | "won" | "lost" = "playing";
   playerHealth = 3;
+  enemyHealth = 3;
   enemyState = "chasing";
   goalReached = false;
   runStatus: ArenaRunStatus = "active";
@@ -583,6 +704,20 @@ export class ArenaGameManager implements GameScript {
       ) {
         this.enemyState = (payload as { state: string }).state;
       }
+    } else if (event === "enemy.healthChanged") {
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        "health" in payload &&
+        typeof (payload as { health: unknown }).health === "number"
+      ) {
+        this.enemyHealth = (payload as { health: number }).health;
+      }
+    } else if (event === "enemy.defeated") {
+      context?.log?.("info", "gameplay.enemyDefeated", {
+        enemyHealth: this.enemyHealth,
+        enemyState: this.enemyState,
+      });
     }
   }
 
@@ -590,6 +725,7 @@ export class ArenaGameManager implements GameScript {
     const session: ArenaSessionState = {
       status: this.status,
       playerHealth: this.playerHealth,
+      enemyHealth: this.enemyHealth,
       enemyState: this.enemyState,
       goalReached: this.goalReached,
       run: {
@@ -602,6 +738,7 @@ export class ArenaGameManager implements GameScript {
       session,
       status: this.status,
       playerHealth: this.playerHealth,
+      enemyHealth: this.enemyHealth,
       enemyState: this.enemyState,
       goalReached: this.goalReached,
       run: {
@@ -641,6 +778,16 @@ export class ArenaGameManager implements GameScript {
         sessionData.playerHealth > 3
       ) {
         return { valid: false, error: "playerHealth must be a finite number in [0, 3]" };
+      }
+    }
+    if ("enemyHealth" in sessionData && sessionData.enemyHealth !== undefined) {
+      if (
+        typeof sessionData.enemyHealth !== "number" ||
+        !Number.isFinite(sessionData.enemyHealth) ||
+        sessionData.enemyHealth < 0 ||
+        sessionData.enemyHealth > 3
+      ) {
+        return { valid: false, error: "enemyHealth must be a finite number in [0, 3]" };
       }
     }
     if ("goalReached" in sessionData) {
@@ -716,6 +863,7 @@ export class ArenaGameManager implements GameScript {
 
     const priorStatus = this.status;
     const priorHealth = this.playerHealth;
+    const priorEnemyHealth = this.enemyHealth;
     const priorEnemyState = this.enemyState;
     const priorGoalReached = this.goalReached;
     const priorRunStatus = this.runStatus;
@@ -732,6 +880,10 @@ export class ArenaGameManager implements GameScript {
       typeof sessionData.playerHealth === "number"
         ? sessionData.playerHealth
         : this.playerHealth;
+    const nextEnemyHealth =
+      typeof sessionData.enemyHealth === "number"
+        ? sessionData.enemyHealth
+        : this.enemyHealth;
     const nextEnemyState =
       typeof sessionData.enemyState === "string"
         ? sessionData.enemyState
@@ -774,6 +926,7 @@ export class ArenaGameManager implements GameScript {
       commit: () => {
         this.status = nextStatus;
         this.playerHealth = nextHealth;
+        this.enemyHealth = nextEnemyHealth;
         this.enemyState = nextEnemyState;
         this.goalReached = nextGoalReached;
         this.runStatus = nextRunStatus;
@@ -783,6 +936,7 @@ export class ArenaGameManager implements GameScript {
       rollback: () => {
         this.status = priorStatus;
         this.playerHealth = priorHealth;
+        this.enemyHealth = priorEnemyHealth;
         this.enemyState = priorEnemyState;
         this.goalReached = priorGoalReached;
         this.runStatus = priorRunStatus;

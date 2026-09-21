@@ -150,3 +150,30 @@ if (loopRun.status !== 0) {
 
 console.log("Packaged Windows gameplay loop tests passed successfully.");
 
+const combatTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-combat.test.js",
+);
+
+console.log("Running real packaged combat test suite...");
+const combatRun = spawnSync(process.execPath, ["--test", combatTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (combatRun.status !== 0) {
+  throw new Error(`Packaged combat test failed with exit code ${String(combatRun.status)}`);
+}
+
+console.log("Packaged Windows combat tests passed successfully.");
+

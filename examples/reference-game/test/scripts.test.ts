@@ -73,4 +73,44 @@ test("ArenaEnemyController state validation and restoration", () => {
 
   assert.equal(enemy.validateRestoreState({ state: "flying" }).valid, false);
   assert.equal(enemy.validateRestoreState({ damageCooldown: -1 }).valid, false);
+  assert.equal(enemy.validateRestoreState({ state: "defeated", health: 0 }).valid, true);
+  assert.equal(enemy.validateRestoreState({ health: -1 }).valid, false);
+  assert.equal(enemy.validateRestoreState({ health: 4 }).valid, false);
+
+  const prep = enemy.prepareRestoreState({ health: 0, state: "defeated" });
+  prep.commit();
+  assert.equal(enemy.health, 0);
+  assert.equal(enemy.state, "defeated");
+
+  const prepRollback = enemy.prepareRestoreState({ health: 3, state: "chasing" });
+  prepRollback.rollback();
+  assert.equal(enemy.health, 0);
+  assert.equal(enemy.state, "defeated");
 });
+
+test("Combat event handling and defeat state transitions", () => {
+  const enemy = new ArenaEnemyController();
+  const eventsEmitted: Array<{ event: string; payload?: unknown }> = [];
+  const fakeContext: any = {
+    entityId: "enemy_1",
+    emit: (event: string, payload?: unknown) => eventsEmitted.push({ event, payload }),
+    log: () => {},
+  };
+
+  // Deal 1 damage
+  enemy.onEvent("gameplay.enemyDamage", { amount: 1 }, fakeContext);
+  assert.equal(enemy.health, 2);
+  assert.equal(eventsEmitted.some((e) => e.event === "enemy.healthChanged"), true);
+
+  // Deal 2 damage -> defeat
+  enemy.onEvent("gameplay.enemyDamage", { amount: 2 }, fakeContext);
+  assert.equal(enemy.health, 0);
+  assert.equal(enemy.state, "defeated");
+  assert.equal(eventsEmitted.some((e) => e.event === "enemy.defeated"), true);
+
+  // Further damage when defeated is ignored
+  enemy.onEvent("gameplay.enemyDamage", { amount: 1 }, fakeContext);
+  assert.equal(enemy.health, 0);
+  assert.equal(enemy.state, "defeated");
+});
+
