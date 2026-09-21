@@ -1,7 +1,7 @@
 export type InputBinding =
-  | {kind:"key";code:string;scale?:number}
-  | {kind:"gamepad-button";button:number;scale?:number}
-  | {kind:"gamepad-axis";axis:number;scale?:number;deadzone?:number};
+  | { kind: "key"; code: string; scale?: number }
+  | { kind: "gamepad-button"; button: number; scale?: number }
+  | { kind: "gamepad-axis"; axis: number; scale?: number; deadzone?: number; direction?: "positive" | "negative" };
 
 export interface InputActionDefinition {
   id:string;
@@ -27,6 +27,47 @@ export interface SemanticActionInput {
   value?: number;
 }
 
+export interface GamepadSnapshot {
+  buttons: readonly number[];
+  axes: readonly number[];
+}
+
+export interface GamepadSnapshotProvider {
+  getSnapshot(): GamepadSnapshot | undefined;
+}
+
+export class BrowserGamepadSnapshotProvider implements GamepadSnapshotProvider {
+  getSnapshot(): GamepadSnapshot | undefined {
+    if (typeof navigator === "undefined" || typeof navigator.getGamepads !== "function") {
+      return undefined;
+    }
+    const gamepads = navigator.getGamepads();
+    if (!gamepads) return undefined;
+    for (let i = 0; i < gamepads.length; i++) {
+      const pad = gamepads[i];
+      if (pad && pad.connected) {
+        return {
+          buttons: pad.buttons.map(b => b.value),
+          axes: [...pad.axes],
+        };
+      }
+    }
+    return undefined;
+  }
+}
+
+export class FakeGamepadSnapshotProvider implements GamepadSnapshotProvider {
+  #current: GamepadSnapshot | undefined;
+
+  setSnapshot(snapshot: GamepadSnapshot | undefined): void {
+    this.#current = snapshot;
+  }
+
+  getSnapshot(): GamepadSnapshot | undefined {
+    return this.#current;
+  }
+}
+
 export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
   schemaVersion: 1,
   actions: [
@@ -36,6 +77,8 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       bindings: [
         { kind: "key", code: "ArrowRight", scale: 1 },
         { kind: "key", code: "KeyD", scale: 1 },
+        { kind: "gamepad-axis", axis: 0, scale: 1, deadzone: 0.15, direction: "positive" },
+        { kind: "gamepad-button", button: 15, scale: 1 },
       ],
     },
     {
@@ -44,6 +87,8 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       bindings: [
         { kind: "key", code: "ArrowLeft", scale: 1 },
         { kind: "key", code: "KeyA", scale: 1 },
+        { kind: "gamepad-axis", axis: 0, scale: 1, deadzone: 0.15, direction: "negative" },
+        { kind: "gamepad-button", button: 14, scale: 1 },
       ],
     },
     {
@@ -52,6 +97,8 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       bindings: [
         { kind: "key", code: "ArrowUp", scale: 1 },
         { kind: "key", code: "KeyW", scale: 1 },
+        { kind: "gamepad-axis", axis: 1, scale: 1, deadzone: 0.15, direction: "negative" },
+        { kind: "gamepad-button", button: 12, scale: 1 },
       ],
     },
     {
@@ -60,6 +107,8 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       bindings: [
         { kind: "key", code: "ArrowDown", scale: 1 },
         { kind: "key", code: "KeyS", scale: 1 },
+        { kind: "gamepad-axis", axis: 1, scale: 1, deadzone: 0.15, direction: "positive" },
+        { kind: "gamepad-button", button: 13, scale: 1 },
       ],
     },
     {
@@ -67,6 +116,33 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
       type: "button",
       bindings: [
         { kind: "key", code: "Space", scale: 1 },
+        { kind: "gamepad-button", button: 0, scale: 1 },
+      ],
+    },
+    {
+      id: "game.pause",
+      type: "button",
+      bindings: [
+        { kind: "key", code: "Escape", scale: 1 },
+        { kind: "gamepad-button", button: 9, scale: 1 },
+      ],
+    },
+    {
+      id: "ui.confirm",
+      type: "button",
+      bindings: [
+        { kind: "key", code: "Enter", scale: 1 },
+        { kind: "key", code: "Space", scale: 1 },
+        { kind: "gamepad-button", button: 0, scale: 1 },
+      ],
+    },
+    {
+      id: "ui.back",
+      type: "button",
+      bindings: [
+        { kind: "key", code: "Escape", scale: 1 },
+        { kind: "key", code: "Backspace", scale: 1 },
+        { kind: "gamepad-button", button: 1, scale: 1 },
       ],
     },
   ],
@@ -152,7 +228,14 @@ export class InputRouter {
         case "gamepad-axis": {
           const raw = snapshot.gamepadAxes[binding.axis] ?? 0;
           const deadzone = binding.deadzone ?? 0.12;
-          if (Math.abs(raw) > deadzone) value += raw * scale;
+          const direction = binding.direction;
+          if (direction === "positive") {
+            if (raw > deadzone) value += raw * scale;
+          } else if (direction === "negative") {
+            if (raw < -deadzone) value += -raw * scale;
+          } else {
+            if (Math.abs(raw) > deadzone) value += raw * scale;
+          }
           break;
         }
       }

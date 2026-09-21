@@ -71,6 +71,16 @@ async function executeStep(
     case "runtime.stop":
       await probe.stop();
       return;
+    case "runtime.pause":
+      if (typeof probe.pause === "function") {
+        await probe.pause();
+      }
+      return;
+    case "runtime.resume":
+      if (typeof probe.resume === "function") {
+        await probe.resume();
+      }
+      return;
     case "runtime.step":
       if (typeof probe.step === "function") {
         await probe.step(step.steps, step.deltaSeconds);

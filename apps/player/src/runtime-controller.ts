@@ -21,6 +21,9 @@ import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
+  type GamepadSnapshotProvider,
+  BrowserGamepadSnapshotProvider,
+  type PhysicalInputSnapshot,
 } from "@kinetra/input";
 import {
   ArenaPlayerController,
@@ -31,6 +34,7 @@ import {
   JsonDocumentStore,
   MemoryStorage,
   IpcKeyValueStorage,
+  type KeyValueStorage,
   SaveMigrator,
   createGameplaySaveMigrator,
   CURRENT_SAVE_SCHEMA_VERSION,
@@ -125,6 +129,14 @@ export interface PlayerRuntimeNavigationState {
   serialized?: string;
 }
 
+export type GameShellMode =
+  | "mainMenu"
+  | "playing"
+  | "paused"
+  | "settings"
+  | "won"
+  | "lost";
+
 export interface PlayerRuntimeQueryResult {
   running: boolean;
   sceneId?: string;
@@ -134,6 +146,7 @@ export interface PlayerRuntimeQueryResult {
   audio?: AudioRuntimeState;
   gameplay?: Record<string, unknown>;
   game?: Record<string, unknown>;
+  shell?: { mode: GameShellMode; isPaused: boolean };
 }
 
 export interface PlayerRuntimeInput {
@@ -198,10 +211,16 @@ export class PlayerRuntimeController {
   #projectRevision: number | undefined;
   #logs: PlayerRuntimeLog[] = [];
   #nextLogSequence = 1;
+  #storage: KeyValueStorage;
   #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
   #saveMigrator: SaveMigrator;
   #audio: PlayerAudioController = new PlayerAudioController();
   #lifecycleQueue: Promise<unknown> = Promise.resolve();
+  #paused = false;
+  #shellMode: GameShellMode = "mainMenu";
+  #gamepadProvider: GamepadSnapshotProvider = new BrowserGamepadSnapshotProvider();
+  #activeKeys = new Set<string>();
+  #lastPausePressed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -219,6 +238,7 @@ export class PlayerRuntimeController {
         ? new IpcKeyValueStorage(platform)
         : new MemoryStorage();
 
+    this.#storage = storage;
     this.#saveStore = new JsonDocumentStore<SaveEnvelope<GameplaySaveData>>(
       storage,
       "saves",
@@ -236,8 +256,86 @@ export class PlayerRuntimeController {
     };
 
     this.#camera = this.#createFallbackCamera();
-    window.addEventListener("resize", () => this.resize());
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", () => this.resize());
+      window.addEventListener("keydown", (e) => {
+        this.#activeKeys.add(e.code);
+      });
+      window.addEventListener("keyup", (e) => {
+        this.#activeKeys.delete(e.code);
+      });
+    }
     this.resize();
+  }
+
+  pause(): void {
+    this.#paused = true;
+    if (this.#shellMode === "playing") {
+      this.#shellMode = "paused";
+    }
+    this.#log("info", "game.paused");
+  }
+
+  resume(): void {
+    this.#paused = false;
+    if (this.#shellMode === "paused") {
+      this.#shellMode = "playing";
+    }
+    this.#log("info", "game.resumed");
+  }
+
+  togglePause(): boolean {
+    if (this.#paused) {
+      this.resume();
+    } else {
+      this.pause();
+    }
+    return this.#paused;
+  }
+
+  isPaused(): boolean {
+    return this.#paused;
+  }
+
+  getShellMode(): GameShellMode {
+    return this.#shellMode;
+  }
+
+  setShellMode(mode: GameShellMode): void {
+    this.#shellMode = mode;
+  }
+
+  getInputRouter(): InputRouter {
+    return this.#inputRouter;
+  }
+
+  getAudioController(): PlayerAudioController {
+    return this.#audio;
+  }
+
+  getStorage(): KeyValueStorage {
+    return this.#storage;
+  }
+
+  getSaveStore(): JsonDocumentStore<SaveEnvelope<GameplaySaveData>> {
+    return this.#saveStore;
+  }
+
+  async hasSave(slotId: string): Promise<boolean> {
+    try {
+      const envelope = await this.#saveStore.load(slotId);
+      return Boolean(envelope);
+    } catch {
+      return false;
+    }
+  }
+
+  setGamepadProvider(provider: GamepadSnapshotProvider): void {
+    this.#gamepadProvider = provider;
+  }
+
+  getActiveKeys(): Set<string> {
+    return this.#activeKeys;
   }
 
   registerScript(
@@ -515,6 +613,8 @@ export class PlayerRuntimeController {
     this.resize();
     this.renderOnce();
     this.#audio.init(this.#assetResolver);
+    this.#shellMode = "playing";
+    this.#paused = false;
     this.#log("info", "runtime.started", { sceneId, projectRevision });
 
     return this.query();
@@ -548,6 +648,8 @@ export class PlayerRuntimeController {
     this.#runtime = undefined;
     this.#projectRevision = undefined;
     this.#camera = this.#createFallbackCamera();
+    this.#shellMode = "mainMenu";
+    this.#paused = false;
     this.#log("info", "runtime.stopped", { sceneId });
   }
 
@@ -1220,7 +1322,12 @@ export class PlayerRuntimeController {
 
   query(query: PlayerRuntimeQuery = {}): PlayerRuntimeQueryResult {
     if (!this.#runtime) {
-      return { running: false, entities: [], audio: this.#audio.getState() };
+      return {
+        running: false,
+        entities: [],
+        audio: this.#audio.getState(),
+        shell: { mode: this.#shellMode, isPaused: this.#paused },
+      };
     }
 
     const requested = query.entityIds ? new Set(query.entityIds) : undefined;
@@ -1298,6 +1405,14 @@ export class PlayerRuntimeController {
       }
     }
 
+    if (activeSession) {
+      if (activeSession.status === "won" && this.#shellMode === "playing") {
+        this.#shellMode = "won";
+      } else if (activeSession.status === "lost" && this.#shellMode === "playing") {
+        this.#shellMode = "lost";
+      }
+    }
+
     return {
       running: true,
       sceneId: this.#runtime.sceneId,
@@ -1310,12 +1425,33 @@ export class PlayerRuntimeController {
       ...(activeSession
         ? { gameplay: { session: activeSession }, game: activeSession }
         : {}),
+      shell: { mode: this.#shellMode, isPaused: this.#paused },
     };
   }
 
   injectInput(event: PlayerRuntimeInput): void {
     if (!this.#runtime) {
       throw new Error("Runtime is not running");
+    }
+
+    if (event.action === "game.pause") {
+      if (event.phase === "press") {
+        this.togglePause();
+      }
+      this.#log("debug", "runtime.input", {
+        action: event.action,
+        phase: event.phase,
+        isPaused: this.#paused,
+      });
+      return;
+    }
+
+    if (this.#paused) {
+      this.#log("debug", "runtime.inputBlockedWhilePaused", {
+        action: event.action,
+        phase: event.phase,
+      });
+      return;
     }
 
     const rawValue = event.value;
@@ -1384,13 +1520,15 @@ export class PlayerRuntimeController {
   step(steps = 1, fixedDeltaSeconds = 1 / 60): void {
     this.#stepped = true;
     for (let s = 0; s < steps; s++) {
-      this.#scripts.update(fixedDeltaSeconds);
-      if (this.#physics) {
-        this.#physics.step(fixedDeltaSeconds);
-        this.#syncTransformsFromPhysics();
-      }
-      if (this.#runtime) {
-        this.#runtime.updateAnimation(fixedDeltaSeconds);
+      if (!this.#paused) {
+        this.#scripts.update(fixedDeltaSeconds);
+        if (this.#physics) {
+          this.#physics.step(fixedDeltaSeconds);
+          this.#syncTransformsFromPhysics();
+        }
+        if (this.#runtime) {
+          this.#runtime.updateAnimation(fixedDeltaSeconds);
+        }
       }
       this.#inputRouter.endStep();
     }
@@ -1426,13 +1564,28 @@ export class PlayerRuntimeController {
 
   frame(deltaSeconds = 1 / 60): void {
     if (!this.#stepped) {
-      this.#scripts.update(deltaSeconds);
-      if (this.#physics) {
-        this.#physics.advance(deltaSeconds);
-        this.#syncTransformsFromPhysics();
+      const pad = this.#gamepadProvider.getSnapshot();
+      const snapshot: PhysicalInputSnapshot = {
+        keys: this.#activeKeys,
+        gamepadButtons: pad?.buttons ?? [],
+        gamepadAxes: pad?.axes ?? [],
+      };
+
+      const pausePressed = this.#inputRouter.isActionPressed("game.pause", snapshot);
+      if (pausePressed && !this.#lastPausePressed) {
+        this.togglePause();
       }
-      if (this.#runtime) {
-        this.#runtime.updateAnimation(deltaSeconds);
+      this.#lastPausePressed = pausePressed;
+
+      if (!this.#paused) {
+        this.#scripts.update(deltaSeconds);
+        if (this.#physics) {
+          this.#physics.advance(deltaSeconds);
+          this.#syncTransformsFromPhysics();
+        }
+        if (this.#runtime) {
+          this.#runtime.updateAnimation(deltaSeconds);
+        }
       }
       this.#inputRouter.endStep();
     }

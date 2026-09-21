@@ -186,9 +186,15 @@ importers:
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../audio
+      '@kinetra/input':
+        specifier: workspace:*
+        version: link:../input
       '@kinetra/reference-game':
         specifier: workspace:*
         version: link:../../examples/reference-game
+      '@kinetra/save-state':
+        specifier: workspace:*
+        version: link:../save-state
       electron:
         specifier: 38.0.0
         version: 38.0.0

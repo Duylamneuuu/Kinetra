@@ -9,9 +9,10 @@ export interface RuntimeInput {
 }
 
 export interface RuntimeSnapshot {
-  running:boolean;
-  sceneId?:string|undefined;
-  state:Record<string,unknown>;
+  running: boolean;
+  sceneId?: string | undefined;
+  state: Record<string, unknown>;
+  shell?: { mode: string; isPaused: boolean };
 }
 
 export interface RuntimeLog {
@@ -83,6 +84,7 @@ export interface RuntimeProbeHost {
     audio?: Record<string, unknown>;
     gameplay?: Record<string, unknown>;
     game?: Record<string, unknown>;
+    shell?: { mode: string; isPaused: boolean };
   }>;
   injectInput(event: {
     action: string;
@@ -133,12 +135,16 @@ export interface RuntimeProbeHost {
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
+  pause?(): Promise<unknown>;
+  resume?(): Promise<unknown>;
   enableTestScriptFixtures?(preset: string): Promise<void>;
 }
 
 export interface RuntimeProbe {
   start(sceneId:string,seed:number):Promise<void>;
   stop():Promise<void>;
+  pause?():Promise<void>;
+  resume?():Promise<void>;
   input(event:RuntimeInput):Promise<void>;
   wait(milliseconds:number):Promise<void>;
   step?(steps?: number, deltaSeconds?: number): Promise<void>;
@@ -188,6 +194,14 @@ export const runtimeStartStepSchema = z.object({
 
 export const runtimeStopStepSchema = z.object({
   type: z.literal("runtime.stop"),
+}).strict();
+
+export const runtimePauseStepSchema = z.object({
+  type: z.literal("runtime.pause"),
+}).strict();
+
+export const runtimeResumeStepSchema = z.object({
+  type: z.literal("runtime.resume"),
 }).strict();
 
 export const runtimeStepStepSchema = z.object({
@@ -334,6 +348,8 @@ export const assertScreenshotValidPngStepSchema = z.object({
 export const acceptanceStepSchema = z.discriminatedUnion("type", [
   runtimeStartStepSchema,
   runtimeStopStepSchema,
+  runtimePauseStepSchema,
+  runtimeResumeStepSchema,
   runtimeStepStepSchema,
   assetRegisterStepSchema,
   animationPlayStepSchema,
