@@ -73,6 +73,7 @@ test("acceptance stops at first failed proof and returns machine-readable failur
   assert.match(report.steps[1]?.message??"",/Expected/);
   assert.equal(report.steps[1]?.expected, 99);
   assert.equal(report.steps[1]?.actual, 0);
+  assert.equal(report.steps[1]?.diagnostics, undefined);
 });
 
 test("assert.screenshotValidPng validates PNG magic header and minBytes", async () => {
@@ -129,7 +130,8 @@ test("assert.screenshotValidPng validates PNG magic header and minBytes", async 
 });
 
 test("missing assertion paths name the absent key and the keys that exist", async () => {
-  const report = await new AcceptanceRunner(new FakeProbe()).run({
+  const probe = new FakeProbe();
+  const report = await new AcceptanceRunner(probe).run({
     schemaVersion: 1,
     suite: "missing-path",
     seed: 0,
@@ -146,7 +148,75 @@ test("missing assertion paths name the absent key and the keys that exist", asyn
   assert.match(message, /state\.player\.health/);
   assert.match(message, /Available keys: jumped, x/);
   assert.equal(report.failureReason, message);
-  assert.deepEqual(report.steps[1]?.actual, ["jumped", "x"]);
+  assert.equal(report.steps[1]?.expected, 3);
+  assert.equal(report.steps[1]?.actual, undefined);
+  assert.deepEqual(report.steps[1]?.diagnostics, {
+    kind: "missing_path",
+    path: "state.player.health",
+    missingSegment: "health",
+    availableKeys: ["jumped", "x"],
+  });
+  assert.deepEqual(probe.state, {
+    running: false,
+    state: { player: { x: 0, jumped: false } },
+  });
+
+  const nearMissing = await new AcceptanceRunner(new FakeProbe()).run({
+    schemaVersion: 1,
+    suite: "missing-near-path",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.near", path: "state.player.health", expected: 3, tolerance: 0.25 },
+    ],
+  });
+  assert.equal(nearMissing.passed, false);
+  assert.equal(nearMissing.steps[1]?.expected, 3);
+  assert.equal(nearMissing.steps[1]?.actual, undefined);
+  assert.equal(nearMissing.steps[1]?.diagnostics?.missingSegment, "health");
+  assert.deepEqual(nearMissing.steps[1]?.diagnostics?.availableKeys, ["jumped", "x"]);
+
+  const nearMismatch = await new AcceptanceRunner(new FakeProbe()).run({
+    schemaVersion: 1,
+    suite: "near-mismatch",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.near", path: "state.player.x", expected: 5, tolerance: 0.1 },
+    ],
+  });
+  assert.equal(nearMismatch.passed, false);
+  assert.match(nearMismatch.steps[1]?.message ?? "", /near 5 ± 0.1, got 0/);
+  assert.equal(nearMismatch.steps[1]?.expected, 5);
+  assert.equal(nearMismatch.steps[1]?.actual, 0);
+  assert.equal(nearMismatch.steps[1]?.diagnostics, undefined);
+
+  const wide = new FakeProbe();
+  const originalStart = wide.start.bind(wide);
+  wide.start = async (sceneId, seed) => {
+    await originalStart(sceneId, seed);
+    const player = wide.state.state.player as Record<string, unknown>;
+    for (let index = 0; index < 14; index += 1) {
+      player[`k${index}`] = index;
+    }
+  };
+  const bounded = await new AcceptanceRunner(wide).run({
+    schemaVersion: 1,
+    suite: "bounded-keys",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.equal", path: "state.player.health", expected: 3 },
+    ],
+  });
+  const availableKeys = bounded.steps[1]?.diagnostics?.availableKeys ?? [];
+  assert.equal(availableKeys.length, 12);
+  assert.match(bounded.steps[1]?.message ?? "", /\(\+4 more\)/);
+  assert.equal(bounded.steps[1]?.expected, 3);
+  assert.equal(bounded.steps[1]?.diagnostics?.missingSegment, "health");
 
   const traversed = await new AcceptanceRunner(new FakeProbe()).run({
     schemaVersion: 1,
@@ -163,6 +233,9 @@ test("missing assertion paths name the absent key and the keys that exist", asyn
     traversed.steps[1]?.message ?? "",
     /traverses non-object data/,
   );
+  assert.equal(traversed.steps[1]?.expected, 0);
+  assert.equal(traversed.steps[1]?.actual, undefined);
+  assert.equal(traversed.steps[1]?.diagnostics, undefined);
 });
 
 test("process smoke can validate a packaged-process style command",async()=>{

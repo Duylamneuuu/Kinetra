@@ -388,6 +388,13 @@ export const acceptanceManifestSchema = z.object({
 export type AcceptanceManifest = z.infer<typeof acceptanceManifestSchema>;
 export type AcceptanceManifestInput = z.input<typeof acceptanceManifestSchema>;
 
+export interface MissingPathDiagnostic {
+  kind: "missing_path";
+  path: string;
+  missingSegment: string;
+  availableKeys: string[];
+}
+
 export interface StepResult {
   index:number;
   type:AcceptanceStep["type"];
@@ -397,6 +404,7 @@ export interface StepResult {
   error?:string;
   expected?:unknown;
   actual?:unknown;
+  diagnostics?: MissingPathDiagnostic;
 }
 
 export interface AcceptanceReport {
