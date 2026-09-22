@@ -124,6 +124,13 @@ function defaultPlayerEntry(): string {
   return resolve(findRepositoryRoot(), "apps/player/dist/package");
 }
 
+export const LINUX_ELECTRON_LAUNCH_ARGS = [
+  "--no-sandbox",
+  "--disable-gpu",
+  "--disable-dev-shm-usage",
+  "--enable-unsafe-swiftshader",
+] as const;
+
 function runtimePipePath(): string {
   const id = `kinetra-runtime-${process.pid}-${randomUUID()}`;
 
@@ -456,6 +463,12 @@ export class ElectronRuntimeHost implements RuntimeHost {
               windowsHide: true,
               stdio: "ignore",
             });
+          } else if (process.platform === "linux" && child.pid) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch {
+              child.kill("SIGKILL");
+            }
           }
         } catch {
           // ignore
@@ -536,14 +549,22 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
+    if (process.platform === "linux") {
+      electronEnv.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
+    }
+
     const executable = this.runtimeExecutable ?? this.electronExecutable;
+    const platformArgs =
+      process.platform === "linux" ? [...LINUX_ELECTRON_LAUNCH_ARGS] : [];
     const args = this.runtimeExecutable
       ? [
+          ...platformArgs,
           ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
           `--user-data-dir=${effectiveUserDataDir}`,
         ]
       : [
           this.playerEntry,
+          ...platformArgs,
           ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
           `--user-data-dir=${effectiveUserDataDir}`,
         ];
@@ -552,6 +573,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       env: electronEnv,
+      detached: process.platform === "linux",
     });
 
     this.#child = child;
