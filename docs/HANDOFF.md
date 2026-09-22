@@ -106,6 +106,8 @@ Instead:
 
 ## Recommended continuation order
 
+The numbered list below is the 2026-09-19 pause plan. `docs/STATUS.md` is newer: the P2 runtime bridge, P7 physics/navigation slices, and P10 Kinetra Arena slices described there are already on `main`. Do not restart those slices from the old WIP PRs.
+
 ### 1. Finish P2 — real runtime bridge
 
 Goal: prove an agent can run the real project, query it, inject semantic input, capture a real frame and read logs.

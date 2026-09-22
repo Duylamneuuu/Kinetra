@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "projectId": "project_311xh6boh9kac",
+  "name": "Starter",
+  "scenes": [
+    {
+      "id": "scene_16yyv825e6wey",
+      "name": "Main",
+      "entities": [
+        {
+          "id": "entity_1du2oy2rzjcfg",
+          "name": "Camera",
+          "components": {
+            "Camera": {
+              "far": 100,
+              "fov": 55,
+              "near": 0.1,
+              "type": "perspective"
+            },
+            "Transform": {
+              "position": [
+                0,
+                1.6,
+                5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_1orl41zpjxd39",
+          "name": "Directional Light",
+          "components": {
+            "Light": {
+              "color": "#ffffff",
+              "intensity": 3,
+              "kind": "directional"
+            },
+            "Transform": {
+              "position": [
+                3,
+                5,
+                4
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3qrri8i1unkp8",
+          "name": "Box",
+          "components": {
+            "Primitive": {
+              "color": "#ff8844",
+              "kind": "box",
+              "roughness": 0.4,
+              "size": [
+                1,
+                1,
+                1
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                0.5,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

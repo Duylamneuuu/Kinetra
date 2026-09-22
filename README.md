@@ -10,9 +10,9 @@ The core product thesis is simple:
 
 ## Current development state
 
-Kinetra is currently at a **pre-alpha architecture/handoff checkpoint**.
+Kinetra is currently at a **pre-alpha checkpoint**. [`docs/STATUS.md`](./docs/STATUS.md) is the implementation source of truth.
 
-Several foundational and subsystem cores are merged, while the real Electron runtime bridge, observer editor, physics/navigation integration and release/Steam work remain experimental/WIP.
+On `main`, the text project model, command bus, Electron player runtime, physics, navigation, verification, and the Kinetra Arena reference game have tested slices. The observer editor and Steam distribution work remain open experimental PRs. A minimal project file for agents is [`examples/starter/game.kinetra.json`](./examples/starter/game.kinetra.json).
 
 Before implementing anything, read:
 
@@ -124,9 +124,9 @@ packages/
   audio/              mixer/bus semantics
   save-state/         save/settings migrations/storage contracts
   verification/       acceptance proof
-  physics-rapier/     planned/WIP adapter boundary
-  navigation-recast/  planned/WIP adapter boundary
-  desktop-build/      planned/WIP release/platform boundary
+  physics-rapier/     Rapier runtime slice
+  navigation-recast/  Recast runtime slice
+  desktop-build/      packaging notes; not a proven Steam exporter
 
 agents/
   engine-guide/       compact machine guidance
@@ -140,7 +140,8 @@ docs/
   research/
 
 examples/
-  reference-game/     future complete-game proof
+  starter/            minimal project file for MCP
+  reference-game/     Kinetra Arena reference game
 ```
 
 ## License

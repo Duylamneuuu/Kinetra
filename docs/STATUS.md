@@ -120,7 +120,8 @@ What has meaningful proof:
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
-- end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
+- `examples/starter/game.kinetra.json` is a canonical serialized project (camera, light, and box) that an MCP client can open. Proof level: parse/serialize round-trip plus an in-memory component patch and undo that leaves the file unchanged. It is not a playable game and it is not Electron or packaged-executable proof.
 
 What remains:
 - perceptual/AI visual critique;
