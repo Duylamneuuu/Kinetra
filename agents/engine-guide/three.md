@@ -32,3 +32,33 @@ Do not mutate raw editor/runtime Three.js objects as authoring state.
 10. package and test the executable when required.
 
 Never call a game complete from compile success alone.
+
+## Kinetra Arena observation
+
+`state.game` below is filled when an acceptance manifest runs the reference game on the Electron player. The default MCP `runtime.start` host is a local scene graph and does not produce this session.
+
+These paths are the ones the existing Electron suites already assert:
+
+- `state.game.status` is `playing`, `won`, or `lost`
+- `state.game.playerHealth`
+- `state.game.enemyHealth`
+- `state.game.goalReached`
+- `state.game.run.status`
+- `state.game.objectives.length`
+- `state.game.objectives.0.id`
+- `state.game.objectives.0.completed`
+- `state.game.objectives.1.id`
+- `state.game.objectives.2.id`
+- `state.game.challenge.active`
+- `state.game.challenge.status`
+
+Drive the player with semantic action ids, not key codes:
+
+- `player.moveForward`
+- `player.moveBackward`
+- `player.moveLeft`
+- `player.moveRight`
+- `player.attack`
+- `game.pause`
+
+`player.jump`, `ui.confirm`, and `ui.back` are also in the engine default input map. Arena movement and combat use the list above. Send them as acceptance `input` steps or `runtime.injectInput` on a host that actually simulates the game.

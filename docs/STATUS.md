@@ -199,6 +199,7 @@ What has meaningful proof:
 - multi-process save & restore persistence across process boundaries: Process A saves intermediate run progress -> terminates -> Process B restores exact player position, player health, enemy health, enemy state, attack cooldown, objective progress, and challenge state, finishing the run;
 - automated `AcceptanceManifest` execution against both dev Electron runtime and packaged Windows executable (`KinetraGame.exe`) via MCP `test.runAcceptance`;
 - real valid PNG capture for Main Menu, HUD, Objective 1, Objective 2, Victory, Defeat, and Combat states;
+- `agents/engine-guide/three.md` lists the `state.game` paths and semantic action ids those Electron suites already assert, and says the default MCP scene-graph host does not produce that session. The new test only checks that the guide text still contains those strings. It is not a new Electron run;
 - deliberate failure producing structured machine-readable step evidence and clean zero-leak teardown.
 
 Not yet implemented:
