@@ -128,6 +128,43 @@ test("assert.screenshotValidPng validates PNG magic header and minBytes", async 
   assert.match(invalidHeaderReport.steps[1]?.message ?? "", /not a valid PNG/);
 });
 
+test("missing assertion paths name the absent key and the keys that exist", async () => {
+  const report = await new AcceptanceRunner(new FakeProbe()).run({
+    schemaVersion: 1,
+    suite: "missing-path",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.equal", path: "state.player.health", expected: 3 },
+    ],
+  });
+
+  assert.equal(report.passed, false);
+  const message = report.steps[1]?.message ?? "";
+  assert.match(message, /Missing "health"/);
+  assert.match(message, /state\.player\.health/);
+  assert.match(message, /Available keys: jumped, x/);
+  assert.equal(report.failureReason, message);
+  assert.deepEqual(report.steps[1]?.actual, ["jumped", "x"]);
+
+  const traversed = await new AcceptanceRunner(new FakeProbe()).run({
+    schemaVersion: 1,
+    suite: "non-object-path",
+    seed: 0,
+    target: "runtime",
+    steps: [
+      { type: "runtime.start", sceneId: "main" },
+      { type: "assert.near", path: "state.player.x.missing", expected: 0, tolerance: 0 },
+    ],
+  });
+  assert.equal(traversed.passed, false);
+  assert.match(
+    traversed.steps[1]?.message ?? "",
+    /traverses non-object data/,
+  );
+});
+
 test("process smoke can validate a packaged-process style command",async()=>{
   const result=await runProcessSmoke({
     executable:process.execPath,

@@ -8,16 +8,36 @@ import type {
   StepResult,
 } from "./types.js";
 
-function getPath(root:unknown,path:string):unknown{
-  if(path.trim()==="") return root;
-  let value:unknown=root;
-  for(const segment of path.split(".")){
-    if(typeof value!=="object"||value===null){
-      throw new Error(`Cannot read "${path}": "${segment}" traverses non-object data`);
+function getPath(root: unknown, path: string): unknown {
+  if (path.trim() === "") return root;
+  let value: unknown = root;
+  for (const segment of path.split(".")) {
+    if (typeof value !== "object" || value === null) {
+      throw new Error(
+        `Cannot read "${path}": "${segment}" traverses non-object data`,
+      );
     }
-    value=(value as Record<string,unknown>)[segment];
+    const record = value as Record<string, unknown>;
+    if (!Object.hasOwn(record, segment)) {
+      const available = Object.keys(record).sort();
+      throw new StepAssertionError(
+        `Missing "${segment}" while reading "${path}". Available keys: ${formatAvailableKeys(available)}`,
+        segment,
+        available.slice(0, 12),
+      );
+    }
+    value = record[segment];
   }
   return value;
+}
+
+function formatAvailableKeys(keys: string[]): string {
+  if (keys.length === 0) {
+    return "(none)";
+  }
+  const shown = keys.slice(0, 12);
+  const extra = keys.length - shown.length;
+  return extra > 0 ? `${shown.join(", ")} (+${extra} more)` : shown.join(", ");
 }
 
 function stableEqual(a:unknown,b:unknown):boolean{
