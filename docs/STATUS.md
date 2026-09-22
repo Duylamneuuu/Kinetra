@@ -192,6 +192,7 @@ What has meaningful proof:
 - deterministic combat foundation: semantic input `player.attack` (mapped to `KeyF`, `KeyJ`, gamepad button 2) with simulation cooldown (2 steps), range check (2.0m), and structured events (`player.attackHit`, `player.attackMiss`);
 - bidirectional authoritative damage model: Player deals damage to Enemy via `gameplay.enemyDamage` (reducing enemy HP), Enemy deals damage to Player via `gameplay.damage` (reducing player HP), with both health values bounded in `[0, 3]`;
 - enemy defeat state: when Enemy health reaches 0, transitions to `state: "defeated"`, emits `enemy.defeated` and `gameplay.enemyDefeated`, and halts navigation, chase pathfinding, and attack execution;
+- `ArenaGameManager` accepts live `enemy.stateChanged` values only when they are `idle`, `chasing`, `attacking`, or `defeated`. Other strings leave the previous session state in place. Proof level: reference-game unit test. This is not Electron or packaged-executable proof;
 - combat audio feedback: triggers hit sound (`ARENA_SFX_HIT_ASSET_ID`) on the `sfx` bus upon player and enemy attacks;
 - Pause & Settings: `game.pause` freezes simulation, physics, and input; persistent audio and keybinding settings across process restarts;
 - deterministic WIN state (`run.status == "completed"`, `status == "won"`) and LOSE state (`run.status == "failed"`, `status == "lost"`);

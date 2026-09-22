@@ -64,6 +64,24 @@ test("ArenaGameManager health invariant and restoration alignment with player", 
   assert.equal(manager.status, "playing");
 });
 
+test("ArenaGameManager ignores enemy states outside the combat set", () => {
+  const manager = new ArenaGameManager();
+  assert.equal(manager.enemyState, "chasing");
+
+  manager.onEvent("enemy.stateChanged", { state: "flying" });
+  assert.equal(manager.enemyState, "chasing");
+  assert.equal(manager.getState().enemyState, "chasing");
+
+  manager.onEvent("enemy.stateChanged", { state: "defeated" });
+  assert.equal(manager.enemyState, "defeated");
+
+  manager.onEvent("enemy.stateChanged", { state: "" });
+  assert.equal(manager.enemyState, "defeated");
+
+  manager.onEvent("enemy.stateChanged", { state: "idle" });
+  assert.equal(manager.enemyState, "idle");
+});
+
 test("ArenaEnemyController state validation and restoration", () => {
   const enemy = new ArenaEnemyController();
 

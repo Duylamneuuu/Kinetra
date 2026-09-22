@@ -515,6 +515,17 @@ export interface ArenaSessionState {
   challenge: ArenaChallengeState;
 }
 
+function isArenaEnemyState(
+  value: string,
+): value is "idle" | "chasing" | "attacking" | "defeated" {
+  return (
+    value === "idle" ||
+    value === "chasing" ||
+    value === "attacking" ||
+    value === "defeated"
+  );
+}
+
 export class ArenaGameManager implements GameScript {
   status: "playing" | "won" | "lost" = "playing";
   playerHealth = 3;
@@ -700,7 +711,8 @@ export class ArenaGameManager implements GameScript {
         typeof payload === "object" &&
         payload !== null &&
         "state" in payload &&
-        typeof (payload as { state: unknown }).state === "string"
+        typeof (payload as { state: unknown }).state === "string" &&
+        isArenaEnemyState((payload as { state: string }).state)
       ) {
         this.enemyState = (payload as { state: string }).state;
       }
