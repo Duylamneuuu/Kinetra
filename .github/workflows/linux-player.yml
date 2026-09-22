@@ -27,7 +27,7 @@ jobs:
         with:
           node-version: 22
       - run: corepack enable
-      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - name: Ensure xvfb
         run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
       - run: pnpm build
