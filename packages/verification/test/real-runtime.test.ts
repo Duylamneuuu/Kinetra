@@ -8,6 +8,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p8-real-acceptance");
 const boxId = stableId("entity", "p8-real-box");
@@ -85,7 +86,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes passing acceptance manifest with semantic input, state query, and real PNG capture",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -155,7 +156,7 @@ test(
 
 test(
   "deliberately failing acceptance scenario returns structured failure report and performs clean teardown",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -202,7 +203,7 @@ test(
 
 test(
   "clean teardown leaves zero orphan processes and is idempotent",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

@@ -8,6 +8,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p7-real-navigation");
 const floorId = stableId("entity", "p7-nav-floor");
@@ -110,7 +111,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes deterministic Recast navigation queries, pathfinding, serialization round-trip, and constrained failure",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -237,7 +238,7 @@ test(
 
 test(
   "serialized NavMesh can be reloaded in real Electron runtime and produce equivalent pathfinding behavior",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -314,7 +315,7 @@ test(
 
 test(
   "clean teardown releases navigation resources and leaves zero orphan Electron processes",
-  { skip: process.platform !== "win32", timeout: 30_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 30_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

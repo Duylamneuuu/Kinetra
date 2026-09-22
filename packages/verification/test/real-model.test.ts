@@ -9,6 +9,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p4-real-model");
 const modelEntityId = stableId("entity", "p4-model-box");
@@ -88,7 +89,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime loads GLB via Kinetra asset identity, resolves through AssetResolver, applies transform, renders in PNG, and passes AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     // 1. Generate deterministic synthetic GLB with known 1x1x1 dimensions and material
     const glbBytes = await createSyntheticGlb({
@@ -180,7 +181,7 @@ test(
 
 test(
   "unresolvable assetId produces truthful structured failure state and error log evidence rather than silent success",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -225,7 +226,7 @@ test(
 
 test(
   "clean teardown releases model resources and leaves zero orphan Electron processes",
-  { skip: process.platform !== "win32", timeout: 30_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 30_000 },
   async () => {
     const glbBytes = await createSyntheticGlb({
       meshName: "BoxMesh",

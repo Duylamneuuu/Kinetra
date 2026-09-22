@@ -121,6 +121,7 @@ What has meaningful proof:
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- the same dev-Electron acceptance suites (`packages/verification` real-* tests and the MCP dev-runtime scenarios) also pass on Linux when `DISPLAY` is set or `KINETRA_LINUX_REAL_ELECTRON=1`. Linux uses software GL unless `KINETRA_LINUX_GL=hardware`. Packaged `KinetraGame.exe` scenarios stay skipped on Linux.
 
 What remains:
 - perceptual/AI visual critique;

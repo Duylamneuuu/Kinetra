@@ -8,6 +8,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p6-gameplay-scene");
 const heroEntityId = stableId("entity", "p6-hero-entity");
@@ -90,7 +91,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes script lifecycle, routes semantic input, advances deterministically, and verifies via AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -228,7 +229,7 @@ test(
 
 test(
   "deliberate script failure scenario: unresolvable script produces structured error without crashing runtime",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -273,7 +274,7 @@ test(
 
 test(
   "lifecycle proof: scene stop and restart cleanly resets script state and re-executes lifecycle",
-  { skip: process.platform !== "win32", timeout: 45_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 45_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

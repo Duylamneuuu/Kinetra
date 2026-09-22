@@ -21,6 +21,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
@@ -46,7 +47,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Gameplay Loop Expansion Slice 3 — Run Status, 3 Objectives, Lockdown Challenge, Multi-Process Save/Load, Win/Lose Flow",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: New Game Run Initialization & HUD State Projection

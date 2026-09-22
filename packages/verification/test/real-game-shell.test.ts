@@ -29,6 +29,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
@@ -55,7 +56,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Game Shell & Controller Slice 2 — Main Menu, HUD, Pause, Settings, Gamepad, Save/Continue, Result Screens",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Main Menu Startup & PNG Proof

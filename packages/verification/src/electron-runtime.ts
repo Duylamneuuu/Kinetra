@@ -1,7 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import type { ProjectDocument } from "@kinetra/project-model";
+
+import { linuxSoftwareGlEnabled } from "./dev-electron.js";
 
 export type RuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
@@ -450,6 +452,10 @@ export class ElectronRuntimeHost implements RuntimeHost {
       child.stderr.destroy();
 
       if (!child.killed) {
+        const linuxDescendants =
+          process.platform === "linux" && child.pid
+            ? linuxDescendantPids(child.pid)
+            : [];
         try {
           if (process.platform === "win32" && child.pid) {
             spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
@@ -459,6 +465,13 @@ export class ElectronRuntimeHost implements RuntimeHost {
           }
         } catch {
           // ignore
+        }
+        for (const pid of linuxDescendants) {
+          try {
+            process.kill(pid, "SIGTERM");
+          } catch {
+            // The child already exited.
+          }
         }
         child.kill();
       }
@@ -532,18 +545,35 @@ export class ElectronRuntimeHost implements RuntimeHost {
       KINETRA_RUNTIME_BRIDGE_PIPE: pipePath,
       KINETRA_USER_DATA_DIR: effectiveUserDataDir,
       ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
+      ...(linuxSoftwareGlEnabled()
+        ? {
+            LIBGL_ALWAYS_SOFTWARE: "1",
+            GALLIUM_DRIVER: "llvmpipe",
+          }
+        : {}),
     };
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
+    const softwareGlArgs = linuxSoftwareGlEnabled()
+      ? [
+          "--disable-dev-shm-usage",
+          "--use-gl=angle",
+          "--use-angle=swiftshader",
+          "--enable-unsafe-swiftshader",
+        ]
+      : [];
+
     const executable = this.runtimeExecutable ?? this.electronExecutable;
     const args = this.runtimeExecutable
       ? [
+          ...softwareGlArgs,
           ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
           `--user-data-dir=${effectiveUserDataDir}`,
         ]
       : [
           this.playerEntry,
+          ...softwareGlArgs,
           ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
           `--user-data-dir=${effectiveUserDataDir}`,
         ];
@@ -711,4 +741,39 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.#resolveReady = undefined;
     this.#rejectReady = undefined;
   }
+}
+
+function linuxDescendantPids(rootPid: number): number[] {
+  const children = new Map<number, number[]>();
+  for (const entry of readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) {
+      continue;
+    }
+    try {
+      const status = readFileSync(`/proc/${entry}/status`, "utf8");
+      const match = status.match(/^PPid:\s+(\d+)/m);
+      const ppid = match ? Number(match[1]) : 0;
+      const list = children.get(ppid) ?? [];
+      list.push(Number(entry));
+      children.set(ppid, list);
+    } catch {
+      // Process exited while scanning.
+    }
+  }
+
+  const result: number[] = [];
+  const stack = [...(children.get(rootPid) ?? [])];
+  const seen = new Set<number>();
+  while (stack.length > 0) {
+    const pid = stack.pop();
+    if (pid === undefined || seen.has(pid)) {
+      continue;
+    }
+    seen.add(pid);
+    result.push(pid);
+    for (const child of children.get(pid) ?? []) {
+      stack.push(child);
+    }
+  }
+  return result;
 }

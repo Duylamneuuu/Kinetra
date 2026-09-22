@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   AcceptanceRunner,
+  devElectronRuntimeSupportedOn,
   runProcessSmoke,
   type RuntimeInput,
   type RuntimeLog,
@@ -136,5 +137,48 @@ test("process smoke can validate a packaged-process style command",async()=>{
   });
   assert.equal(result.exitCode,0);
   assert.match(result.stdout,/KINETRA_SMOKE_OK/);
+});
+
+test("dev Electron acceptance is Windows, or Linux with a display or explicit opt-in", () => {
+  assert.equal(
+    devElectronRuntimeSupportedOn({
+      platform: "win32",
+      display: undefined,
+      force: undefined,
+    }),
+    true,
+  );
+  assert.equal(
+    devElectronRuntimeSupportedOn({
+      platform: "linux",
+      display: ":1",
+      force: undefined,
+    }),
+    true,
+  );
+  assert.equal(
+    devElectronRuntimeSupportedOn({
+      platform: "linux",
+      display: undefined,
+      force: "1",
+    }),
+    true,
+  );
+  assert.equal(
+    devElectronRuntimeSupportedOn({
+      platform: "linux",
+      display: undefined,
+      force: undefined,
+    }),
+    false,
+  );
+  assert.equal(
+    devElectronRuntimeSupportedOn({
+      platform: "darwin",
+      display: ":0",
+      force: "1",
+    }),
+    false,
+  );
 });
 

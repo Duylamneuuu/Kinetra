@@ -9,6 +9,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p6-real-audio-scene");
 const boxEntityId = stableId("entity", "p6-audio-box");
@@ -89,7 +90,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime plays audio by assetId, propagates hierarchical bus gain and mute, and captures frame via AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     // 1. Generate deterministic synthetic WAV (440Hz, 0.5s mono PCM)
     const wavBytes = createSyntheticWav({
@@ -260,7 +261,7 @@ test(
 
 test(
   "audio runtime handles missing assets, invalid bytes, and unknown buses with structured errors",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -315,7 +316,7 @@ test(
 
 test(
   "runtime stop and restart releases audio playback resources cleanly",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const wavBytes = createSyntheticWav({
       sampleRate: 44100,

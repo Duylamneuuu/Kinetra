@@ -8,6 +8,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p7-real-physics");
 const floorId = stableId("entity", "p7-floor");
@@ -155,7 +156,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes deterministic Rapier physics simulation, gravity fall, floor collision, and kinematic character constraint",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

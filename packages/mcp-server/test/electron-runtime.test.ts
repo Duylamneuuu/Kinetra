@@ -4,6 +4,7 @@ import test from "node:test";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 
 import { ElectronRuntimeHost } from "../src/index.js";
+import { devElectronRuntimeSupported } from "@kinetra/verification";
 
 const sceneId = stableId("scene", "electron-capture");
 const boxId = stableId("entity", "electron-box");
@@ -81,7 +82,7 @@ function project(): ProjectDocument {
 
 test(
   "Electron runtime renders project state and returns a real PNG frame",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = new ElectronRuntimeHost({
       requestTimeoutMs: 30_000,

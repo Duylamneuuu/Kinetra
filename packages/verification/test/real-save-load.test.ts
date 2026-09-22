@@ -8,6 +8,7 @@ import {
   KinetraRuntimeProbe,
   type AcceptanceManifest,
 } from "../src/index.js";
+import { devElectronRuntimeSupported } from "../src/index.js";
 
 const sceneId = stableId("scene", "p6-save-load-scene");
 const heroEntityId = stableId("entity", "p6-hero-save-load");
@@ -186,7 +187,7 @@ function assertNoForbiddenObjects(obj: unknown, path = "root"): void {
 
 test(
   "real Electron runtime executes save -> restart -> load -> verify cycle with real AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -380,7 +381,7 @@ test(
 
 test(
   "real Electron runtime performs save migration from synthetic v1 schema and restores into fresh session",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -443,7 +444,7 @@ test(
 
 test(
   "deliberate invalid save failure: incompatible schema and corrupt payload return structured error without crashing Electron",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -530,7 +531,7 @@ test(
 
 test(
   "all-or-nothing save restoration atomicity: malformed gameplay, unsupported script, and commit throw apply zero mutations and rollback",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

@@ -59,6 +59,10 @@ Vision should not be asked to infer save-slot correctness when structured state 
 
 For shipping tasks, the final smoke suite launches the packaged executable. Passing \`npm run dev\` is not enough.
 
+## Linux dev Electron
+
+Dev-Electron acceptance runs on Linux when `DISPLAY` is set, or when `KINETRA_LINUX_REAL_ELECTRON=1` (use this under `xvfb-run` in CI). The runtime host then uses software GL so cloud and CI machines without a GPU still capture real frames. Set `KINETRA_LINUX_GL=hardware` to leave GL selection to the machine. Packaged `KinetraGame.exe` acceptance remains a Windows proof.
+
 ## Determinism
 
 Pin the Electron/runtime environment used for visual baselines. Rendering screenshots can vary across OS/GPU/browser versions, so semantic assertions remain authoritative where possible.

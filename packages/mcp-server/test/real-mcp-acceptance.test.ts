@@ -14,6 +14,7 @@ import {
   ARENA_SCENE_ID,
   arenaAudioAssets,
 } from "@kinetra/reference-game";
+import { devElectronRuntimeSupported } from "@kinetra/verification";
 
 const sceneId = stableId("scene", "p8-mcp-acceptance");
 const boxId = stableId("entity", "p8-mcp-box");
@@ -188,7 +189,7 @@ function createMcpTestClient(service: KinetraAgentService) {
 
 test(
   "Scenario A: DEV RUNTIME PASS — MCP tool test.runAcceptance executes passing manifest over InMemoryTransport",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
 
@@ -231,7 +232,7 @@ test(
 
 test(
   "Scenario B: DEV RUNTIME DELIBERATE FAIL — MCP tool returns passed: false with structured expected/actual (not isError)",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 60_000 },
   async () => {
     const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
 
@@ -376,7 +377,7 @@ test(
 
 test(
   "Scenario E: REPEATED INVOCATIONS — PASS -> FAIL -> PASS over single MCP client connection proves zero leak",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !devElectronRuntimeSupported(), timeout: 120_000 },
   async () => {
     const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
 
