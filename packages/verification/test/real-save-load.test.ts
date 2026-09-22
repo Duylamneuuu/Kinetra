@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -186,7 +186,7 @@ function assertNoForbiddenObjects(obj: unknown, path = "root"): void {
 
 test(
   "real Electron runtime executes save -> restart -> load -> verify cycle with real AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -380,7 +380,7 @@ test(
 
 test(
   "real Electron runtime performs save migration from synthetic v1 schema and restores into fresh session",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -443,7 +443,7 @@ test(
 
 test(
   "deliberate invalid save failure: incompatible schema and corrupt payload return structured error without crashing Electron",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -530,7 +530,7 @@ test(
 
 test(
   "all-or-nothing save restoration atomicity: malformed gameplay, unsupported script, and commit throw apply zero mutations and rollback",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

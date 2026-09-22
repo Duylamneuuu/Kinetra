@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -110,7 +110,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes deterministic Recast navigation queries, pathfinding, serialization round-trip, and constrained failure",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -237,7 +237,7 @@ test(
 
 test(
   "serialized NavMesh can be reloaded in real Electron runtime and produce equivalent pathfinding behavior",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -314,7 +314,7 @@ test(
 
 test(
   "clean teardown releases navigation resources and leaves zero orphan Electron processes",
-  { skip: process.platform !== "win32", timeout: 30_000 },
+  { skip: !canRunRealElectronTests(), timeout: 30_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

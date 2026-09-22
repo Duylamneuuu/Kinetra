@@ -24,7 +24,7 @@ import {
 } from "@kinetra/save-state";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -55,7 +55,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Game Shell & Controller Slice 2 — Main Menu, HUD, Pause, Settings, Gamepad, Save/Continue, Result Screens",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Main Menu Startup & PNG Proof

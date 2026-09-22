@@ -712,3 +712,21 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.#rejectReady = undefined;
   }
 }
+
+/**
+ * Whether the current machine can launch real Electron for runtime tests.
+ *
+ * - Windows: yes (native display; existing CI behavior, unchanged).
+ * - Linux: yes when an X display is available (`DISPLAY` set, e.g. under
+ *   `xvfb-run`). Headless shells without X skip instead of failing.
+ * - Other platforms: no (not a Kinetra test target).
+ */
+export function canRunRealElectronTests(): boolean {
+  if (process.platform === "win32") {
+    return true;
+  }
+  if (process.platform === "linux") {
+    return Boolean(process.env.DISPLAY);
+  }
+  return false;
+}

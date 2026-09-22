@@ -14,7 +14,7 @@ import {
   ARENA_ENTITY_MANAGER,
 } from "@kinetra/reference-game";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -44,7 +44,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Combat Foundation Slice 4 — Player Attack, Damage Model, Enemy Defeated State, Multi-Process Save/Load, Packaged Proof",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Player attacks Enemy, Enemy health decreases

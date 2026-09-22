@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   AcceptanceRunner,
+  canRunRealElectronTests,
   runProcessSmoke,
   type RuntimeInput,
   type RuntimeLog,
@@ -136,5 +137,18 @@ test("process smoke can validate a packaged-process style command",async()=>{
   });
   assert.equal(result.exitCode,0);
   assert.match(result.stdout,/KINETRA_SMOKE_OK/);
+});
+
+test("real Electron gate requires a display on Linux",{skip:process.platform!=="linux"},()=>{
+  const previous=process.env.DISPLAY;
+  try{
+    process.env.DISPLAY=":99";
+    assert.equal(canRunRealElectronTests(),true);
+    delete process.env.DISPLAY;
+    assert.equal(canRunRealElectronTests(),false);
+  }finally{
+    if(previous===undefined)delete process.env.DISPLAY;
+    else process.env.DISPLAY=previous;
+  }
 });
 

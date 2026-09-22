@@ -16,7 +16,7 @@ import {
   ARENA_ENTITY_GOAL,
 } from "@kinetra/reference-game";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -46,7 +46,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Gameplay Loop Expansion Slice 3 — Run Status, 3 Objectives, Lockdown Challenge, Multi-Process Save/Load, Win/Lose Flow",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: New Game Run Initialization & HUD State Projection

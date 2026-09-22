@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -155,7 +155,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes deterministic Rapier physics simulation, gravity fall, floor collision, and kinematic character constraint",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

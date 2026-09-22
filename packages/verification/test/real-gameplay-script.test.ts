@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
-  AcceptanceRunner,
+  canRunRealElectronTests,  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
@@ -90,7 +90,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes script lifecycle, routes semantic input, advances deterministically, and verifies via AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -228,7 +228,7 @@ test(
 
 test(
   "deliberate script failure scenario: unresolvable script produces structured error without crashing runtime",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -273,7 +273,7 @@ test(
 
 test(
   "lifecycle proof: scene stop and restart cleanly resets script state and re-executes lifecycle",
-  { skip: process.platform !== "win32", timeout: 45_000 },
+  { skip: !canRunRealElectronTests(), timeout: 45_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

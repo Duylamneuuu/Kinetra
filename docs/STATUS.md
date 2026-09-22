@@ -121,6 +121,7 @@ What has meaningful proof:
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- full real-Electron verification suite (runtime, physics, navigation, GLB models, animation, gameplay scripts, save/load, audio, desktop save, arena, game shell, gameplay loop, combat) also proven on Linux under xvfb via the default pipe bridge (`canRunRealElectronTests` gate: Windows always runs, Linux runs when `DISPLAY` is set, headless shells skip); Linux CI runs it in `.github/workflows/linux-verification.yml`.
 
 What remains:
 - perceptual/AI visual critique;
