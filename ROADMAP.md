@@ -6,10 +6,16 @@ Kinetra's roadmap is ordered by dependency and proof, not by editor spectacle.
 
 ## Current checkpoint
 
+This checkpoint matches `docs/STATUS.md` for what is on `main`. The phase sections below are still the full intended gates, which are broader than the merged slices. An open experimental PR is not accepted architecture.
+
 - P0 and P1 foundation gates were completed.
-- P4, P5, P6 and P8 have meaningful **core** work merged, but their full production gates are still broader than the merged core.
-- P2, P3, P7 and P9 have WIP/experimental branches or PRs that should not be assumed merge-ready.
-- P10 should not begin until the real runtime/verification path is consolidated.
+- P2 AI-native runtime bridge: real Electron player control, semantic input, structured logs, and PNG capture are proven. Packaged Windows proof is `KinetraGame.exe` on the Windows player workflow. A Linux run is not that proof.
+- P3 observer editor remains an unmerged experimental PR.
+- P4, P5, and P6 have proven runtime slices. Hot reimport, a full animation graph, and a complete game-UI gate are still broader than the merged core.
+- P7 physics and navigation have proven Electron slices for a rigid body, a kinematic character controller, navmesh baking, and path queries. Crowds, LOD, and performance budgets are not done.
+- P8 verification: MCP `test.runAcceptance` and packaged-runtime acceptance are proven against dev Electron and `KinetraGame.exe`.
+- P9 distribution and Steam remain an unmerged experimental PR. Signing and Steam upload need credentials this repository does not have.
+- P10 Kinetra Arena, through the combat foundation, is proven on dev Electron and packaged Windows. Multiple levels, weapons, inventory, and extra enemy types are not implemented.
 
 ## Phase 0 — Runtime contracts
 
