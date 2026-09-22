@@ -64,6 +64,33 @@ test("ArenaGameManager health invariant and restoration alignment with player", 
   assert.equal(manager.status, "playing");
 });
 
+test("ArenaGameManager clamps live health events into [0, 3]", () => {
+  const manager = new ArenaGameManager();
+
+  manager.onEvent("gameplay.playerHealthChanged", { health: 9 });
+  assert.equal(manager.playerHealth, 3);
+  assert.equal(manager.status, "playing");
+
+  manager.onEvent("gameplay.playerHealthChanged", { health: Number.NaN });
+  assert.equal(manager.playerHealth, 3);
+
+  manager.onEvent("enemy.healthChanged", { health: 4 });
+  assert.equal(manager.enemyHealth, 3);
+
+  manager.onEvent("enemy.healthChanged", { health: Number.POSITIVE_INFINITY });
+  assert.equal(manager.enemyHealth, 3);
+
+  manager.onEvent("gameplay.playerHealthChanged", { health: -2 });
+  assert.equal(manager.playerHealth, 0);
+  assert.equal(manager.status, "lost");
+  assert.equal(manager.runStatus, "failed");
+
+  manager.onEvent("enemy.healthChanged", { health: -1 });
+  assert.equal(manager.enemyHealth, 0);
+  assert.equal(manager.getState().playerHealth, 0);
+  assert.equal(manager.getState().enemyHealth, 0);
+});
+
 test("ArenaEnemyController state validation and restoration", () => {
   const enemy = new ArenaEnemyController();
 

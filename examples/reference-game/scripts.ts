@@ -9,6 +9,10 @@ import {
   ARENA_SFX_LOSE_ASSET_ID,
 } from "./audio.js";
 
+function boundedArenaHealth(value: number): number {
+  return Math.max(0, Math.min(3, value));
+}
+
 export class ArenaPlayerController implements GameScript {
   health = 3;
   moveCount = 0;
@@ -678,9 +682,10 @@ export class ArenaGameManager implements GameScript {
         typeof payload === "object" &&
         payload !== null &&
         "health" in payload &&
-        typeof (payload as { health: unknown }).health === "number"
+        typeof (payload as { health: unknown }).health === "number" &&
+        Number.isFinite((payload as { health: number }).health)
       ) {
-        this.playerHealth = (payload as { health: number }).health;
+        this.playerHealth = boundedArenaHealth((payload as { health: number }).health);
         if (this.playerHealth <= 0 && this.status === "playing") {
           this.status = "lost";
           this.runStatus = "failed";
@@ -709,9 +714,10 @@ export class ArenaGameManager implements GameScript {
         typeof payload === "object" &&
         payload !== null &&
         "health" in payload &&
-        typeof (payload as { health: unknown }).health === "number"
+        typeof (payload as { health: unknown }).health === "number" &&
+        Number.isFinite((payload as { health: number }).health)
       ) {
-        this.enemyHealth = (payload as { health: number }).health;
+        this.enemyHealth = boundedArenaHealth((payload as { health: number }).health);
       }
     } else if (event === "enemy.defeated") {
       context?.log?.("info", "gameplay.enemyDefeated", {
