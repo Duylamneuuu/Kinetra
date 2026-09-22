@@ -118,6 +118,7 @@ What has meaningful proof:
 - clean, leak-free process teardown and lifecycle management across repeated PASS/FAIL invocations;
 - process smoke runner for packaged exes;
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
+- MCP `input.query` returns the engine-default semantic action catalog (stable ids, button or axis type, default key and gamepad bindings), including `player.moveForward`, `player.attack`, and `game.pause`. Tool descriptions state that the default local host records those actions without simulating gameplay, and that `test.runAcceptance` is the path that plays them on Electron. Proof level: in-memory MCP tool calls. This does not launch Electron and does not read player settings remaps;
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable.

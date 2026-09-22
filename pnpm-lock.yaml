@@ -107,6 +107,9 @@ importers:
       '@kinetra/command-bus':
         specifier: workspace:*
         version: link:../command-bus
+      '@kinetra/input':
+        specifier: workspace:*
+        version: link:../input
       '@kinetra/project-model':
         specifier: workspace:*
         version: link:../project-model

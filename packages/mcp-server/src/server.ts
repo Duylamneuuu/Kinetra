@@ -264,10 +264,20 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   );
 
   server.registerTool(
+    "input.query",
+    {
+      description:
+        "List the engine-default semantic actions. Each entry has a stable id, type button or axis, and the default key or gamepad bindings. Use these ids with runtime.injectInput or AcceptanceManifest input steps. Player settings may remap bindings; action ids stay the same. This query does not read a running game.",
+      inputSchema: z.object({}),
+    },
+    async () => safe(() => service.queryInputActions()),
+  );
+
+  server.registerTool(
     "runtime.start",
     {
       description:
-        "Instantiate the current project revision into the local Three.js scene-graph runtime.",
+        "Instantiate the current project revision in the connected runtime host. The default host is a local Three.js scene-graph projection: it returns transforms and does not run gameplay scripts, physics, or navigation.",
       inputSchema: z.object({
         sceneId: z.string().min(1),
       }),
@@ -282,7 +292,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   server.registerTool(
     "runtime.stop",
     {
-      description: "Stop and dispose the current local runtime projection.",
+      description: "Stop and dispose the connected runtime host.",
       inputSchema: z.object({}),
     },
     async () =>
@@ -296,7 +306,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "runtime.query",
     {
       description:
-        "Inspect live scene-graph state for selected entities using stable entity IDs.",
+        "Inspect the connected runtime. The default local host returns entity id, name, parent, and transform for the requested entity ids. It does not include gameplay script state.",
       inputSchema: z.object({
         entityIds: z.array(z.string()).max(500).optional(),
       }),
@@ -313,7 +323,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "runtime.injectInput",
     {
       description:
-        "Inject a semantic gameplay action. The local P2 host records actions; gameplay systems consume them in later phases.",
+        "Send one semantic action to the connected runtime host. Use an action id from input.query with phase press, release, or hold. The default local host records the action in logs and does not move entities. To play the reference game, send those same action ids as AcceptanceManifest input steps through test.runAcceptance.",
       inputSchema: z.object({
         action: z.string().min(1),
         phase: z.enum(["press", "release", "hold"]).default("press"),
@@ -391,7 +401,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     "test.runAcceptance",
     {
       description:
-        "Execute a Kinetra AcceptanceManifest against the real Electron runtime (target=\"runtime\") or packaged Windows executable (target=\"packaged\"), returning a complete machine-readable pass/fail report with step evidence.",
+        "Execute a Kinetra AcceptanceManifest against the real Electron runtime (target=\"runtime\") or packaged Windows executable (target=\"packaged\"), returning a complete machine-readable pass/fail report with step evidence. Input steps use semantic action ids from input.query.",
       inputSchema: z.object({
         manifest: acceptanceManifestSchema,
         target: z.enum(["runtime", "packaged"]).optional(),

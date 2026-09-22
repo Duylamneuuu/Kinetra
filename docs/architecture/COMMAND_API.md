@@ -80,7 +80,9 @@ test.runAcceptance
 build.windows
 ~~~
 
-Avoid a single universal \`execute_json\` as the primary public MCP API. Semantic tools provide better schemas, smaller contexts and safer permissions.
+Avoid a single universal `execute_json` as the primary public MCP API. Semantic tools provide better schemas, smaller contexts and safer permissions.
+
+The implemented MCP tools are the list in `packages/mcp-server/README.md`, including `input.query` and `test.runAcceptance`. Prefab, asset, animation, and `build.windows` names in the taxonomy above are not MCP tools yet.
 
 ## Query efficiency
 
