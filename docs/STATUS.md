@@ -121,6 +121,7 @@ What has meaningful proof:
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- agent repair loop (`packages/mcp-server/test/agent-repair-loop.test.ts`) authors a marker through the command bus, runs real Electron acceptance, observes the structured position failure, patches the transform, and passes a second acceptance run including a valid PNG. On Linux this runs when `DISPLAY` is set or `KINETRA_LINUX_REAL_ELECTRON=1`. It is dev-Electron proof, not packaged `KinetraGame.exe` proof.
 
 What remains:
 - perceptual/AI visual critique;
