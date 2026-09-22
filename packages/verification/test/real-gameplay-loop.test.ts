@@ -16,7 +16,8 @@ import {
   ARENA_ENTITY_GOAL,
 } from "@kinetra/reference-game";
 import {
-  canRunRealElectronTests,  AcceptanceRunner,
+  canRunRealElectronTests,
+  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,

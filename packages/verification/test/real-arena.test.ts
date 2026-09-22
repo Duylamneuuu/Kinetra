@@ -18,7 +18,8 @@ import {
   ARENA_SFX_LOSE_ASSET_ID,
 } from "@kinetra/reference-game";
 import {
-  canRunRealElectronTests,  AcceptanceRunner,
+  canRunRealElectronTests,
+  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,

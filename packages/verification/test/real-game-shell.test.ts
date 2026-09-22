@@ -24,7 +24,8 @@ import {
 } from "@kinetra/save-state";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
-  canRunRealElectronTests,  AcceptanceRunner,
+  canRunRealElectronTests,
+  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,

@@ -4,7 +4,8 @@ import test from "node:test";
 import { createSyntheticWav } from "@kinetra/audio";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
-  canRunRealElectronTests,  AcceptanceRunner,
+  canRunRealElectronTests,
+  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,

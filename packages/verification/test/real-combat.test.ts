@@ -14,7 +14,8 @@ import {
   ARENA_ENTITY_MANAGER,
 } from "@kinetra/reference-game";
 import {
-  canRunRealElectronTests,  AcceptanceRunner,
+  canRunRealElectronTests,
+  AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
   type AcceptanceManifest,
