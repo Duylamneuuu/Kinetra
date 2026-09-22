@@ -61,7 +61,8 @@ At a high level, `main` contains:
 - deterministic Blender/GLB asset-core work;
 - animation semantic core;
 - complete-game contracts for script lifecycle, prefabs, input, audio, save/settings;
-- verification/acceptance core.
+- verification/acceptance core;
+- Linux dev-Electron smoke: `pnpm --filter @kinetra/player smoke:linux` (not Windows packaged proof).
 
 These are foundations, not proof that the whole engine is finished.
 

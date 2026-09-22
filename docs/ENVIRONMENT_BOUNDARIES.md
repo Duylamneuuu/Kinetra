@@ -14,6 +14,7 @@ Do **not** ask for a local developer machine merely for:
 - headless Blender export tests;
 - GLB validation;
 - Electron Windows packaging on GitHub Actions;
+- Linux dev-Electron smoke under xvfb (`pnpm --filter @kinetra/player smoke:linux`);
 - static release manifest/VDF generation;
 - deterministic acceptance-runner logic.
 

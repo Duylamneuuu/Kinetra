@@ -12,7 +12,7 @@ The core product thesis is simple:
 
 Kinetra is currently at a **pre-alpha architecture/handoff checkpoint**.
 
-Several foundational and subsystem cores are merged, while the real Electron runtime bridge, observer editor, physics/navigation integration and release/Steam work remain experimental/WIP.
+Several foundational and subsystem cores are merged. Runtime, physics, navigation, and the Kinetra Arena reference game have proof at the levels recorded in [docs/STATUS.md](./docs/STATUS.md). The observer editor and release/Steam work are not finished.
 
 Before implementing anything, read:
 
@@ -22,6 +22,16 @@ Before implementing anything, read:
 - [ROADMAP.md](./ROADMAP.md)
 
 Do **not** infer that a feature is finished because a package folder or open PR exists.
+
+## Linux runtime check
+
+On Linux:
+
+```bash
+pnpm --filter @kinetra/player smoke:linux
+```
+
+That command builds the real Electron player, launches it under xvfb when `DISPLAY` is unset, forces software rendering, and drives Kinetra Arena through the existing stdio runtime bridge. It is development/runtime proof on Linux. Windows packaging proof stays on `package:win` / `smoke:win` and `KinetraGame.exe`.
 
 ## What Kinetra is for
 

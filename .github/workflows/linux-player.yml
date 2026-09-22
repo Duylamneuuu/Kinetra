@@ -1,0 +1,53 @@
+name: Linux player smoke
+
+on:
+  pull_request:
+    paths:
+      - "apps/player/**"
+      - "packages/**"
+      - "examples/reference-game/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "pnpm-lock.yaml"
+      - "tsconfig.base.json"
+      - ".github/workflows/linux-player.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-electron-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Install headless Electron libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libgbm1 \
+            libx11-xcb1 \
+            libxss1 \
+            libasound2t64 \
+            || sudo apt-get install -y \
+              xvfb \
+              libnss3 \
+              libatk1.0-0 \
+              libatk-bridge2.0-0 \
+              libgtk-3-0 \
+              libgbm1 \
+              libx11-xcb1 \
+              libxss1 \
+              libasound2
+      - run: pnpm --filter @kinetra/player smoke:linux

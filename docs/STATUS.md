@@ -121,6 +121,7 @@ What has meaningful proof:
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- Linux dev-Electron smoke (`pnpm --filter @kinetra/player smoke:linux`) proven on Linux under xvfb with software rendering. It builds the real player, speaks the existing stdio runtime bridge, boots Kinetra Arena, checks `runtime.hostInfo.platform === "linux"`, moves the player with semantic `player.moveForward`, captures a real PNG, stops, and repeats without leaving Electron processes. This is not Windows packaged `KinetraGame.exe` proof.
 
 What remains:
 - perceptual/AI visual critique;

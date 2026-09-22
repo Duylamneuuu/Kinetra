@@ -55,9 +55,23 @@ Use together:
 
 Vision should not be asked to infer save-slot correctness when structured state can answer it.
 
+## Platform proof hierarchy
+
+These proofs are not interchangeable:
+
+| Command / target | What it proves |
+|---|---|
+| `pnpm --filter @kinetra/player smoke:linux` | Linux dev Electron, under xvfb when `DISPLAY` is unset, using software rendering. Speaks the existing stdio runtime bridge (`KINETRA_RUNTIME_BRIDGE_STDIO=1` / `--runtime-bridge-stdio`). |
+| Windows GitHub Actions `package:win` + `smoke:win` | Native Windows package and platform behavior. |
+| Packaged `KinetraGame.exe` acceptance | Shipped Windows executable. |
+
+`smoke:linux` builds the real player, launches real Electron, and drives Kinetra Arena through `ping`, `runtime.hostInfo`, `runtime.start`, `runtime.query`, `runtime.injectInput`, `runtime.step`, `runtime.captureFrame`, and `runtime.stop`. `runtime.hostInfo.platform` must be `linux`. Semantic `player.moveForward` must change player position and arena controller state. The captured frame must be a real PNG. The command repeats and fails if Electron processes from that session remain.
+
+It does not certify Windows packaging or `KinetraGame.exe`.
+
 ## Packaged-build truth
 
-For shipping tasks, the final smoke suite launches the packaged executable. Passing \`npm run dev\` is not enough.
+For shipping tasks, the final smoke suite launches the packaged executable. Passing `npm run dev` is not enough.
 
 ## Determinism
 

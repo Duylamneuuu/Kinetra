@@ -11,7 +11,9 @@
     "build": "pnpm build:web && pnpm build:electron && pnpm assemble",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "package:win": "pnpm build && node scripts/package-win.mjs",
-    "smoke:win": "node scripts/smoke-win.mjs"
+    "smoke:win": "node scripts/smoke-win.mjs",
+    "smoke:linux": "node scripts/smoke-linux.mjs",
+    "test": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
     "@kinetra/audio": "workspace:*",
