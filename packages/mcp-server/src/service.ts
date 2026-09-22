@@ -5,6 +5,10 @@ import {
   type EntityQuery,
 } from "@kinetra/command-bus";
 import {
+  DEFAULT_PLAYER_INPUT_MAP,
+  type InputBinding,
+} from "@kinetra/input";
+import {
   newId,
   type ComponentMap,
   type JsonObject,
@@ -165,6 +169,28 @@ export class KinetraAgentService {
 
   queryEntities(query: EntityQuery = {}) {
     return this.bus.queryEntities(query);
+  }
+
+  queryInputActions(): {
+    schemaVersion: 1;
+    source: "engine-default";
+    actions: Array<{
+      id: string;
+      type: "button" | "axis";
+      bindings: InputBinding[];
+    }>;
+  } {
+    return {
+      schemaVersion: 1,
+      source: "engine-default",
+      actions: DEFAULT_PLAYER_INPUT_MAP.actions
+        .map((action) => ({
+          id: action.id,
+          type: action.type,
+          bindings: structuredClone(action.bindings),
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    };
   }
 
   async createScene(input: SceneCreateInput): Promise<CommandResult> {

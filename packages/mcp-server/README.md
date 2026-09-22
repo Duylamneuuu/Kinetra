@@ -4,7 +4,7 @@ The primary AI authoring gateway for Kinetra.
 
 Kinetra treats MCP/typed commands as the AI's editor. This package adapts semantic MCP tools onto the same project command bus used by every future human UI.
 
-## Current P2 surface
+## Current tool surface
 
 ~~~text
 project.inspect
@@ -20,15 +20,23 @@ entity.patch
 entity.reparent
 entity.delete
 
+input.query
+
 runtime.start
 runtime.stop
 runtime.query
 runtime.injectInput
 runtime.readLogs
 runtime.captureFrame
+
+test.runAcceptance
 ~~~
 
-The MCP layer does **not** mutate Three.js objects directly. Authoring tools mutate the text project through `@kinetra/command-bus`. `runtime.start` then instantiates a snapshot into the runtime model.
+The MCP layer does **not** mutate Three.js objects directly. Authoring tools mutate the text project through `@kinetra/command-bus`. `runtime.start` instantiates a snapshot into the connected runtime host.
+
+`input.query` returns the engine-default semantic action ids (`player.moveForward`, `player.attack`, `game.pause`, and the rest of the player map) with their default bindings. Action ids stay stable when the player remaps keys.
+
+`runtime.start`, `runtime.query`, and `runtime.injectInput` on the default CLI host use the local Three.js scene-graph. That host returns transforms and records semantic actions in logs. It does not run gameplay scripts. `test.runAcceptance` is the tool that drives the real Electron player, or the packaged Windows executable when `target` is `packaged`.
 
 ## Stdio
 
@@ -48,6 +56,6 @@ The stdio process writes protocol traffic to stdout and errors only to stderr.
 
 ## Runtime capture status
 
-P2 currently includes a local Three.js **scene-graph** runtime host that supports start/stop/state query/logs/semantic input. It intentionally does not fake a screenshot: `runtime.captureFrame` reports that raster capture is unavailable and returns structured fallback state.
+The default CLI host is a local Three.js scene-graph. `runtime.captureFrame` on that host reports that raster capture is unavailable and returns structured fallback state.
 
-A later P2 bridge connects the MCP service to the Electron/browser player so the same tool returns a real frame without changing the MCP contract.
+`test.runAcceptance` runs the same observation contract against the Electron player. There, frame capture is a real PNG. Packaged Windows proof uses `target: "packaged"` and `KinetraGame.exe`.
