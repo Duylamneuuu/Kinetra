@@ -1,0 +1,40 @@
+name: Linux player smoke
+
+on:
+  pull_request:
+    paths:
+      - "apps/player/**"
+      - "packages/**"
+      - "examples/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "scripts/**"
+      - ".kinetra/**"
+      - ".github/workflows/linux-player.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - name: Ensure xvfb
+        run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+      - run: pnpm build
+      - run: pnpm --filter @kinetra/player smoke:linux
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kinetra-linux-smoke
+          path: apps/player/dist/linux-smoke
+          if-no-files-found: error
