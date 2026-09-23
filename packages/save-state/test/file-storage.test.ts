@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import test from "node:test";
 import { FileKeyValueStorage } from "../src/file-storage.js";
 
@@ -34,6 +34,48 @@ test("FileKeyValueStorage sets, gets, and deletes keys", async () => {
 
     // Deleting again does not throw
     await storage.delete("saves:slot-1");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("save slot ids cannot share a filename with settings storage", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "kinetra-save-namespace-"));
+
+  try {
+    const storage = new FileKeyValueStorage(tempDir);
+    const settingsKey = "settings:user-settings";
+    const collidingSaveKey = "saves:settings_user-settings";
+    const settingsPayload = JSON.stringify({ schemaVersion: 1, audio: { masterGain: 0.5 } });
+    const savePayload = JSON.stringify({ schemaVersion: 2, slot: "must-not-overwrite" });
+
+    assert.equal(
+      storage.resolveFilePath(settingsKey).endsWith(`${sep}settings_user-settings.json`),
+      true,
+    );
+    assert.throws(
+      () => storage.resolveFilePath(collidingSaveKey),
+      /reserved for settings storage/,
+    );
+    assert.throws(
+      () => storage.resolveFilePath("settings_user-settings"),
+      /reserved for settings storage/,
+    );
+
+    await storage.set(settingsKey, settingsPayload);
+    await assert.rejects(() => storage.set(collidingSaveKey, savePayload), /reserved for settings/);
+    await assert.rejects(() => storage.get(collidingSaveKey), /reserved for settings/);
+    await assert.rejects(() => storage.delete(collidingSaveKey), /reserved for settings/);
+
+    assert.equal(await storage.get(settingsKey), settingsPayload);
+    const files = await readdir(tempDir);
+    assert.deepEqual(files, ["settings_user-settings.json"]);
+
+    await storage.set("saves:slot-a", savePayload);
+    assert.equal(await storage.get("saves:slot-a"), savePayload);
+    assert.equal(await storage.get(settingsKey), settingsPayload);
+    const afterSave = (await readdir(tempDir)).sort();
+    assert.deepEqual(afterSave, ["settings_user-settings.json", "slot-a.json"]);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

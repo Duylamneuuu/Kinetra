@@ -9,6 +9,7 @@ import { resolve, sep } from "node:path";
 import type { KeyValueStorage } from "./index.js";
 
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
+const SETTINGS_FILENAME_PREFIX = "settings_";
 
 export interface FileStorageOptions {
   /** Optional custom replacement primitive, primarily for deterministic testing */
@@ -40,12 +41,22 @@ export class FileKeyValueStorage implements KeyValueStorage {
       throw new TypeError("Storage key must be a non-empty string");
     }
 
-    // Strip or map prefix if formatted as "prefix:key" (e.g. "saves:slot-a" -> "slot-a", "settings:user" -> "settings_user")
+    // Strip or map prefix if formatted as "prefix:key"
+    // (e.g. "saves:slot-a" -> "slot-a", "settings:user-settings" -> "settings_user-settings").
+    // The settings_ filename prefix is reserved. A save slot id must not
+    // produce the same file as settings storage.
+    const isSettingsKey = key.startsWith("settings:");
     const cleanKey = key.startsWith("saves:")
       ? key.slice("saves:".length)
-      : key.startsWith("settings:")
-        ? `settings_${key.slice("settings:".length)}`
+      : isSettingsKey
+        ? `${SETTINGS_FILENAME_PREFIX}${key.slice("settings:".length)}`
         : key;
+
+    if (!isSettingsKey && cleanKey.startsWith(SETTINGS_FILENAME_PREFIX)) {
+      throw new Error(
+        `Invalid storage key "${key}": filenames starting with "${SETTINGS_FILENAME_PREFIX}" are reserved for settings storage`,
+      );
+    }
 
     if (!SAFE_KEY_PATTERN.test(cleanKey)) {
       throw new Error(

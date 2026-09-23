@@ -93,6 +93,7 @@ What exists:
 - renderer IPC storage bridge (`IpcKeyValueStorage`) keeping filesystem paths outside renderer and project JSON;
 - isolated test storage root (`KINETRA_SAVE_DIR` / `--save-dir=`);
 - strict storage key validation and path traversal protection;
+- settings files stay in the `settings_` filename namespace. A save slot id, including `settings_user-settings`, cannot resolve to the same file as `settings:user-settings`. Existing save files that do not use that prefix (`slot-a.json` and the same pattern) still load. Proof level: UNIT (`@kinetra/save-state` file storage);
 - multi-process save persistence (Process A saves -> terminates -> fresh Process B restores and continues gameplay);
 - file-backed schema migration (v1 -> v2) and corrupt file/missing slot resilience;
 - hierarchical audio buses (@kinetra/audio) with truthful gain/mute computation;
