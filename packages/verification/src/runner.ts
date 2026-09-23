@@ -3,21 +3,70 @@ import type {
   AcceptanceManifest,
   AcceptanceReport,
   AcceptanceStep,
+  MissingPathDiagnostic,
   RuntimeLog,
   RuntimeProbe,
   StepResult,
 } from "./types.js";
 
-function getPath(root:unknown,path:string):unknown{
-  if(path.trim()==="") return root;
-  let value:unknown=root;
-  for(const segment of path.split(".")){
-    if(typeof value!=="object"||value===null){
-      throw new Error(`Cannot read "${path}": "${segment}" traverses non-object data`);
+const MAX_DIAGNOSTIC_KEYS = 12;
+
+class MissingPathError extends Error {
+  readonly diagnostic: MissingPathDiagnostic;
+
+  constructor(message: string, diagnostic: MissingPathDiagnostic) {
+    super(message);
+    this.name = "MissingPathError";
+    this.diagnostic = diagnostic;
+  }
+}
+
+function getPath(root: unknown, path: string): unknown {
+  if (path.trim() === "") return root;
+  let value: unknown = root;
+  for (const segment of path.split(".")) {
+    if (typeof value !== "object" || value === null) {
+      throw new Error(
+        `Cannot read "${path}": "${segment}" traverses non-object data`,
+      );
     }
-    value=(value as Record<string,unknown>)[segment];
+    const record = value as Record<string, unknown>;
+    if (!Object.hasOwn(record, segment)) {
+      const available = Object.keys(record).sort();
+      const diagnostic: MissingPathDiagnostic = {
+        kind: "missing_path",
+        path,
+        missingSegment: segment,
+        availableKeys: available.slice(0, MAX_DIAGNOSTIC_KEYS),
+      };
+      throw new MissingPathError(
+        `Missing "${segment}" while reading "${path}". Available keys: ${formatAvailableKeys(available)}`,
+        diagnostic,
+      );
+    }
+    value = record[segment];
   }
   return value;
+}
+
+function readAssertedPath(root: unknown, path: string, expected: unknown): unknown {
+  try {
+    return getPath(root, path);
+  } catch (error) {
+    if (error instanceof MissingPathError) {
+      throw new StepAssertionError(error.message, expected, undefined, error.diagnostic);
+    }
+    throw error;
+  }
+}
+
+function formatAvailableKeys(keys: string[]): string {
+  if (keys.length === 0) {
+    return "(none)";
+  }
+  const shown = keys.slice(0, 12);
+  const extra = keys.length - shown.length;
+  return extra > 0 ? `${shown.join(", ")} (+${extra} more)` : shown.join(", ");
 }
 
 function stableEqual(a:unknown,b:unknown):boolean{
@@ -43,6 +92,7 @@ export class StepAssertionError extends Error {
     message: string,
     public readonly expected?: unknown,
     public readonly actual?: unknown,
+    public readonly diagnostics?: MissingPathDiagnostic,
   ) {
     super(message);
     this.name = "StepAssertionError";
@@ -194,7 +244,7 @@ async function executeStep(
       return;
     case "assert.equal":{
       const snapshot=await probe.snapshot();
-      const actual=getPath(snapshot,step.path);
+      const actual=readAssertedPath(snapshot,step.path,step.expected);
       if(!stableEqual(actual,step.expected)){
         throw new StepAssertionError(
           `Expected ${step.path} = ${JSON.stringify(step.expected)}, got ${JSON.stringify(actual)}`,
@@ -205,7 +255,7 @@ async function executeStep(
       return;
     }
     case "assert.near":{
-      const actual=getPath(await probe.snapshot(),step.path);
+      const actual=readAssertedPath(await probe.snapshot(),step.path,step.expected);
       if(typeof actual!=="number"){
         throw new StepAssertionError(
           `Expected numeric value at ${step.path}`,
@@ -312,6 +362,7 @@ export class AcceptanceRunner {
           const isAssertion=error instanceof StepAssertionError;
           const expected=isAssertion?error.expected:("expected" in step?step.expected:undefined);
           const actual=isAssertion?error.actual:undefined;
+          const diagnostics=isAssertion?error.diagnostics:undefined;
           steps.push({
             index,
             type:step.type,
@@ -321,6 +372,7 @@ export class AcceptanceRunner {
             error:message,
             ...(expected!==undefined?{expected}:{}),
             ...(actual!==undefined?{actual}:{}),
+            ...(diagnostics!==undefined?{diagnostics}:{}),
           });
           break;
         }
