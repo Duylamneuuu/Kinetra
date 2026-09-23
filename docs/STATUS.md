@@ -28,6 +28,10 @@ Legend:
 
 ## Merged subsystem notes
 
+### Authoring components
+
+`listRuntimeComponents()` returns the component names the player runtime interprets (Camera, CharacterBody, Collider, Light, Model, NavMesh, Primitive, RigidBody, Script, Transform) with field notes for defaults and supported enums. Unknown component names remain valid project JSON. Proof level: project-model unit tests. Not an MCP tool.
+
 ### Asset pipeline
 
 What has meaningful proof:
