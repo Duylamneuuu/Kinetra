@@ -120,7 +120,8 @@ What has meaningful proof:
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
-- end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
+- command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
 
 What remains:
 - perceptual/AI visual critique;
