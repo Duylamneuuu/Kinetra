@@ -134,7 +134,7 @@ What remains:
 What has meaningful proof:
 - Electron player runtime controlled over Windows named pipes (`ElectronRuntimeHost`);
 - cross-platform stdio bridge transport (`transport: "stdio"`) with identical request/response protocol, proven by Linux cloud smoke;
-- one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow. Dev smoke does not copy launch switches; `ElectronRuntimeHost` applies `LINUX_ELECTRON_LAUNCH_ARGS` on Linux;
+- one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow. Dev smoke does not copy launch switches; `ElectronRuntimeHost` applies `LINUX_ELECTRON_LAUNCH_ARGS` on Linux. Proof for that single policy: `node apps/player/scripts/smoke-linux.mjs --iterations 1` on this branch passed 9 checks with no leaked processes (LINUX CLOUD, dev Electron, one iteration);
 - handshake synchronization (document load + renderer ready via `.cts` preload script);
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
 - live structured entity query and semantic input injection (`runtime.injectInput`);
