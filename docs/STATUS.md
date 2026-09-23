@@ -134,7 +134,7 @@ What remains:
 What has meaningful proof:
 - Electron player runtime controlled over Windows named pipes (`ElectronRuntimeHost`);
 - cross-platform stdio bridge transport (`transport: "stdio"`) with identical request/response protocol, proven by Linux cloud smoke;
-- one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow;
+- one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow. Dev smoke does not copy launch switches; `ElectronRuntimeHost` applies `LINUX_ELECTRON_LAUNCH_ARGS` on Linux;
 - handshake synchronization (document load + renderer ready via `.cts` preload script);
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
 - live structured entity query and semantic input injection (`runtime.injectInput`);

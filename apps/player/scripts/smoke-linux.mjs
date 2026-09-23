@@ -29,14 +29,6 @@ const defaultOutDir = join(appRoot, "dist", "linux-smoke");
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const MIN_PNG_BYTES = 1_000;
 const OVERALL_TIMEOUT_MS = 240_000;
-// Software-rendering/sandbox switches for GPU-less cloud VMs. Linux-only:
-// Windows flows never see these.
-const LINUX_ELECTRON_ARGS = [
-  "--no-sandbox",
-  "--disable-gpu",
-  "--disable-dev-shm-usage",
-  "--enable-unsafe-swiftshader",
-];
 
 function parseArgs(argv) {
   const args = { outDir: defaultOutDir, iterations: 2 };
@@ -183,9 +175,10 @@ async function runIteration({
       });
   };
 
+  // Linux sandbox/GPU switches are LINUX_ELECTRON_LAUNCH_ARGS inside
+  // ElectronRuntimeHost. This script must not keep a second copy.
   const host = new ElectronRuntimeHost({
     transport: "stdio",
-    electronArgs: LINUX_ELECTRON_ARGS,
     requestTimeoutMs: 30_000,
   });
   let framePath;

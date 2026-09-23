@@ -14,6 +14,7 @@
     "package:linux": "pnpm build && node scripts/package-linux.mjs",
     "smoke:win": "node scripts/smoke-win.mjs",
     "smoke:linux": "node scripts/smoke-linux.mjs",
+    "test": "node --test test/*.test.mjs",
     "smoke:linux:packaged": "node scripts/smoke-linux-packaged.mjs"
   },
   "dependencies": {
