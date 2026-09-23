@@ -93,7 +93,26 @@ export interface ElectronRuntimeHostOptions {
   requestTimeoutMs?: number;
   saveDir?: string;
   userDataDir?: string;
+  /**
+   * Runtime bridge transport.
+   *
+   * - `"pipe"` (default): named pipe / unix socket bridge. Unchanged
+   *   Windows behavior; existing tests and packaged-exe flows use this.
+   * - `"stdio"`: line-delimited JSON over the child process stdio streams
+   *   (`KINETRA_RUNTIME_BRIDGE_STDIO=1`). Used by Linux cloud verification
+   *   where a cross-platform stdio bridge is simpler than socket files.
+   */
+  transport?: ElectronRuntimeTransport;
+  /**
+   * Extra argv entries passed to Electron ahead of the player entry point
+   * (Chromium/Electron switches such as `--no-sandbox`). Empty by default.
+   * Linux cloud smoke passes software-rendering/sandbox switches here;
+   * Windows flows pass nothing and are unaffected.
+   */
+  electronArgs?: string[];
 }
+
+export type ElectronRuntimeTransport = "pipe" | "stdio";
 
 function findRepositoryRoot(): string {
   let current = dirname(fileURLToPath(import.meta.url));
@@ -145,10 +164,13 @@ export class ElectronRuntimeHost implements RuntimeHost {
   readonly requestTimeoutMs: number;
   readonly saveDir: string | undefined;
   readonly userDataDir: string | undefined;
+  readonly transport: ElectronRuntimeTransport;
+  readonly electronArgs: readonly string[];
 
   #child: ChildProcessWithoutNullStreams | undefined;
   #server: Server | undefined;
   #socket: Socket | undefined;
+  #stdioLines: ReturnType<typeof createInterface> | undefined;
   #pipePath: string | undefined;
   #ownedUserDataDir: string | undefined;
   #pending = new Map<string, PendingRequest>();
@@ -172,6 +194,8 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.saveDir = options.saveDir;
     this.userDataDir = options.userDataDir;
+    this.transport = options.transport ?? "pipe";
+    this.electronArgs = Object.freeze([...(options.electronArgs ?? [])]);
   }
 
   async start(
@@ -419,9 +443,15 @@ export class ElectronRuntimeHost implements RuntimeHost {
     const child = this.#child;
     const socket = this.#socket;
     const server = this.#server;
+    const stdioLines = this.#stdioLines;
+
+    const bridgeWritable =
+      this.transport === "stdio"
+        ? Boolean(child && !child.stdin.destroyed)
+        : Boolean(socket && !socket.destroyed);
 
     // Runtime stop is polite, but teardown must never be hostage to a broken renderer.
-    if (child && socket && !socket.destroyed) {
+    if (child && bridgeWritable) {
       try {
         await Promise.race([
           this.#request("runtime.stop", {}),
@@ -436,6 +466,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     this.#socket = undefined;
     socket?.destroy();
+
+    this.#stdioLines = undefined;
+    stdioLines?.close();
 
     this.#server = undefined;
     if (server) {
@@ -464,6 +497,30 @@ export class ElectronRuntimeHost implements RuntimeHost {
       }
 
       child.unref();
+
+      // Bounded wait so repeated invocations cannot leak Electron processes.
+      // The process was already signalled above; this only escalates if it
+      // refuses to exit.
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = await Promise.race([
+          new Promise<boolean>((resolveExit) => {
+            child.once("exit", () => resolveExit(true));
+            if (child.exitCode !== null || child.signalCode !== null) {
+              resolveExit(true);
+            }
+          }),
+          new Promise<boolean>((resolveTimeout) =>
+            setTimeout(() => resolveTimeout(false), 5_000),
+          ),
+        ]);
+        if (!exited && child.exitCode === null && child.signalCode === null) {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }
+      }
     }
 
     if (this.#ownedUserDataDir) {
@@ -489,6 +546,15 @@ export class ElectronRuntimeHost implements RuntimeHost {
       return;
     }
 
+    if (this.transport === "stdio") {
+      await this.#ensureStdioProcess();
+      return;
+    }
+
+    await this.#ensurePipeProcess();
+  }
+
+  async #ensurePipeProcess(): Promise<void> {
     const pipePath = runtimePipePath();
     this.#pipePath = pipePath;
 
@@ -521,11 +587,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       server.listen(pipePath, resolveListen);
     });
 
-    const effectiveUserDataDir =
-      this.userDataDir ?? join(tmpdir(), `kinetra-ud-${randomUUID()}`);
-    if (!this.userDataDir) {
-      this.#ownedUserDataDir = effectiveUserDataDir;
-    }
+    const effectiveUserDataDir = this.#claimUserDataDir();
 
     const electronEnv: NodeJS.ProcessEnv = {
       ...process.env,
@@ -538,14 +600,50 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     const executable = this.runtimeExecutable ?? this.electronExecutable;
     const args = this.runtimeExecutable
-      ? [
-          ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
-          `--user-data-dir=${effectiveUserDataDir}`,
-        ]
+      ? [...this.#appArgs(effectiveUserDataDir)]
+      : [this.playerEntry, ...this.#appArgs(effectiveUserDataDir)];
+
+    const child = spawn(executable, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+      env: electronEnv,
+    });
+
+    this.#child = child;
+    this.#armReadyPromise();
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8").trim();
+      if (text) {
+        process.stderr.write(`[kinetra-electron:stdout] ${text}\n`);
+      }
+    });
+
+    this.#watchChild(child);
+
+    await this.#readyPromise;
+  }
+
+  async #ensureStdioProcess(): Promise<void> {
+    const effectiveUserDataDir = this.#claimUserDataDir();
+
+    const electronEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      KINETRA_RUNTIME_BRIDGE_STDIO: "1",
+      KINETRA_USER_DATA_DIR: effectiveUserDataDir,
+      ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
+    };
+
+    delete electronEnv["ELECTRON_RUN_AS_NODE"];
+    delete electronEnv["KINETRA_RUNTIME_BRIDGE_PIPE"];
+
+    const executable = this.runtimeExecutable ?? this.electronExecutable;
+    const args = this.runtimeExecutable
+      ? [...this.electronArgs, ...this.#appArgs(effectiveUserDataDir)]
       : [
+          ...this.electronArgs,
           this.playerEntry,
-          ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
-          `--user-data-dir=${effectiveUserDataDir}`,
+          ...this.#appArgs(effectiveUserDataDir),
         ];
 
     const child = spawn(executable, args, {
@@ -556,6 +654,36 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     this.#child = child;
 
+    const output = createInterface({
+      input: child.stdout,
+      crlfDelay: Infinity,
+    });
+    this.#stdioLines = output;
+    output.on("line", (line) => this.#handleStdioLine(line));
+
+    this.#armReadyPromise();
+    this.#watchChild(child);
+
+    await this.#readyPromise;
+  }
+
+  #claimUserDataDir(): string {
+    const effectiveUserDataDir =
+      this.userDataDir ?? join(tmpdir(), `kinetra-ud-${randomUUID()}`);
+    if (!this.userDataDir) {
+      this.#ownedUserDataDir = effectiveUserDataDir;
+    }
+    return effectiveUserDataDir;
+  }
+
+  #appArgs(effectiveUserDataDir: string): string[] {
+    return [
+      ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
+      `--user-data-dir=${effectiveUserDataDir}`,
+    ];
+  }
+
+  #armReadyPromise(): void {
     this.#readyPromise = new Promise<void>((resolveReady, rejectReady) => {
       const timer = setTimeout(() => {
         rejectReady(
@@ -574,14 +702,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
         rejectReady(err);
       };
     });
+  }
 
-    child.stdout.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8").trim();
-      if (text) {
-        process.stderr.write(`[kinetra-electron:stdout] ${text}\n`);
-      }
-    });
-
+  #watchChild(child: ChildProcessWithoutNullStreams): void {
     child.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
       if (text) {
@@ -603,8 +726,20 @@ export class ElectronRuntimeHost implements RuntimeHost {
       this.#rejectAllPending(error);
       this.#resetProcess(child);
     });
+  }
 
-    await this.#readyPromise;
+  #handleStdioLine(line: string): void {
+    // In stdio mode the child stdout channel carries bridge messages.
+    // Anything else is unexpected process chatter: surface it for diagnosis
+    // instead of feeding it to the JSON bridge parser.
+    if (!line.trim()) {
+      return;
+    }
+    if (!line.trimStart().startsWith("{")) {
+      process.stderr.write(`[kinetra-electron:stdout] ${line}\n`);
+      return;
+    }
+    this.#handleBridgeLine(line);
   }
 
   #handleBridgeLine(line: string): void {
@@ -659,14 +794,45 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async #request<T = unknown>(method: string, params: unknown): Promise<T> {
     await this.#ensureProcess();
 
+    const id = `host_${this.#nextRequestId++}`;
+    const line = `${JSON.stringify({
+      id,
+      method,
+      params,
+    })}\n`;
+
+    if (this.transport === "stdio") {
+      const child = this.#child;
+      if (!child || child.stdin.destroyed) {
+        throw new Error("Electron runtime bridge stdin is unavailable");
+      }
+      const response = this.#trackPending<T>(id, method);
+      try {
+        child.stdin.write(line, "utf8");
+      } catch (error) {
+        this.#pending.delete(id);
+        throw error;
+      }
+      return response;
+    }
+
     const socket = this.#socket;
 
     if (!socket || socket.destroyed) {
       throw new Error("Electron runtime bridge socket is unavailable");
     }
 
-    const id = `host_${this.#nextRequestId++}`;
+    const response = this.#trackPending<T>(id, method);
+    try {
+      socket.write(line, "utf8");
+    } catch (error) {
+      this.#pending.delete(id);
+      throw error;
+    }
+    return response;
+  }
 
+  #trackPending<T>(id: string, method: string): Promise<T> {
     const response = new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
@@ -680,16 +846,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       this.#pending.set(id, { resolve, reject, timer });
     });
 
-    socket.write(
-      `${JSON.stringify({
-        id,
-        method,
-        params,
-      })}\n`,
-      "utf8",
-    );
-
-    return (await response) as T;
+    return response as Promise<T>;
   }
 
   #rejectAllPending(error: Error): void {

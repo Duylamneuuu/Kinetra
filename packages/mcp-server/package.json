@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/service.test.js dist/test/starter-project.test.js dist/test/electron-runtime.test.js dist/test/real-mcp-acceptance.test.js"
+    "test": "node --test dist/test/service.test.js dist/test/tool-error.test.js dist/test/starter-project.test.js dist/test/electron-runtime.test.js dist/test/real-mcp-acceptance.test.js"
   },
   "devDependencies": {
     "@kinetra/reference-game": "workspace:*",
