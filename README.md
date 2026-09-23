@@ -12,7 +12,7 @@ The core product thesis is simple:
 
 Kinetra is currently at a **pre-alpha architecture/handoff checkpoint**.
 
-Several foundational and subsystem cores are merged, while the real Electron runtime bridge, observer editor, physics/navigation integration and release/Steam work remain experimental/WIP.
+Foundational authoring, the real Electron runtime bridge, physics, navigation, and the Arena reference game have proven slices on `main`. The observer editor and release/Steam work remain experimental. `docs/STATUS.md` is the source of truth for which proof is Windows, Linux cloud, or still open.
 
 Before implementing anything, read:
 
@@ -124,8 +124,8 @@ packages/
   audio/              mixer/bus semantics
   save-state/         save/settings migrations/storage contracts
   verification/       acceptance proof
-  physics-rapier/     planned/WIP adapter boundary
-  navigation-recast/  planned/WIP adapter boundary
+  physics-rapier/     Rapier runtime adapter
+  navigation-recast/  Recast runtime adapter
   desktop-build/      planned/WIP release/platform boundary
 
 agents/
@@ -140,7 +140,7 @@ docs/
   research/
 
 examples/
-  reference-game/     future complete-game proof
+  reference-game/     Kinetra Arena vertical slice
 ```
 
 ## License
