@@ -17,8 +17,10 @@ import type {
   CommandResult,
   EngineCommand,
   EntityQuery,
+  EntityQueryEntityMiss,
   EntityQueryItem,
   EntityQueryResult,
+  EntityQueryUnmatched,
   ExecuteOptions,
 } from "./types.js";
 
@@ -351,6 +353,20 @@ export class CommandBus {
   }
 
   queryEntities(query: EntityQuery = {}): EntityQueryResult {
+    const unmatched = this.#queryUnmatched(query);
+    const offset = Math.max(0, query.offset ?? 0);
+    const limit = Math.min(500, Math.max(1, query.limit ?? 100));
+
+    if (unmatched?.sceneId !== undefined) {
+      return {
+        items: [],
+        total: 0,
+        offset,
+        limit,
+        unmatched,
+      };
+    }
+
     const matched: EntityQueryItem[] = [];
 
     for (const scene of this.#project.scenes) {
@@ -379,8 +395,6 @@ export class CommandBus {
       }
     }
 
-    const offset = Math.max(0, query.offset ?? 0);
-    const limit = Math.min(500, Math.max(1, query.limit ?? 100));
     const items = matched.slice(offset, offset + limit);
     const nextOffset = offset + items.length < matched.length ? offset + items.length : undefined;
 
@@ -390,10 +404,104 @@ export class CommandBus {
       offset,
       limit,
       ...(nextOffset !== undefined ? { nextOffset } : {}),
+      ...(unmatched ? { unmatched } : {}),
+    };
+  }
+
+  #queryUnmatched(query: EntityQuery): EntityQueryUnmatched | undefined {
+    const scenes = this.#project.scenes;
+
+    if (
+      query.sceneId !== undefined &&
+      !scenes.some((scene) => scene.id === query.sceneId)
+    ) {
+      const available = boundedIds(scenes.map((scene) => scene.id));
+      return {
+        sceneId: query.sceneId,
+        availableSceneIds: available.shown,
+        ...(available.omitted > 0 ? { omittedSceneCount: available.omitted } : {}),
+      };
+    }
+
+    if (!query.ids || query.ids.length === 0) {
+      return undefined;
+    }
+
+    const inScope = new Set<string>();
+    for (const scene of scenes) {
+      if (query.sceneId !== undefined && scene.id !== query.sceneId) {
+        continue;
+      }
+      for (const entity of scene.entities) {
+        inScope.add(entity.id);
+      }
+    }
+
+    const elsewhere = new Map<string, string>();
+    if (query.sceneId !== undefined) {
+      for (const scene of scenes) {
+        if (scene.id === query.sceneId) {
+          continue;
+        }
+        for (const entity of scene.entities) {
+          if (!elsewhere.has(entity.id)) {
+            elsewhere.set(entity.id, scene.id);
+          }
+        }
+      }
+    }
+
+    const misses: EntityQueryEntityMiss[] = [];
+    const seen = new Set<string>();
+    for (const id of query.ids) {
+      if (seen.has(id) || inScope.has(id)) {
+        seen.add(id);
+        continue;
+      }
+      seen.add(id);
+      const otherSceneId = elsewhere.get(id);
+      misses.push(otherSceneId ? { id, sceneId: otherSceneId } : { id });
+    }
+
+    if (misses.length === 0) {
+      return undefined;
+    }
+
+    const bounded = boundedEntityMisses(misses);
+    return {
+      entities: bounded.shown,
+      ...(bounded.omitted > 0 ? { omittedEntityCount: bounded.omitted } : {}),
     };
   }
 
   eventLog(): CommandEvent[] {
     return structuredClone(this.#events);
   }
+}
+
+const QUERY_ALTERNATIVE_LIMIT = 12;
+
+function boundedIds(ids: readonly string[]): { shown: string[]; omitted: number } {
+  const unique = [...new Set(ids)].sort();
+  return {
+    shown: unique.slice(0, QUERY_ALTERNATIVE_LIMIT),
+    omitted: Math.max(0, unique.length - QUERY_ALTERNATIVE_LIMIT),
+  };
+}
+
+function boundedEntityMisses(misses: readonly EntityQueryEntityMiss[]): {
+  shown: EntityQueryEntityMiss[];
+  omitted: number;
+} {
+  const byId = new Map<string, EntityQueryEntityMiss>();
+  for (const miss of misses) {
+    if (!byId.has(miss.id)) {
+      byId.set(miss.id, miss);
+    }
+  }
+  const unique = [...byId.values()].sort((left, right) => left.id.localeCompare(right.id));
+  return {
+    shown: unique.slice(0, QUERY_ALTERNATIVE_LIMIT),
+    omitted: Math.max(0, unique.length - QUERY_ALTERNATIVE_LIMIT),
+  };
 }

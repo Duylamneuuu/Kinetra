@@ -66,6 +66,7 @@ test("executes atomic create transaction and exposes narrow queries", () => {
 
   assert.equal(query.total, 1);
   assert.deepEqual(query.items[0]?.entity.components, { Health: { value: 10 } });
+  assert.equal(query.unmatched, undefined);
 });
 
 test("every command error code includes a next-step remediation", () => {
@@ -206,6 +207,110 @@ test("rejects malformed untrusted command JSON before mutation", () => {
 
   assert.equal(bus.revision, 0);
   assert.equal(bus.queryEntities().total, 0);
+});
+
+test("entity query names unmatched scene and entity ids without changing matches", () => {
+  const bus = new CommandBus(project());
+  const otherSceneId = stableId("scene", "other");
+  const pagedId = stableId("entity", "paged");
+
+  bus.execute({
+    requestId: "other-scene",
+    command: "scene.create",
+    payload: { scene: { id: otherSceneId, name: "Other", entities: [] } },
+  });
+  bus.executeTransaction([
+    {
+      requestId: "root",
+      command: "entity.create",
+      payload: { sceneId, entity: { id: rootId, name: "Root", components: {} } },
+    },
+    {
+      requestId: "child",
+      command: "entity.create",
+      payload: {
+        sceneId,
+        entity: { id: childId, name: "Child", components: { Health: { value: 1 } } },
+      },
+    },
+    {
+      requestId: "paged",
+      command: "entity.create",
+      payload: { sceneId, entity: { id: pagedId, name: "Paged", components: {} } },
+    },
+    {
+      requestId: "away",
+      command: "entity.create",
+      payload: {
+        sceneId: otherSceneId,
+        entity: { id: stableId("entity", "away"), name: "Away", components: {} },
+      },
+    },
+  ]);
+
+  const missingScene = bus.queryEntities({ sceneId: "scene-missing", ids: [rootId] });
+  assert.equal(missingScene.total, 0);
+  assert.deepEqual(missingScene.items, []);
+  assert.equal(missingScene.unmatched?.sceneId, "scene-missing");
+  assert.deepEqual(missingScene.unmatched?.availableSceneIds, [otherSceneId, sceneId].sort());
+  assert.equal(missingScene.unmatched?.entities, undefined);
+
+  const missingEntity = bus.queryEntities({ sceneId, ids: [rootId, "entity-missing"] });
+  assert.equal(missingEntity.total, 1);
+  assert.equal(missingEntity.items[0]?.entity.id, rootId);
+  assert.deepEqual(missingEntity.unmatched?.entities, [{ id: "entity-missing" }]);
+
+  const otherScene = bus.queryEntities({
+    sceneId,
+    ids: [stableId("entity", "away")],
+  });
+  assert.equal(otherScene.total, 0);
+  assert.deepEqual(otherScene.unmatched?.entities, [
+    { id: stableId("entity", "away"), sceneId: otherSceneId },
+  ]);
+
+  const filtered = bus.queryEntities({
+    sceneId,
+    ids: [childId],
+    component: "MissingComponent",
+  });
+  assert.equal(filtered.total, 0);
+  assert.equal(filtered.unmatched, undefined);
+
+  const page = bus.queryEntities({
+    ids: [rootId, childId, pagedId],
+    limit: 1,
+  });
+  assert.equal(page.total, 3);
+  assert.equal(page.items.length, 1);
+  assert.equal(page.unmatched, undefined);
+
+  const manyIds = Array.from({ length: 14 }, (_, index) => `missing-${String(index).padStart(2, "0")}`);
+  const capped = bus.queryEntities({ ids: [...manyIds, rootId] });
+  assert.equal(capped.total, 1);
+  assert.equal(capped.unmatched?.entities?.length, 12);
+  assert.deepEqual(
+    capped.unmatched?.entities?.map((miss) => miss.id),
+    manyIds.slice(0, 12),
+  );
+  assert.equal(capped.unmatched?.omittedEntityCount, 2);
+
+  for (let index = 0; index < 12; index += 1) {
+    bus.execute({
+      requestId: `extra-scene-${index}`,
+      command: "scene.create",
+      payload: {
+        scene: { id: `scene-extra-${String(index).padStart(2, "0")}`, name: "Extra", entities: [] },
+      },
+    });
+  }
+  const manyScenes = bus.queryEntities({ sceneId: "scene-missing" });
+  assert.equal(manyScenes.total, 0);
+  assert.deepEqual(
+    manyScenes.unmatched?.availableSceneIds,
+    Array.from({ length: 12 }, (_, index) => `scene-extra-${String(index).padStart(2, "0")}`),
+  );
+  assert.equal(manyScenes.unmatched?.omittedSceneCount, 2);
 });
 
 test("reparent and cascade delete obey hierarchy rules", () => {

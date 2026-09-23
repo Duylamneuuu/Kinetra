@@ -89,12 +89,34 @@ export interface EntityQueryItem {
   entity: EntityDefinition;
 }
 
+/** An entity id from the query that is not in the searched scenes. */
+export interface EntityQueryEntityMiss {
+  id: string;
+  /** Scene that contains this entity when the query was limited to a different scene. */
+  sceneId?: string;
+}
+
+/**
+ * Caller-supplied ids that did not match.
+ * Omitted when every supplied scene id and entity id matched.
+ * `items` and `total` stay the matched page; misses are not copied into them.
+ */
+export interface EntityQueryUnmatched {
+  /** Supplied scene id that is not in the project. Entity ids are not searched in this case. */
+  sceneId?: string;
+  availableSceneIds?: string[];
+  omittedSceneCount?: number;
+  entities?: EntityQueryEntityMiss[];
+  omittedEntityCount?: number;
+}
+
 export interface EntityQueryResult {
   items: EntityQueryItem[];
   total: number;
   offset: number;
   limit: number;
   nextOffset?: number;
+  unmatched?: EntityQueryUnmatched;
 }
 
 export interface CommandBusSnapshot {

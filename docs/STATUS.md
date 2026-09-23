@@ -123,6 +123,7 @@ What has meaningful proof:
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
 - command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
+- `entity.query` keeps `items` and `total` as the matched page. When the caller supplies a scene id or entity ids that are absent, `unmatched` names that scene (with up to 12 available scene ids) or those entity ids (with the other scene id when the entity exists elsewhere). A component or name filter that simply matches nothing does not set `unmatched`. An id on a later page is not a miss. Proof level: command-bus unit tests. Not an MCP schema change.
 
 What remains:
 - perceptual/AI visual critique;
