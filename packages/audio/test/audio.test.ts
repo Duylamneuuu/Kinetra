@@ -14,6 +14,65 @@ test("audio bus gain and mute propagate through hierarchy", () => {
   assert.equal(mixer.effectiveGain("sfx"), 0);
 });
 
+test("audio bus errors name a missing parent and a cycle path", () => {
+  assert.throws(
+    () =>
+      new AudioMixerModel([
+        { id: "master", gain: 1 },
+        { id: "music", parentId: "missing", gain: 1 },
+      ]),
+    /Audio bus parent "missing" is missing\. Available buses: master, music\./,
+  );
+
+  assert.throws(
+    () =>
+      new AudioMixerModel([
+        { id: "music", parentId: "sfx", gain: 1 },
+        { id: "sfx", parentId: "music", gain: 1 },
+      ]),
+    /Audio bus cycle detected: music -> sfx -> music\./,
+  );
+
+  const ids = Array.from({ length: 13 }, (_, index) => `bus-${String(index).padStart(2, "0")}`);
+  assert.throws(
+    () =>
+      new AudioMixerModel(
+        ids.map((id, index) => ({
+          id,
+          parentId: ids[(index + 1) % ids.length],
+          gain: 1,
+        })),
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        error.message,
+        `Audio bus cycle detected: ${ids.slice(0, 12).join(" -> ")}, and 1 more, returning to ${ids[0]}.`,
+      );
+      assert.equal(error.message.includes("bus-12"), false);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () =>
+      new AudioMixerModel([
+        ...ids.map((id) => ({ id, gain: 1 })),
+        { id: "voice", parentId: "missing", gain: 1 },
+      ]),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(
+        error.message,
+        /Audio bus parent "missing" is missing\. Available buses: bus-00, bus-01, bus-02, bus-03, bus-04, bus-05, bus-06, bus-07, bus-08, bus-09, bus-10, bus-11, and 2 more\./,
+      );
+      assert.equal(error.message.includes("bus-12"), false);
+      assert.equal(error.message.includes("voice"), false);
+      return true;
+    },
+  );
+});
+
 test("audio mixer query methods inspect bus states correctly", () => {
   const mixer = new AudioMixerModel([
     { id: "master", gain: 0.8 },

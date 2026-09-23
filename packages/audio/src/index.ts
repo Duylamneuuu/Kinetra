@@ -43,7 +43,9 @@ export class AudioMixerModel {
       this.#buses.set(bus.id, structuredClone(bus));
     }
     for (const bus of this.#buses.values()) {
-      if (bus.parentId && !this.#buses.has(bus.parentId)) throw new Error(`Audio bus parent "${bus.parentId}" missing`);
+      if (bus.parentId && !this.#buses.has(bus.parentId)) {
+        throw new Error(describeMissingAudioBusParent(bus.parentId, [...this.#buses.keys()]));
+      }
     }
     for (const id of this.#buses.keys()) this.#assertNoCycle(id);
   }
@@ -92,7 +94,9 @@ export class AudioMixerModel {
     const visited = new Set<string>();
 
     while (current) {
-      if (visited.has(current.id)) throw new Error("Audio bus cycle detected");
+      if (visited.has(current.id)) {
+        throw new Error(describeAudioBusCycle(audioBusCycleFrom(current, this.#buses) ?? [current.id, current.id]));
+      }
       visited.add(current.id);
       if (current.muted) return 0;
       gain *= current.gain;
@@ -108,14 +112,64 @@ export class AudioMixerModel {
   }
 
   #assertNoCycle(id: string): void {
-    const visited = new Set<string>();
-    let current: AudioBusDefinition | undefined = this.#buses.get(id);
-    while (current) {
-      if (visited.has(current.id)) throw new Error("Audio bus cycle detected");
-      visited.add(current.id);
-      current = current.parentId ? this.#buses.get(current.parentId) : undefined;
+    const cycle = audioBusCycleFrom(this.#buses.get(id), this.#buses);
+    if (cycle) {
+      throw new Error(describeAudioBusCycle(cycle));
     }
   }
+}
+
+const AUDIO_BUS_LIST_LIMIT = 12;
+
+export function describeAudioBusCycle(cycle: readonly string[]): string {
+  if (cycle.length === 0) {
+    return "Audio bus cycle detected.";
+  }
+  const uniqueCount = new Set(cycle).size;
+  const closing = cycle[0] ?? "";
+  if (uniqueCount <= AUDIO_BUS_LIST_LIMIT) {
+    return `Audio bus cycle detected: ${cycle.join(" -> ")}.`;
+  }
+  const shown = cycle.slice(0, AUDIO_BUS_LIST_LIMIT);
+  const omitted = uniqueCount - AUDIO_BUS_LIST_LIMIT;
+  return `Audio bus cycle detected: ${shown.join(" -> ")}, and ${omitted} more, returning to ${closing}.`;
+}
+
+export function describeMissingAudioBusParent(parentId: string, busIds: readonly string[]): string {
+  const sorted = [...new Set(busIds.filter((id) => id.length > 0))].sort();
+  if (sorted.length === 0) {
+    return `Audio bus parent "${parentId}" is missing. Available buses: (none).`;
+  }
+  const shown = sorted.slice(0, AUDIO_BUS_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Audio bus parent "${parentId}" is missing. Available buses: ${shown.join(", ")}${extra}.`;
+}
+
+function audioBusCycleFrom(
+  start: AudioBusDefinition | undefined,
+  buses: ReadonlyMap<string, AudioBusDefinition>,
+): string[] | undefined {
+  if (!start) {
+    return undefined;
+  }
+  const stack = [start.id];
+  const index = new Map<string, number>([[start.id, 0]]);
+  let parentId = start.parentId;
+  while (parentId) {
+    const seenAt = index.get(parentId);
+    if (seenAt !== undefined) {
+      return [...stack.slice(seenAt), parentId];
+    }
+    const parent = buses.get(parentId);
+    if (!parent) {
+      return undefined;
+    }
+    index.set(parent.id, stack.length);
+    stack.push(parent.id);
+    parentId = parent.parentId;
+  }
+  return undefined;
 }
 
 export interface SyntheticWavOptions {

@@ -101,6 +101,7 @@ What exists:
 - semantic audio command execution (`audio.play`, `audio.stop`, `audio.setBusGain`, `audio.setBusMuted`);
 - truthful structured observation (`state.audio.initialized`, `state.audio.buses`, `state.audio.activePlaybacks`);
 - structured error handling for missing/corrupt audio assets and unknown buses;
+- a missing audio bus parent names up to 12 registered bus ids, and a bus cycle names the path (`music -> sfx -> music`), capped at 12 buses. Proof level: audio unit test. Unknown-bus wording on the audio-bus branch is separate.
 - clean audio resource teardown and session restart;
 - real AcceptanceRunner verification and active-playback PNG frame capture.
 
