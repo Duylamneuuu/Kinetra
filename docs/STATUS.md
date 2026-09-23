@@ -123,7 +123,7 @@ What has meaningful proof:
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
 - command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
-- `listEngineCommands()` returns the authoring envelope and the five command names with payload fields. An unknown command fails with `INVALID_COMMAND` and a remediation that lists those names. Proof level: command-bus unit tests. Not an MCP tool.
+- `listEngineCommands()` returns the authoring envelope and the five command names with payload fields. An unknown command fails with `INVALID_COMMAND` and a remediation that lists those names. The catalog names match the `case` labels in the parser and the bus. Proof level: command-bus unit tests. Not an MCP tool.
 
 What remains:
 - perceptual/AI visual critique;

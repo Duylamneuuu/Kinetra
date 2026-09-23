@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { CommandError, listEngineCommands, parseEngineCommand } from "../src/index.js";
 
@@ -90,4 +93,26 @@ test("every catalog command parses and an unknown name lists the alternatives", 
       error.message === 'Unsupported command "entity.move"' &&
       error.remediation === `Use one of: ${commandNames.join(", ")}.`,
   );
+});
+
+function sourceFile(name: string): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let hop = 0; hop < 6; hop += 1) {
+    const candidate = join(dir, "src", name);
+    if (existsSync(candidate)) return readFileSync(candidate, "utf8");
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(`command-bus src/${name} was not found`);
+}
+
+function commandCases(source: string): string[] {
+  return [...source.matchAll(/case "([^"]+)":/g)].map((match) => match[1] ?? "").sort();
+}
+
+test("catalog names are the command cases in the parser and the bus", () => {
+  const expected = [...commandNames].sort();
+  assert.deepEqual(commandCases(sourceFile("validation.ts")), expected);
+  assert.deepEqual(commandCases(sourceFile("bus.ts")), expected);
 });
