@@ -67,6 +67,69 @@ function collectDescendants(scene: SceneDefinition, rootId: string): Set<string>
   return ids;
 }
 
+const MISSING_ID_LIST_LIMIT = 12;
+
+function formatIdList(ids: readonly string[]): string {
+  const sorted = [...new Set(ids.filter((id) => id.length > 0))].sort();
+  const shown = sorted.slice(0, MISSING_ID_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return shown.length === 0 ? "" : `${shown.join(", ")}${extra}`;
+}
+
+function describeMissingScene(
+  sceneId: string,
+  project: ProjectDocument,
+): { message: string; remediation: string } {
+  const listed = formatIdList(project.scenes.map((scene) => scene.id));
+  if (!listed) {
+    return {
+      message: `Scene "${sceneId}" does not exist. No scenes are in the project.`,
+      remediation: "Call scene.create to add a scene, then retry with that scene id.",
+    };
+  }
+  return {
+    message: `Scene "${sceneId}" does not exist. Available scenes: ${listed}.`,
+    remediation: `Retry with one of: ${listed}. Call scene.query to refresh.`,
+  };
+}
+
+function describeMissingEntity(
+  entityId: string,
+  project: ProjectDocument,
+): { message: string; remediation: string } {
+  const listed = formatIdList(
+    project.scenes.flatMap((scene) => scene.entities.map((entity) => entity.id)),
+  );
+  if (!listed) {
+    return {
+      message: `Entity "${entityId}" does not exist. No entities are in the project.`,
+      remediation: "Call entity.create to add an entity, then retry with that entity id.",
+    };
+  }
+  return {
+    message: `Entity "${entityId}" does not exist. Available entities: ${listed}.`,
+    remediation: `Retry with one of: ${listed}. Call entity.query to refresh.`,
+  };
+}
+
+function describeMissingParent(
+  parentId: string,
+  scene: SceneDefinition,
+  where: string,
+): { message: string; remediation: string } {
+  const listed = formatIdList(scene.entities.map((entity) => entity.id));
+  const available = listed
+    ? ` Available entities: ${listed}.`
+    : " No entities are in this scene.";
+  return {
+    message: `Parent "${parentId}" does not exist ${where}.${available}`,
+    remediation: listed
+      ? `Retry with one of: ${listed}. Call entity.query to refresh.`
+      : "Create an entity in this scene, or omit parentId.",
+  };
+}
+
 function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeRecord[] {
   switch (command.command) {
     case "scene.create": {
@@ -81,10 +144,8 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
     case "entity.create": {
       const scene = project.scenes.find((candidate) => candidate.id === command.payload.sceneId);
       if (!scene) {
-        throw new CommandError(
-          "SCENE_NOT_FOUND",
-          `Scene "${command.payload.sceneId}" does not exist`,
-        );
+        const described = describeMissingScene(command.payload.sceneId, project);
+        throw new CommandError("SCENE_NOT_FOUND", described.message, described.remediation);
       }
 
       if (findEntity(project, command.payload.entity.id)) {
@@ -98,10 +159,12 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
         command.payload.entity.parentId &&
         !scene.entities.some((entity) => entity.id === command.payload.entity.parentId)
       ) {
-        throw new CommandError(
-          "PARENT_NOT_FOUND",
-          `Parent "${command.payload.entity.parentId}" does not exist in scene "${scene.id}"`,
+        const described = describeMissingParent(
+          command.payload.entity.parentId,
+          scene,
+          `in scene "${scene.id}"`,
         );
+        throw new CommandError("PARENT_NOT_FOUND", described.message, described.remediation);
       }
 
       scene.entities.push(structuredClone(command.payload.entity));
@@ -111,10 +174,8 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
     case "component.patch": {
       const located = findEntity(project, command.payload.entityId);
       if (!located) {
-        throw new CommandError(
-          "ENTITY_NOT_FOUND",
-          `Entity "${command.payload.entityId}" does not exist`,
-        );
+        const described = describeMissingEntity(command.payload.entityId, project);
+        throw new CommandError("ENTITY_NOT_FOUND", described.message, described.remediation);
       }
 
       const existing = located.entity.components[command.payload.component];
@@ -142,10 +203,8 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
     case "entity.reparent": {
       const located = findEntity(project, command.payload.entityId);
       if (!located) {
-        throw new CommandError(
-          "ENTITY_NOT_FOUND",
-          `Entity "${command.payload.entityId}" does not exist`,
-        );
+        const described = describeMissingEntity(command.payload.entityId, project);
+        throw new CommandError("ENTITY_NOT_FOUND", described.message, described.remediation);
       }
 
       if (command.payload.parentId) {
@@ -153,10 +212,12 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
           (candidate) => candidate.id === command.payload.parentId,
         );
         if (!parent) {
-          throw new CommandError(
-            "PARENT_NOT_FOUND",
-            `Parent "${command.payload.parentId}" does not exist in the same scene`,
+          const described = describeMissingParent(
+            command.payload.parentId,
+            located.scene,
+            "in the same scene",
           );
+          throw new CommandError("PARENT_NOT_FOUND", described.message, described.remediation);
         }
         located.entity.parentId = parent.id;
       } else {
@@ -169,10 +230,8 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
     case "entity.delete": {
       const located = findEntity(project, command.payload.entityId);
       if (!located) {
-        throw new CommandError(
-          "ENTITY_NOT_FOUND",
-          `Entity "${command.payload.entityId}" does not exist`,
-        );
+        const described = describeMissingEntity(command.payload.entityId, project);
+        throw new CommandError("ENTITY_NOT_FOUND", described.message, described.remediation);
       }
 
       const directChildren = located.scene.entities.filter(
@@ -180,9 +239,11 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
       );
 
       if (directChildren.length > 0 && command.payload.cascade !== true) {
+        const listed = formatIdList(directChildren.map((entity) => entity.id));
         throw new CommandError(
           "CHILDREN_EXIST",
-          `Entity "${located.entity.id}" has children; set cascade=true to delete the subtree`,
+          `Entity "${located.entity.id}" has children; set cascade=true to delete the subtree. Child ids: ${listed}.`,
+          `Reparent or delete ${listed}, or retry entity.delete with cascade=true.`,
         );
       }
 

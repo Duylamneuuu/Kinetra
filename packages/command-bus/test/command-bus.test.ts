@@ -259,3 +259,136 @@ test("reparent and cascade delete obey hierarchy rules", () => {
   assert.equal(deleted.changes.filter((change) => change.kind === "deleted").length, 2);
   assert.equal(bus.queryEntities().total, 0);
 });
+
+test("missing scene, entity, and parent errors name the ids that exist", () => {
+  const empty = new CommandBus({
+    schemaVersion: 1,
+    projectId: stableId("project", "empty"),
+    name: "Empty",
+    scenes: [],
+  });
+  assert.throws(
+    () =>
+      empty.execute({
+        requestId: "missing-scene",
+        command: "entity.create",
+        payload: {
+          sceneId: "missing",
+          entity: { id: stableId("entity", "new"), name: "New", components: {} },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommandError);
+      assert.equal(error.code, "SCENE_NOT_FOUND");
+      assert.match(error.message, /No scenes are in the project/);
+      assert.match(error.remediation, /scene\.create/);
+      return true;
+    },
+  );
+
+  const bus = new CommandBus(project());
+  bus.execute({
+    requestId: "root",
+    command: "entity.create",
+    payload: {
+      sceneId,
+      entity: { id: rootId, name: "Root", components: {} },
+    },
+  });
+
+  assert.throws(
+    () =>
+      bus.execute({
+        requestId: "patch-missing",
+        command: "component.patch",
+        payload: { entityId: "missing-entity", component: "Transform", patch: {} },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommandError);
+      assert.equal(error.code, "ENTITY_NOT_FOUND");
+      assert.match(error.message, new RegExp(`Available entities: ${rootId}`));
+      assert.match(error.remediation, /entity\.query/);
+      return true;
+    },
+  );
+
+  assert.throws(
+    () =>
+      bus.execute({
+        requestId: "bad-parent",
+        command: "entity.create",
+        payload: {
+          sceneId,
+          entity: {
+            id: childId,
+            name: "Child",
+            parentId: "missing-parent",
+            components: {},
+          },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommandError);
+      assert.equal(error.code, "PARENT_NOT_FOUND");
+      assert.match(error.message, new RegExp(`Available entities: ${rootId}`));
+      return true;
+    },
+  );
+
+  bus.execute({
+    requestId: "child",
+    command: "entity.create",
+    payload: {
+      sceneId,
+      entity: { id: childId, name: "Child", parentId: rootId, components: {} },
+    },
+  });
+  assert.throws(
+    () =>
+      bus.execute({
+        requestId: "delete-root",
+        command: "entity.delete",
+        payload: { entityId: rootId },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommandError);
+      assert.equal(error.code, "CHILDREN_EXIST");
+      assert.match(error.message, new RegExp(`Child ids: ${childId}`));
+      assert.match(error.remediation, /cascade=true/);
+      return true;
+    },
+  );
+});
+
+test("missing scene errors cap the scene list", () => {
+  const scenes = Array.from({ length: 14 }, (_, index) => ({
+    id: `scene-${String(index).padStart(2, "0")}`,
+    name: `Scene ${index}`,
+    entities: [],
+  }));
+  const bus = new CommandBus({
+    schemaVersion: 1,
+    projectId: stableId("project", "many-scenes"),
+    name: "Many scenes",
+    scenes,
+  });
+  assert.throws(
+    () =>
+      bus.execute({
+        requestId: "missing-scene",
+        command: "entity.create",
+        payload: {
+          sceneId: "missing",
+          entity: { id: stableId("entity", "new"), name: "New", components: {} },
+        },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommandError);
+      assert.match(error.message, /Available scenes: scene-00, scene-01/);
+      assert.match(error.message, /and 2 more/);
+      assert.equal(error.message.includes("scene-12"), false);
+      assert.match(error.remediation, /scene\.query/);
+      return true;
+    },
+  );
+});

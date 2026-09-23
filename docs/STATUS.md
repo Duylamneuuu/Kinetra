@@ -122,6 +122,7 @@ What has meaningful proof:
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
 - command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
+- missing scene, entity, and parent command errors name the ids that exist, capped at 12, and `entity.delete` names child ids when cascade is required. Proof level: UNIT (`@kinetra/command-bus`).
 
 What remains:
 - perceptual/AI visual critique;
