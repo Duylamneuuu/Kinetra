@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { copyFile, readFile } from "node:fs/promises";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -11,9 +11,19 @@ import type { AcceptanceManifest } from "@kinetra/verification";
 
 import { KinetraAgentService } from "../src/index.js";
 
-const fixturePath = fileURLToPath(
-  new URL("../../../examples/reference-game/arena.kinetra.json", import.meta.url),
-);
+function arenaFixturePath(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let hop = 0; hop < 8; hop += 1) {
+    const candidate = join(dir, "examples/reference-game/arena.kinetra.json");
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error("examples/reference-game/arena.kinetra.json was not found");
+}
+
+const fixturePath = arenaFixturePath();
 
 const realElectron =
   process.platform === "win32" ||
@@ -90,7 +100,7 @@ test(
       assert.equal(report.observations?.hostInfo && (report.observations.hostInfo as { isPackaged?: boolean }).isPackaged, false);
 
       const undone = await service.undo(patched.undoToken, patched.revision);
-      assert.equal(undone.success, true);
+      assert.equal(undone.ok, true);
       const restored = service.queryEntities({
         sceneId: scene.id,
         nameContains: "PowerCore",
