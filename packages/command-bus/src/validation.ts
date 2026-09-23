@@ -1,5 +1,6 @@
 import type { EntityDefinition, JsonValue, SceneDefinition } from "@kinetra/project-model";
 
+import { supportedCommandNames } from "./catalog.js";
 import { CommandError } from "./errors.js";
 import type { EngineCommand } from "./types.js";
 
@@ -172,7 +173,11 @@ export function parseEngineCommand(input: unknown): EngineCommand {
     }
 
     default:
-      throw new CommandError("INVALID_COMMAND", `Unsupported command "${input.command}"`);
+      throw new CommandError(
+        "INVALID_COMMAND",
+        `Unsupported command "${input.command}"`,
+        `Use one of: ${supportedCommandNames()}.`,
+      );
   }
 
   return structuredClone(input) as unknown as EngineCommand;

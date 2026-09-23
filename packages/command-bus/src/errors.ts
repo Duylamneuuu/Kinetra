@@ -27,7 +27,7 @@ const remediationByCode: Record<CommandErrorCode, string> = {
   COMPONENT_NOT_OBJECT:
     "Send the component value as a JSON object of fields to merge.",
   INVALID_COMMAND:
-    "Compare the command with the typed tool schema and resend a supported command name and payload.",
+    "Call listEngineCommands() and resend a supported command name with the payload fields it describes.",
 };
 
 export class CommandError extends Error {

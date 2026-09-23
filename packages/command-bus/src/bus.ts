@@ -8,6 +8,7 @@ import {
   type SceneDefinition,
 } from "@kinetra/project-model";
 
+import { supportedCommandNames } from "./catalog.js";
 import { CommandError } from "./errors.js";
 import { parseEngineCommand } from "./validation.js";
 import type {
@@ -198,7 +199,11 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
 
     default: {
       const exhaustive: never = command;
-      throw new CommandError("INVALID_COMMAND", `Unsupported command ${String(exhaustive)}`);
+      throw new CommandError(
+        "INVALID_COMMAND",
+        `Unsupported command ${String(exhaustive)}`,
+        `Use one of: ${supportedCommandNames()}.`,
+      );
     }
   }
 }
