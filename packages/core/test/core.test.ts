@@ -62,6 +62,28 @@ test("prefab instantiation creates stable hierarchy and explicit overrides",()=>
   assert.equal(first[1]?.parentId,first[0]?.id);
   assert.equal(first[0]?.id,second[0]?.id);
   assert.deepEqual(first[0]?.components.Health,{value:250});
+
+  assert.throws(
+    ()=>instantiatePrefab({
+      prefab:{
+        ...prefab,
+        entities:[
+          ...prefab.entities,
+          {localId:"orphan",name:"Orphan",parentLocalId:"missing-parent",components:{}},
+        ],
+      },
+      instanceId:"enemy-2",
+    }),
+    /Prefab parent "missing-parent" does not exist\. Available local ids: mesh, orphan, root\./,
+  );
+  assert.throws(
+    ()=>instantiatePrefab({
+      prefab,
+      instanceId:"enemy-3",
+      overrides:[{localId:"missing-local",component:"Health",patch:{value:1}}],
+    }),
+    /Override targets unknown prefab entity "missing-local"\. Available local ids: mesh, root\./,
+  );
 });
 
 test("ScriptRegistry and PlayerControllerScript with execution state tracking",async()=>{

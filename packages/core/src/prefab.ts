@@ -33,7 +33,10 @@ export function instantiatePrefab(input:{
 
   for(const entity of input.prefab.entities){
     if(entity.parentLocalId&&!localIds.has(entity.parentLocalId)){
-      throw new Error(`Prefab parent "${entity.parentLocalId}" does not exist`);
+      throw new Error(describePrefabLocalIds(
+        `Prefab parent "${entity.parentLocalId}" does not exist`,
+        [...localIds],
+      ));
     }
   }
 
@@ -49,7 +52,12 @@ export function instantiatePrefab(input:{
 
   for(const override of input.overrides??[]){
     const entity=byLocal.get(override.localId);
-    if(!entity) throw new Error(`Override targets unknown prefab entity "${override.localId}"`);
+    if(!entity){
+      throw new Error(describePrefabLocalIds(
+        `Override targets unknown prefab entity "${override.localId}"`,
+        [...localIds],
+      ));
+    }
     const existing=entity.components[override.component];
     if(existing!==undefined&&!jsonObject(existing)){
       throw new Error(`Component "${override.component}" is not object data and cannot be patched`);
@@ -61,4 +69,15 @@ export function instantiatePrefab(input:{
   }
 
   return result;
+}
+
+const PREFAB_LOCAL_ID_LIMIT=12;
+
+function describePrefabLocalIds(prefix:string,ids:readonly string[]):string{
+  const sorted=[...new Set(ids.filter((id)=>id.length>0))].sort();
+  if(sorted.length===0) return `${prefix}. Available local ids: (none).`;
+  const shown=sorted.slice(0,PREFAB_LOCAL_ID_LIMIT);
+  const hidden=sorted.length-shown.length;
+  const extra=hidden>0?`, and ${hidden} more`:"";
+  return `${prefix}. Available local ids: ${shown.join(", ")}${extra}.`;
 }
