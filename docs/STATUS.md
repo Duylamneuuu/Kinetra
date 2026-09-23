@@ -185,6 +185,7 @@ Still missing:
 
 What has meaningful proof:
 - complete reference game vertical slice authored as standard Kinetra project data (`@kinetra/reference-game`);
+- Arena authoring snapshot `examples/reference-game/arena.kinetra.json` matches `createArenaProject()` after schema validation and canonical serialization, including the Player, Enemy, SecurityConsole, PowerCore, Goal, ArenaManager, and MainCamera ids;
 - real Electron runtime boots directly into main menu shell with standard DOM/CSS overlay (`apps/player`);
 - player controllable via 3D semantic input (`player.moveRight`, `player.moveLeft`, `player.moveForward`, `player.moveBackward`, `player.attack`) and Gamepad snapshot provider;
 - script-owned gameplay transforms synchronized with scene graph and Rapier physics;
