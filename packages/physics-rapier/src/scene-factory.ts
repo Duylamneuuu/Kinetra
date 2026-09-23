@@ -108,6 +108,13 @@ export async function createPhysicsWorldFromScene(
           ? rigidBody.gravityScale
           : undefined;
 
+      if (shape !== "sphere" && shape !== "ball" && shape !== "capsule" && shape !== "box") {
+        world.dispose();
+        throw new Error(
+          `Unsupported collider shape "${shape}" on entity "${entity.id}". Available shapes: ball, box, capsule, sphere.`,
+        );
+      }
+
       if (shape === "sphere" || shape === "ball") {
         const radius = numberValue(
           collider?.radius ?? primitive?.radius,

@@ -134,7 +134,9 @@ export class RapierPhysicsWorld {
         break;
       }
       default:
-        throw new Error(`Unsupported dynamic body shape "${input.shape}"`);
+        throw new Error(
+          `Unsupported collider shape "${input.shape}" for body "${input.id}". Available shapes: box, capsule, sphere.`,
+        );
     }
 
     if (input.restitution !== undefined)

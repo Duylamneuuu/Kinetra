@@ -156,6 +156,7 @@ What has meaningful proof:
 - real-time transform synchronization from physics world into Three.js scene graph;
 - deterministic stepping command (`runtime.step`) exposed over the runtime bridge;
 - full acceptance verification (`real-physics.test.ts`) driving live Electron runtime with real PNG capture and clean teardown.
+- an explicit unknown dynamic collider shape is rejected and names the supported shapes. The scene factory accepts `ball`, `box`, `capsule`, and `sphere`. `addDynamicBody` accepts `box`, `capsule`, and `sphere`. An omitted shape still defaults to a box. Proof level: physics unit test. Not an Electron proof.
 
 Still missing:
 - raycasting / shape casting query API;

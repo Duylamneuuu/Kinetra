@@ -206,6 +206,45 @@ test("createPhysicsWorldFromScene instantiates bodies from SceneDefinition", asy
   }
 });
 
+test("unknown dynamic collider shapes name the supported shapes", async () => {
+  const scene: SceneDefinition = {
+    id: "scene_shapes",
+    name: "Shapes",
+    entities: [
+      {
+        id: "bad",
+        name: "Bad",
+        components: {
+          Transform: { position: [0, 1, 0] },
+          RigidBody: { type: "dynamic" },
+          Collider: { shape: "cylinder", radius: 0.5 },
+        },
+      },
+    ],
+  };
+
+  await assert.rejects(
+    () => createPhysicsWorldFromScene(scene),
+    /Unsupported collider shape "cylinder" on entity "bad"\. Available shapes: ball, box, capsule, sphere\./,
+  );
+
+  const physics = await RapierPhysicsWorld.create();
+  try {
+    assert.throws(
+      () =>
+        physics.addDynamicBody({
+          id: "bad-body",
+          position: { x: 0, y: 0, z: 0 },
+          shape: "cylinder" as "box",
+        }),
+      /Unsupported collider shape "cylinder" for body "bad-body"\. Available shapes: box, capsule, sphere\./,
+    );
+    assert.equal(physics.hasBody("bad-body"), false);
+  } finally {
+    physics.dispose();
+  }
+});
+
 test("physics world disposal is clean and idempotent", async () => {
   const physics = await RapierPhysicsWorld.create();
   physics.addFixedBox({
