@@ -34,6 +34,7 @@ Legend:
 What has meaningful proof:
 - deterministic source/import fingerprints;
 - asset dependency invalidation;
+- dependency cycle errors name the cycle path (`a -> b -> a`) and keep at most 12 assets in that path. Proof level: asset-pipeline unit test.
 - structured diagnostics;
 - GLB validation;
 - Blender headless fixture generation/export through CI;

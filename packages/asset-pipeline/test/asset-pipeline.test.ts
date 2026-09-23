@@ -47,7 +47,30 @@ test("database computes transitive invalidation set", () => {
 test("database rejects dependency cycles", () => {
   const db=new AssetDatabase();
   db.upsert(record("a",["b"]));
-  assert.throws(()=>db.upsert(record("b",["a"])),/cycle/i);
+  assert.throws(
+    () => db.upsert(record("b",["a"])),
+    /Asset dependency cycle detected: a -> b -> a\./,
+  );
+});
+
+test("database caps long dependency cycle paths at 12 assets", () => {
+  const db=new AssetDatabase();
+  const ids = Array.from({ length: 13 }, (_, index) => `asset-${String(index).padStart(2, "0")}`);
+  for (let index = 0; index < ids.length - 1; index += 1) {
+    db.upsert(record(ids[index]!, [ids[index + 1]!]));
+  }
+  assert.throws(
+    () => db.upsert(record(ids[12]!, [ids[0]!])),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const shown = ids.slice(0, 12).join(" -> ");
+      assert.equal(
+        error.message,
+        `Asset dependency cycle detected: ${shown}, and 1 more, returning to ${ids[0]}.`,
+      );
+      return true;
+    },
+  );
 });
 
 test("validator emits structured policy diagnostics", () => {

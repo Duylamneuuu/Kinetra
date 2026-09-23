@@ -58,19 +58,42 @@ export class AssetDatabase {
 
   #assertAcyclic(): void {
     const visiting = new Set<string>();
+    const stack: string[] = [];
     const visited = new Set<string>();
 
     const visit = (id: string): void => {
       if (visited.has(id)) return;
-      if (visiting.has(id)) throw new Error(`Asset dependency cycle detected at "${id}"`);
+      if (visiting.has(id)) {
+        const start = stack.indexOf(id);
+        throw new Error(describeAssetCycle([...stack.slice(start), id]));
+      }
       visiting.add(id);
+      stack.push(id);
       for (const dep of this.#records.get(id)?.dependencies ?? []) {
         if (this.#records.has(dep)) visit(dep);
       }
+      stack.pop();
       visiting.delete(id);
       visited.add(id);
     };
 
-    for (const id of this.#records.keys()) visit(id);
+    for (const id of [...this.#records.keys()].sort()) visit(id);
   }
+}
+
+const ASSET_CYCLE_LIMIT = 12;
+
+/** Names a cycle as `a -> b -> a`, keeping at most 12 assets in the path. */
+export function describeAssetCycle(cycle: readonly string[]): string {
+  if (cycle.length === 0) {
+    return "Asset dependency cycle detected.";
+  }
+  const uniqueCount = new Set(cycle).size;
+  const closing = cycle[0] ?? "";
+  if (uniqueCount <= ASSET_CYCLE_LIMIT) {
+    return `Asset dependency cycle detected: ${cycle.join(" -> ")}.`;
+  }
+  const shown = cycle.slice(0, ASSET_CYCLE_LIMIT);
+  const omitted = uniqueCount - ASSET_CYCLE_LIMIT;
+  return `Asset dependency cycle detected: ${shown.join(" -> ")}, and ${omitted} more, returning to ${closing}.`;
 }
