@@ -12,6 +12,7 @@ import {
   ScriptHost,
   ScriptRegistry,
   PlayerControllerScript,
+  BoundedLogBuffer,
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
@@ -53,6 +54,8 @@ import {
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
+
+const PLAYER_LOG_CAPACITY = 2000;
 
 export interface PlayerRuntimeLog {
   sequence: number;
@@ -209,8 +212,7 @@ export class PlayerRuntimeController {
   #stepped = false;
   #camera: THREE.Camera;
   #projectRevision: number | undefined;
-  #logs: PlayerRuntimeLog[] = [];
-  #nextLogSequence = 1;
+  #logs = new BoundedLogBuffer(PLAYER_LOG_CAPACITY);
   #storage: KeyValueStorage;
   #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
   #saveMigrator: SaveMigrator;
@@ -1536,9 +1538,7 @@ export class PlayerRuntimeController {
   }
 
   readLogs(sinceSequence = 0): PlayerRuntimeLog[] {
-    return this.#logs
-      .filter((entry) => entry.sequence > sinceSequence)
-      .map((entry) => structuredClone(entry));
+    return this.#logs.read(sinceSequence);
   }
 
   resize(): void {
@@ -1634,11 +1634,6 @@ export class PlayerRuntimeController {
     message: string,
     data?: Record<string, unknown>,
   ): void {
-    this.#logs.push({
-      sequence: this.#nextLogSequence++,
-      level,
-      message,
-      ...(data ? { data: structuredClone(data) } : {}),
-    });
+    this.#logs.append(level, message, data);
   }
 }

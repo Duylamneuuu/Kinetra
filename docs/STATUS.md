@@ -138,6 +138,7 @@ What has meaningful proof:
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
 - live structured entity query and semantic input injection (`runtime.injectInput`);
 - structured runtime log recording;
+- player runtime log retention is capped at 2000 entries. Overflow drops the oldest `debug`, then `info`, then `warning`, then `error`, and sequence numbers keep increasing. `readLogs` still returns the retained array. Proof level: UNIT (`BoundedLogBuffer`). Real Electron retention under a long session is not yet proven;
 - real non-empty PNG frame capture via `webContents.capturePage()`;
 - clean teardown without leaked Electron processes or dangling pipe sockets;
 - packaged Windows executable (`KinetraGame.exe`) smoke test and runtime bridge compatibility.

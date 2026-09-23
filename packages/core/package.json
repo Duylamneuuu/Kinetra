@@ -9,7 +9,7 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/core.test.js"
+    "test":"node --test dist/test/core.test.js dist/test/log-buffer.test.js"
   },
   "dependencies":{"@kinetra/project-model":"workspace:*"}
 }
