@@ -144,6 +144,13 @@ function defaultPlayerEntry(): string {
   return resolve(findRepositoryRoot(), "apps/player/dist/package");
 }
 
+export const LINUX_ELECTRON_LAUNCH_ARGS = [
+  "--no-sandbox",
+  "--disable-gpu",
+  "--disable-dev-shm-usage",
+  "--enable-unsafe-swiftshader",
+] as const;
+
 function runtimePipePath(): string {
   const id = `kinetra-runtime-${process.pid}-${randomUUID()}`;
 
@@ -490,6 +497,12 @@ export class ElectronRuntimeHost implements RuntimeHost {
               windowsHide: true,
               stdio: "ignore",
             });
+          } else if (process.platform === "linux" && child.pid) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch {
+              child.kill("SIGKILL");
+            }
           }
         } catch {
           // ignore
@@ -599,12 +612,22 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
 
+    if (process.platform === "linux") {
+      electronEnv.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
+    }
+
     const executable = this.runtimeExecutable ?? this.electronExecutable;
+    const platformArgs = this.#platformLaunchArgs();
     const args = this.runtimeExecutable
-      ? [...this.electronArgs, ...this.#appArgs(effectiveUserDataDir)]
+      ? [
+          ...this.electronArgs,
+          ...platformArgs,
+          ...this.#appArgs(effectiveUserDataDir),
+        ]
       : [
           ...this.electronArgs,
           this.playerEntry,
+          ...platformArgs,
           ...this.#appArgs(effectiveUserDataDir),
         ];
 
@@ -612,6 +635,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       env: electronEnv,
+      detached: process.platform === "linux",
     });
 
     this.#child = child;
@@ -642,12 +666,22 @@ export class ElectronRuntimeHost implements RuntimeHost {
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
     delete electronEnv["KINETRA_RUNTIME_BRIDGE_PIPE"];
 
+    if (process.platform === "linux") {
+      electronEnv.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
+    }
+
     const executable = this.runtimeExecutable ?? this.electronExecutable;
+    const platformArgs = this.#platformLaunchArgs();
     const args = this.runtimeExecutable
-      ? [...this.electronArgs, ...this.#appArgs(effectiveUserDataDir)]
+      ? [
+          ...this.electronArgs,
+          ...platformArgs,
+          ...this.#appArgs(effectiveUserDataDir),
+        ]
       : [
           ...this.electronArgs,
           this.playerEntry,
+          ...platformArgs,
           ...this.#appArgs(effectiveUserDataDir),
         ];
 
@@ -655,6 +689,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
       env: electronEnv,
+      detached: process.platform === "linux",
     });
 
     this.#child = child;
@@ -686,6 +721,10 @@ export class ElectronRuntimeHost implements RuntimeHost {
       ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
       `--user-data-dir=${effectiveUserDataDir}`,
     ];
+  }
+
+  #platformLaunchArgs(): string[] {
+    return process.platform === "linux" ? [...LINUX_ELECTRON_LAUNCH_ARGS] : [];
   }
 
   #armReadyPromise(): void {
@@ -899,20 +938,18 @@ export function canRunRealElectronTests(): boolean {
  * there is no GPU. Windows returns an empty list so existing CI behavior
  * stays unchanged.
  *
- * These flags are not applied by `ElectronRuntimeHost` itself. Verification
- * tests pass the result as `electronArgs`. On Linux this also shows the
- * bridge window so `capturePage()` composites the WebGL canvas instead of a
- * stale hidden DOM layer.
+ * The switch list is `LINUX_ELECTRON_LAUNCH_ARGS`. `ElectronRuntimeHost`
+ * already applies that list on Linux through `#platformLaunchArgs` for both
+ * the dev player and the packaged executable. Tests may also pass this
+ * function as `electronArgs`; that forwards the same list and does not
+ * introduce a second policy. On Linux this also shows the bridge window so
+ * `capturePage()` composites the WebGL canvas instead of a stale hidden DOM
+ * layer. The default host constructor leaves `electronArgs` empty.
  */
 export function realElectronLaunchArgs(): string[] {
   if (process.platform !== "linux") {
     return [];
   }
   process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
-  return [
-    "--no-sandbox",
-    "--disable-gpu",
-    "--disable-dev-shm-usage",
-    "--enable-unsafe-swiftshader",
-  ];
+  return [...LINUX_ELECTRON_LAUNCH_ARGS];
 }
