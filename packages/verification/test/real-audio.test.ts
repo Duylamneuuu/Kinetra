@@ -5,6 +5,7 @@ import { createSyntheticWav } from "@kinetra/audio";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -81,6 +82,7 @@ function audioFixtureProject(): ProjectDocument {
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }

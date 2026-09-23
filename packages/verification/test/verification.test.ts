@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   AcceptanceRunner,
   canRunRealElectronTests,
+  ElectronRuntimeHost,
+  realElectronLaunchArgs,
   runProcessSmoke,
   type RuntimeInput,
   type RuntimeLog,
@@ -137,6 +139,33 @@ test("process smoke can validate a packaged-process style command",async()=>{
   });
   assert.equal(result.exitCode,0);
   assert.match(result.stdout,/KINETRA_SMOKE_OK/);
+});
+
+test("default Electron host does not receive verification launch switches", () => {
+  const previous = process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW;
+  try {
+    const host = new ElectronRuntimeHost();
+    assert.deepEqual([...host.electronArgs], []);
+    const args = realElectronLaunchArgs();
+    if (process.platform === "linux") {
+      assert.deepEqual(args, [
+        "--no-sandbox",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--enable-unsafe-swiftshader",
+      ]);
+      assert.equal(process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW, "1");
+    } else {
+      assert.deepEqual(args, []);
+    }
+    assert.deepEqual([...host.electronArgs], []);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW;
+    } else {
+      process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = previous;
+    }
+  }
 });
 
 test("real Electron gate requires a display on Linux",{skip:process.platform!=="linux"},()=>{

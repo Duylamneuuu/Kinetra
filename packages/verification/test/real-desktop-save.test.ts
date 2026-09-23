@@ -8,6 +8,7 @@ import test from "node:test";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -86,6 +87,7 @@ function desktopSaveFixtureProject(): ProjectDocument {
 
 function createDesktopHost(saveDir: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     saveDir,
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE

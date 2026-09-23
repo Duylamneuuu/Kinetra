@@ -5,6 +5,7 @@ import { createSyntheticGlb } from "@kinetra/asset-pipeline";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -80,6 +81,7 @@ function modelFixtureProject(targetAssetId: string = testAssetId): ProjectDocume
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }

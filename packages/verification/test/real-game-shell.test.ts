@@ -25,6 +25,7 @@ import {
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -33,6 +34,7 @@ import {
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     ...(saveDir ? { saveDir } : {}),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE

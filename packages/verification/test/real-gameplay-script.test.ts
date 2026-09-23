@@ -4,6 +4,7 @@ import test from "node:test";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -82,6 +83,7 @@ function gameplayFixtureProject(scriptId: string = "PlayerController"): ProjectD
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }

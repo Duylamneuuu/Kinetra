@@ -5,6 +5,7 @@ import { createSyntheticAnimatedGlb } from "@kinetra/asset-pipeline";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
   canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -79,6 +80,7 @@ function animationFixtureProject(targetAssetId: string = testAssetId): ProjectDo
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
