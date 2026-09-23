@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 
-import { CommandBus, CommandError } from "../src/index.js";
+import { CommandBus, CommandError, type CommandErrorCode } from "../src/index.js";
 
 const sceneId = stableId("scene", "main");
 const rootId = stableId("entity", "root");
@@ -68,6 +68,29 @@ test("executes atomic create transaction and exposes narrow queries", () => {
   assert.deepEqual(query.items[0]?.entity.components, { Health: { value: 10 } });
 });
 
+test("every command error code includes a next-step remediation", () => {
+  const covered = {
+    STALE_REVISION: true,
+    SCENE_NOT_FOUND: true,
+    SCENE_ALREADY_EXISTS: true,
+    ENTITY_NOT_FOUND: true,
+    ENTITY_ALREADY_EXISTS: true,
+    PARENT_NOT_FOUND: true,
+    CHILDREN_EXIST: true,
+    COMPONENT_NOT_OBJECT: true,
+    INVALID_COMMAND: true,
+  } satisfies Record<CommandErrorCode, true>;
+
+  for (const code of Object.keys(covered) as CommandErrorCode[]) {
+    const error = new CommandError(code, "example");
+    assert.equal(error.code, code);
+    assert.ok(error.remediation.length > 12, `${code} remediation`);
+  }
+
+  const overridden = new CommandError("INVALID_COMMAND", "bad payload", "Send a supported command.");
+  assert.equal(overridden.remediation, "Send a supported command.");
+});
+
 test("rejects stale revisions without mutating state", () => {
   const bus = new CommandBus(project());
 
@@ -89,7 +112,11 @@ test("rejects stale revisions without mutating state", () => {
         expectedProjectRevision: 0,
         payload: { entityId: rootId, component: "Transform", patch: { visible: true } },
       }),
-    (error: unknown) => error instanceof CommandError && error.code === "STALE_REVISION",
+    (error: unknown) =>
+      error instanceof CommandError &&
+      error.code === "STALE_REVISION" &&
+      error.remediation.includes("project.inspect") &&
+      error.remediation.includes("expectedProjectRevision"),
   );
 
   assert.equal(bus.revision, 1);

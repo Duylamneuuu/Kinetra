@@ -26,12 +26,62 @@ function success(value: unknown) {
 }
 
 function failure(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-
   return {
     isError: true,
-    content: [{ type: "text" as const, text: message }],
+    content: [{ type: "text" as const, text: formatToolError(error) }],
   };
+}
+
+export function formatToolError(error: unknown): string {
+  if (error instanceof Error) {
+    const coded = error as Error & {
+      code?: unknown;
+      remediation?: unknown;
+      issues?: unknown;
+    };
+    const issues = structuredIssues(coded.issues);
+    if (typeof coded.code === "string" || issues !== undefined) {
+      return JSON.stringify(
+        {
+          ...(typeof coded.code === "string" ? { code: coded.code } : {}),
+          message: error.message,
+          ...(typeof coded.remediation === "string"
+            ? { remediation: coded.remediation }
+            : {}),
+          ...(issues !== undefined ? { issues } : {}),
+        },
+        null,
+        2,
+      );
+    }
+    return error.message;
+  }
+  return String(error);
+}
+
+function structuredIssues(
+  value: unknown,
+): Array<{ path: string; code: string; message: string }> | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+  const issues: Array<{ path: string; code: string; message: string }> = [];
+  for (const item of value) {
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      !("path" in item) ||
+      !("code" in item) ||
+      !("message" in item) ||
+      typeof item.path !== "string" ||
+      typeof item.code !== "string" ||
+      typeof item.message !== "string"
+    ) {
+      return undefined;
+    }
+    issues.push({ path: item.path, code: item.code, message: item.message });
+  }
+  return issues;
 }
 
 async function safe<T>(operation: () => Promise<T> | T) {

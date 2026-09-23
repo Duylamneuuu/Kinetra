@@ -14,6 +14,12 @@ const runtimeBridgeMode =
   Boolean(runtimeBridgePipe) ||
   process.env.KINETRA_RUNTIME_BRIDGE_STDIO === "1" ||
   process.argv.includes("--runtime-bridge-stdio");
+// Hidden bridge windows produce DOM-stale capturePage() frames (the menu layer
+// freezes at first paint while the WebGL canvas keeps updating). Linux cloud
+// smoke and packaged launches set this flag so captures composite truthfully.
+// Default stays hidden: Windows behavior is unchanged.
+const bridgeShowWindow =
+  process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW === "1";
 
 const userDataDirArg =
   process.env.KINETRA_USER_DATA_DIR ||
@@ -107,7 +113,7 @@ function createWindow(): BrowserWindow {
     height: 720,
     minWidth: 640,
     minHeight: 360,
-    show: !(smokeTest || runtimeBridgeMode),
+    show: bridgeShowWindow ? true : !(smokeTest || runtimeBridgeMode),
     paintWhenInitiallyHidden: true,
     backgroundColor: "#0b0d12",
     autoHideMenuBar: true,
