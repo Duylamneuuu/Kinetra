@@ -10,6 +10,7 @@ Kinetra's roadmap is ordered by dependency and proof, not by editor spectacle.
 - P4, P5, P6 and P8 have meaningful **core** work merged, but their full production gates are still broader than the merged core.
 - P2, P3, P7 and P9 have WIP/experimental branches or PRs that should not be assumed merge-ready.
 - P10 should not begin until the real runtime/verification path is consolidated.
+- Linux x64 portable packaging (`KinetraGame`) is a first-class packaged target beside Windows. It is not a second engine, and it does not replace `KinetraGame.exe` proof.
 
 ## Phase 0 — Runtime contracts
 
