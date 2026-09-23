@@ -373,6 +373,23 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
   }
 
+  async metrics(): Promise<{ logsDropped: number }> {
+    await this.#ensureProcess();
+    const result = await this.#request<{ logsDropped?: unknown }>(
+      "runtime.metrics",
+      {},
+    );
+    if (
+      !result ||
+      typeof result.logsDropped !== "number" ||
+      !Number.isInteger(result.logsDropped) ||
+      result.logsDropped < 0
+    ) {
+      throw new TypeError("runtime.metrics returned an invalid logsDropped count");
+    }
+    return { logsDropped: result.logsDropped };
+  }
+
   async captureSave(slotId?: string): Promise<{
     success: boolean;
     envelope?: Record<string, unknown>;

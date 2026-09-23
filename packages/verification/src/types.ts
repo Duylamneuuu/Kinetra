@@ -104,6 +104,7 @@ export interface RuntimeProbeHost {
     message: string;
     data?: Record<string, unknown>;
   }>>;
+  metrics?(): Promise<RuntimeMetrics>;
   step?(steps?: number, deltaSeconds?: number): Promise<unknown>;
   bakeNavigation?(params: {
     positions?: number[];

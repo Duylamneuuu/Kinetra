@@ -308,8 +308,9 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
   }
 
   async metrics(): Promise<RuntimeMetrics> {
-    // Real runtime metrics are not yet tracked by the player.
-    // Return empty metrics truthfully per architectural rule.
+    if (typeof this.#host.metrics === "function") {
+      return this.#host.metrics();
+    }
     return {};
   }
 }

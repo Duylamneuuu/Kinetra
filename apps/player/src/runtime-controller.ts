@@ -1541,6 +1541,15 @@ export class PlayerRuntimeController {
     return this.#logs.read(sinceSequence);
   }
 
+  /**
+   * Dropped-log count for the process-lifetime buffer.
+   * `runtime.stop` / `runtime.start` keep the same buffer, so this count
+   * does not reset with a scene. A new controller starts at 0.
+   */
+  metrics(): { logsDropped: number } {
+    return { logsDropped: this.#logs.dropped };
+  }
+
   resize(): void {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);

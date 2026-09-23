@@ -144,9 +144,8 @@ test(
         ),
       );
 
-      // Verify honest empty metrics reporting
       const metrics = await probe.metrics();
-      assert.deepEqual(metrics, {});
+      assert.deepEqual(metrics, { logsDropped: 0 });
     } finally {
       await host.close();
     }

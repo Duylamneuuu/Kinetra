@@ -3,6 +3,7 @@ import test from "node:test";
 import { BoundedLogBuffer } from "../src/log-buffer.js";
 
 test("bounded log buffer drops oldest debug before info, warning, and error", () => {
+  assert.equal(new BoundedLogBuffer(4).dropped, 0);
   const buffer = new BoundedLogBuffer(2);
   buffer.append("debug", "debug-old");
   buffer.append("info", "runtime.started");

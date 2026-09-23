@@ -325,6 +325,9 @@ async function handleRuntimeCommand(request: {
       return runtime.readLogs(sinceSequence);
     }
 
+    case "runtime.metrics":
+      return runtime.metrics();
+
     case "runtime.render":
       runtime.renderOnce();
       return runtime.query();

@@ -243,6 +243,7 @@ async function handleBridgeRequest(
     case "runtime.query":
     case "runtime.injectInput":
     case "runtime.readLogs":
+    case "runtime.metrics":
     case "runtime.step":
     case "asset.register":
     case "animation.play":
