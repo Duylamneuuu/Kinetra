@@ -1,5 +1,6 @@
 import {
   assertValidProject,
+  describeMissingScene,
   type ProjectDocument,
 } from "@kinetra/project-model";
 import {
@@ -425,7 +426,12 @@ export class PlayerRuntimeController {
 
     const scene = project.scenes.find((candidate) => candidate.id === sceneId);
     if (!scene) {
-      throw new Error(`Scene "${sceneId}" does not exist`);
+      throw new Error(
+        describeMissingScene(
+          sceneId,
+          project.scenes.map((candidate) => candidate.id),
+        ),
+      );
     }
 
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);

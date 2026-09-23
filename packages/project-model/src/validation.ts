@@ -208,3 +208,18 @@ export function assertValidProject(project: ProjectDocument): void {
     throw new ProjectValidationError(issues);
   }
 }
+
+const MISSING_SCENE_LIST_LIMIT = 12;
+
+export function describeMissingScene(sceneId: string, sceneIds: readonly string[]): string {
+  const ids = [
+    ...new Set(sceneIds.filter((id) => typeof id === "string" && id.length > 0)),
+  ].sort();
+  if (ids.length === 0) {
+    return `Scene "${sceneId}" does not exist. No scenes are in the project.`;
+  }
+  const shown = ids.slice(0, MISSING_SCENE_LIST_LIMIT);
+  const hidden = ids.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Scene "${sceneId}" does not exist. Available scenes: ${shown.join(", ")}${extra}.`;
+}

@@ -261,3 +261,23 @@ test("loads animated GLTF, discovers clips, plays, deterministically advances, s
   assert.equal(runtime.disposed, true);
 });
 
+test("instantiating a missing scene names the scenes in the project", () => {
+  assert.throws(
+    () => ThreeSceneRuntime.instantiate(project(), "missing"),
+    new RegExp(`Scene "missing" does not exist[\\s\\S]*Available scenes: ${sceneId}`),
+  );
+  assert.throws(
+    () =>
+      ThreeSceneRuntime.instantiate(
+        {
+          schemaVersion: 1,
+          projectId: stableId("project", "empty"),
+          name: "Empty",
+          scenes: [],
+        },
+        "missing",
+      ),
+    /No scenes are in the project/,
+  );
+});
+

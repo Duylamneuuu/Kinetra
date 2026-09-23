@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  describeMissingScene,
   ProjectValidationError,
   migrateProject,
   parseProject,
@@ -98,4 +99,20 @@ test("rejects duplicate entity ids and parent cycles", () => {
   assert.ok(issues.some((issue) => issue.code === "entity.parent.cycle"));
 
   assert.throws(() => serializeProject(project), ProjectValidationError);
+});
+
+test("describeMissingScene names existing scenes and caps the list", () => {
+  assert.equal(
+    describeMissingScene("missing", []),
+    'Scene "missing" does not exist. No scenes are in the project.',
+  );
+  assert.equal(
+    describeMissingScene("missing", ["zeta", "alpha"]),
+    'Scene "missing" does not exist. Available scenes: alpha, zeta.',
+  );
+  const ids = Array.from({ length: 14 }, (_, index) => `scene-${String(index).padStart(2, "0")}`);
+  const described = describeMissingScene("missing", [...ids].reverse());
+  assert.match(described, /Available scenes: scene-00, scene-01/);
+  assert.match(described, /and 2 more/);
+  assert.equal(described.includes("scene-12"), false);
 });

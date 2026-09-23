@@ -1,7 +1,8 @@
-import type {
-  EntityDefinition,
-  ProjectDocument,
-  SceneDefinition,
+import {
+  describeMissingScene,
+  type EntityDefinition,
+  type ProjectDocument,
+  type SceneDefinition,
 } from "@kinetra/project-model";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -199,7 +200,12 @@ export class ThreeSceneRuntime {
   static instantiate(project: ProjectDocument, sceneId: string): ThreeSceneRuntime {
     const scene = project.scenes.find((candidate) => candidate.id === sceneId);
     if (!scene) {
-      throw new Error(`Scene "${sceneId}" does not exist`);
+      throw new Error(
+        describeMissingScene(
+          sceneId,
+          project.scenes.map((candidate) => candidate.id),
+        ),
+      );
     }
     return new ThreeSceneRuntime(scene);
   }
