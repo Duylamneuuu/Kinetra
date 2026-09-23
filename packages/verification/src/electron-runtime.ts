@@ -392,6 +392,19 @@ export class ElectronRuntimeHost implements RuntimeHost {
     }>("save.get", { ...(slotId !== undefined ? { slotId } : {}) });
   }
 
+  async listSaves(): Promise<{ slots: string[] }> {
+    await this.#ensureProcess();
+    const result = await this.#request<{ slots?: unknown }>("save.list", {});
+    if (
+      !result ||
+      !Array.isArray(result.slots) ||
+      result.slots.some((slot) => typeof slot !== "string")
+    ) {
+      throw new TypeError("save.list returned an invalid slot list");
+    }
+    return { slots: result.slots };
+  }
+
   async loadSave(params: {
     slotId?: string;
     envelope?: Record<string, unknown>;
@@ -403,6 +416,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
     rolledBack?: boolean;
     atomicityViolation?: boolean;
+    availableSlots?: string[];
   }> {
     await this.#ensureProcess();
     return this.#request<{
@@ -413,6 +427,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
       rolledBack?: boolean;
       atomicityViolation?: boolean;
+      availableSlots?: string[];
     }>("save.load", params);
   }
 

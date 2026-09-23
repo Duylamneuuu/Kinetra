@@ -243,6 +243,9 @@ async function handleRuntimeCommand(request: {
       return { success: !!envelope, envelope };
     }
 
+    case "save.list":
+      return runtime.listSaves();
+
     case "save.load": {
       const slotId = typeof params.slotId === "string" ? params.slotId : undefined;
       const envelope = isRecord(params.envelope)

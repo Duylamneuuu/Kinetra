@@ -9,6 +9,7 @@ declare global {
       storageGet(key: string): Promise<string | undefined>;
       storageSet(key: string, value: string): Promise<void>;
       storageDelete(key: string): Promise<void>;
+      storageList(prefix: string): Promise<string[]>;
       quit(): Promise<void>;
     };
     kinetraRuntimeBridge?: {

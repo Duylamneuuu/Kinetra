@@ -229,6 +229,13 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     return { success: false, error: "Host does not support getSave" };
   }
 
+  async listSaves(): Promise<{ slots: string[] }> {
+    if (typeof this.#host.listSaves === "function") {
+      return this.#host.listSaves();
+    }
+    throw new Error("Host does not support listSaves");
+  }
+
   async loadSave(params: {
     slotId?: string;
     envelope?: Record<string, unknown>;

@@ -257,6 +257,7 @@ async function handleBridgeRequest(
     case "navigation.computePath":
     case "save.capture":
     case "save.get":
+    case "save.list":
     case "save.load":
     case "testHarness.enableTestFixtures":
       return callRenderer(request.method, request.params ?? {});
@@ -455,6 +456,13 @@ ipcMain.handle("kinetra:storage:delete", async (_event, key: unknown) => {
     throw new TypeError("Storage key must be a string");
   }
   await getFileStorage().delete(key);
+});
+
+ipcMain.handle("kinetra:storage:list", async (_event, prefix: unknown) => {
+  if (typeof prefix !== "string") {
+    throw new TypeError("Storage prefix must be a string");
+  }
+  return getFileStorage().list(prefix);
 });
 
 

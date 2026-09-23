@@ -32,6 +32,9 @@ const platformApi = {
   storageDelete(key: string): Promise<void> {
     return ipcRenderer.invoke("kinetra:storage:delete", key);
   },
+  storageList(prefix: string): Promise<string[]> {
+    return ipcRenderer.invoke("kinetra:storage:list", prefix);
+  },
   quit(): Promise<void> {
     return ipcRenderer.invoke("kinetra:app:quit");
   },

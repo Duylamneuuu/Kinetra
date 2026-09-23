@@ -37,6 +37,7 @@ import {
   type KeyValueStorage,
   SaveMigrator,
   createGameplaySaveMigrator,
+  describeMissingSaveSlot,
   CURRENT_SAVE_SCHEMA_VERSION,
   type SaveEnvelope,
   type EntitySaveState,
@@ -328,6 +329,10 @@ export class PlayerRuntimeController {
     } catch {
       return false;
     }
+  }
+
+  async listSaves(): Promise<{ slots: string[] }> {
+    return { slots: await this.#saveStore.list() };
   }
 
   setGamepadProvider(provider: GamepadSnapshotProvider): void {
@@ -941,6 +946,7 @@ export class PlayerRuntimeController {
     phase?: "validation" | "migration" | "preparation" | "commit" | "rollback";
     rolledBack?: boolean;
     atomicityViolation?: boolean;
+    availableSlots?: string[];
   }> {
     if (!this.#runtime) {
       const error = "Cannot load save: Runtime is not running";
@@ -961,9 +967,26 @@ export class PlayerRuntimeController {
     }
 
     if (!rawEnvelope) {
-      const error = `Save document not found for slot "${slotId}"`;
-      this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, slotId, error, phase: "validation" };
+      let knownSlots: string[] = [];
+      try {
+        knownSlots = await this.#saveStore.list();
+      } catch {
+        knownSlots = [];
+      }
+      const described = describeMissingSaveSlot(slotId, knownSlots);
+      this.#log("error", "save.restoreFailed", {
+        slotId,
+        phase: "validation",
+        error: described.message,
+        availableSlots: described.availableSlots,
+      });
+      return {
+        success: false,
+        slotId,
+        error: described.message,
+        phase: "validation",
+        availableSlots: described.availableSlots,
+      };
     }
 
     // Phase 1: Validation

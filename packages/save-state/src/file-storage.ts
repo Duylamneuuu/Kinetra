@@ -2,11 +2,13 @@ import {
   mkdir,
   open,
   readFile,
+  readdir,
   rename,
   unlink,
 } from "node:fs/promises";
+import { type Dirent } from "node:fs";
 import { resolve, sep } from "node:path";
-import type { KeyValueStorage } from "./index.js";
+import { assertStoragePrefix, type KeyValueStorage } from "./index.js";
 
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
 
@@ -135,4 +137,50 @@ export class FileKeyValueStorage implements KeyValueStorage {
       throw err;
     }
   }
+
+  /**
+   * Lists document ids for a storage prefix.
+   *
+   * Desktop files drop the `saves:` prefix (`saves:slot-a` -> `slot-a.json`)
+   * and rewrite `settings:` to `settings_<id>.json`. Every other safe
+   * `*.json` file in the root is therefore a save slot. Settings files are
+   * not save slots. Prefixes other than `saves` and `settings` are not
+   * encoded in filenames and return an empty list.
+   */
+  async list(prefix: string): Promise<string[]> {
+    assertStoragePrefix(prefix);
+    if (prefix !== "saves" && prefix !== "settings") {
+      return [];
+    }
+
+    let entries: Dirent[];
+    try {
+      entries = await readdir(this.rootDir, { withFileTypes: true });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw err;
+    }
+
+    const ids: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const id = slotIdFromFileName(entry.name, prefix);
+      if (id !== undefined) ids.push(id);
+    }
+    return ids.sort();
+  }
+}
+
+function slotIdFromFileName(fileName: string, prefix: "saves" | "settings"): string | undefined {
+  if (!fileName.endsWith(".json")) return undefined;
+  const stem = fileName.slice(0, -".json".length);
+  if (prefix === "settings") {
+    if (!stem.startsWith("settings_")) return undefined;
+    const id = stem.slice("settings_".length);
+    return SAFE_KEY_PATTERN.test(id) ? id : undefined;
+  }
+  if (stem.startsWith("settings_")) return undefined;
+  return SAFE_KEY_PATTERN.test(stem) ? stem : undefined;
 }

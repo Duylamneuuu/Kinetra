@@ -134,7 +134,8 @@ export interface RuntimeProbeHost {
   setAudioBusMuted?(busId: string, muted: boolean): Promise<unknown>;
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
-  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
+  listSaves?(): Promise<{ slots: string[] }>;
+  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string; availableSlots?: string[] }>;
   pause?(): Promise<unknown>;
   resume?(): Promise<unknown>;
   enableTestScriptFixtures?(preset: string): Promise<void>;
@@ -183,7 +184,8 @@ export interface RuntimeProbe {
   setAudioBusMuted?(busId: string, muted: boolean): Promise<void>;
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
-  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
+  listSaves?(): Promise<{ slots: string[] }>;
+  loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string; availableSlots?: string[] }>;
 }
 
 export const runtimeStartStepSchema = z.object({

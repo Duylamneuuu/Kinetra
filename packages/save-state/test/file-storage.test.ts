@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -34,6 +34,35 @@ test("FileKeyValueStorage sets, gets, and deletes keys", async () => {
 
     // Deleting again does not throw
     await storage.delete("saves:slot-1");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("FileKeyValueStorage lists save slots and excludes settings files", async () => {
+  const tempDir = await mkdtemp(join(tmpdir(), "kinetra-save-test-"));
+
+  try {
+    const missing = new FileKeyValueStorage(join(tempDir, "missing"));
+    assert.deepEqual(await missing.list("saves"), []);
+
+    const storage = new FileKeyValueStorage(tempDir);
+    await storage.set("saves:slot-b", "{}");
+    await storage.set("saves:slot-a", "{}");
+    await storage.set("settings:user", "{}");
+    await writeFile(join(tempDir, "not safe.json"), "{}");
+    await writeFile(join(tempDir, "slot-a.json.tmp.1"), "partial");
+    await mkdir(join(tempDir, "nested.json"));
+
+    assert.deepEqual(await storage.list("saves"), ["slot-a", "slot-b"]);
+    assert.deepEqual(await storage.list("settings"), ["user"]);
+    assert.deepEqual(await storage.list("notes"), []);
+
+    await storage.delete("saves:slot-b");
+    assert.deepEqual(await storage.list("saves"), ["slot-a"]);
+
+    await assert.rejects(() => storage.list("../saves"), /prefix/i);
+    await assert.rejects(() => storage.list(""), /prefix/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

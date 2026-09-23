@@ -38,10 +38,44 @@ export class SaveMigrator {
   }
 }
 
+const STORAGE_PREFIX_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const MISSING_SAVE_SLOT_LIST_LIMIT = 12;
+
+export function assertStoragePrefix(prefix: string): void {
+  if (typeof prefix !== "string" || !STORAGE_PREFIX_PATTERN.test(prefix)) {
+    throw new TypeError(
+      `Storage prefix must match ${STORAGE_PREFIX_PATTERN.source}`,
+    );
+  }
+}
+
+export function describeMissingSaveSlot(
+  slotId: string,
+  availableSlots: readonly string[],
+): { message: string; availableSlots: string[] } {
+  const slots = [...availableSlots]
+    .filter((slot) => typeof slot === "string" && slot.length > 0)
+    .sort();
+  if (slots.length === 0) {
+    return {
+      availableSlots: [],
+      message: `Save document not found for slot "${slotId}". No save slots exist. Call save.list before save.load.`,
+    };
+  }
+  const shown = slots.slice(0, MISSING_SAVE_SLOT_LIST_LIMIT);
+  const hidden = slots.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return {
+    availableSlots: slots,
+    message: `Save document not found for slot "${slotId}". Available slots: ${shown.join(", ")}${extra}. Call save.list to refresh.`,
+  };
+}
+
 export interface KeyValueStorage {
   get(key:string):Promise<string|undefined>;
   set(key:string,value:string):Promise<void>;
   delete(key:string):Promise<void>;
+  list(prefix:string):Promise<string[]>;
 }
 
 export class MemoryStorage implements KeyValueStorage {
@@ -49,12 +83,22 @@ export class MemoryStorage implements KeyValueStorage {
   async get(key:string){return this.#values.get(key);}
   async set(key:string,value:string){this.#values.set(key,value);}
   async delete(key:string){this.#values.delete(key);}
+  async list(prefix:string):Promise<string[]>{
+    assertStoragePrefix(prefix);
+    const head=`${prefix}:`;
+    return [...this.#values.keys()]
+      .filter((key)=>key.startsWith(head))
+      .map((key)=>key.slice(head.length))
+      .filter((id)=>id.length>0)
+      .sort();
+  }
 }
 
 export interface PlatformStorageBridge {
   storageGet(key: string): Promise<string | undefined>;
   storageSet(key: string, value: string): Promise<void>;
   storageDelete(key: string): Promise<void>;
+  storageList(prefix: string): Promise<string[]>;
 }
 
 export class IpcKeyValueStorage implements KeyValueStorage {
@@ -70,6 +114,14 @@ export class IpcKeyValueStorage implements KeyValueStorage {
 
   async delete(key: string): Promise<void> {
     await this.bridge.storageDelete(key);
+  }
+
+  async list(prefix: string): Promise<string[]> {
+    const ids = await this.bridge.storageList(prefix);
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) {
+      throw new TypeError("Platform storage list must return string ids");
+    }
+    return [...ids].sort();
   }
 }
 
@@ -87,6 +139,14 @@ export class JsonDocumentStore<T>{
 
   async remove(key:string):Promise<void>{
     await this.storage.delete(`${this.prefix}:${key}`);
+  }
+
+  async list():Promise<string[]>{
+    const ids=await this.storage.list(this.prefix);
+    if(!Array.isArray(ids)||ids.some((id)=>typeof id!=="string")){
+      throw new TypeError("Storage list must return string ids");
+    }
+    return [...ids].sort();
   }
 }
 
