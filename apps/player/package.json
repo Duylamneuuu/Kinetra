@@ -12,8 +12,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "node --experimental-strip-types --test test/builtin-scripts.test.ts",
     "package:win": "pnpm build && node scripts/package-win.mjs",
+    "package:linux": "pnpm build && node scripts/package-linux.mjs",
     "smoke:win": "node scripts/smoke-win.mjs",
-    "smoke:linux": "node scripts/smoke-linux.mjs"
+    "smoke:linux": "node scripts/smoke-linux.mjs",
+    "smoke:linux:packaged": "node scripts/smoke-linux-packaged.mjs"
   },
   "dependencies": {
     "@kinetra/audio": "workspace:*",
