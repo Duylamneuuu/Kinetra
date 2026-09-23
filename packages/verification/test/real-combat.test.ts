@@ -17,6 +17,7 @@ import {
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
+  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
@@ -44,7 +45,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Combat Foundation Slice 4 — Player Attack, Damage Model, Enemy Defeated State, Multi-Process Save/Load, Packaged Proof",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: !canLaunchHostedElectronAcceptance(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Player attacks Enemy, Enemy health decreases
