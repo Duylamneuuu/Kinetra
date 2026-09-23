@@ -79,6 +79,66 @@ test("migrates schema v0 to v1", () => {
   assert.equal(migrated.scenes[0]?.entities[0]?.id, "entity_a");
 });
 
+test("parent errors name bounded entity choices and the cycle path", () => {
+  const sceneId = "scene_main";
+  const project = (entities: ProjectDocument["scenes"][number]["entities"]): ProjectDocument => ({
+    schemaVersion: 1,
+    projectId: "project_parents",
+    name: "Parents",
+    scenes: [{ id: sceneId, name: "Main", entities }],
+  });
+
+  const missing = validateProject(
+    project([
+      { id: "entity_child", name: "Child", parentId: "entity_missing", components: {} },
+      { id: "entity_root", name: "Root", components: {} },
+    ]),
+  ).find((issue) => issue.code === "entity.parent.missing");
+  assert.equal(
+    missing?.message,
+    'Parent entity "entity_missing" does not exist in scene "scene_main". Available entities: entity_child, entity_root.',
+  );
+
+  const cycleIssues = validateProject(
+    project([
+      { id: "entity_a", name: "A", parentId: "entity_b", components: {} },
+      { id: "entity_b", name: "B", parentId: "entity_a", components: {} },
+    ]),
+  ).filter((issue) => issue.code === "entity.parent.cycle");
+  assert.equal(cycleIssues.length, 1);
+  assert.equal(cycleIssues[0]?.message, "Parent cycle detected: entity_a -> entity_b -> entity_a.");
+
+  const ids = Array.from({ length: 13 }, (_, index) => `entity-${String(index).padStart(2, "0")}`);
+  const longCycle = validateProject(
+    project(
+      ids.map((id, index) => ({
+        id,
+        name: id,
+        parentId: ids[(index + 1) % ids.length] ?? id,
+        components: {},
+      })),
+    ),
+  ).find((issue) => issue.code === "entity.parent.cycle");
+  assert.equal(
+    longCycle?.message,
+    `Parent cycle detected: ${ids.slice(0, 12).join(" -> ")}, and 1 more, returning to ${ids[0]}.`,
+  );
+  assert.equal(longCycle?.message.includes("entity-12"), false);
+
+  const capped = validateProject(
+    project([
+      ...ids.map((id) => ({ id, name: id, components: {} })),
+      { id: "entity_orphan", name: "Orphan", parentId: "entity_missing", components: {} },
+    ]),
+  ).find((issue) => issue.code === "entity.parent.missing");
+  assert.match(
+    capped?.message ?? "",
+    /Available entities: entity-00, entity-01, entity-02, entity-03, entity-04, entity-05, entity-06, entity-07, entity-08, entity-09, entity-10, entity-11, and 2 more\./,
+  );
+  assert.equal(capped?.message.includes("entity-12"), false);
+  assert.equal(capped?.message.includes("entity_orphan"), false);
+});
+
 test("rejects duplicate entity ids and parent cycles", () => {
   const project = fixture();
   const scene = project.scenes[0];

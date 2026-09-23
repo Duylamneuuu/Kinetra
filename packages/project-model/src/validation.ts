@@ -96,31 +96,78 @@ function validateEntity(
     issues.push({
       path: `${path}.parentId`,
       code: "entity.parent.missing",
-      message: `Parent entity "${entity.parentId}" does not exist in scene "${scene.id}"`,
+      message: `Parent entity "${entity.parentId}" does not exist in scene "${scene.id}". ${describeEntityChoices(scene.entities.map((candidate) => candidate.id))}`,
     });
   }
 }
 
+const PARENT_ID_LIST_LIMIT = 12;
+
+function describeEntityChoices(entityIds: readonly string[]): string {
+  const sorted = [...new Set(entityIds.filter((id) => id.length > 0))].sort();
+  if (sorted.length === 0) {
+    return "Available entities: (none).";
+  }
+  const shown = sorted.slice(0, PARENT_ID_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Available entities: ${shown.join(", ")}${extra}.`;
+}
+
+function describeParentCycle(cycle: readonly string[]): string {
+  if (cycle.length === 0) {
+    return "Parent cycle detected.";
+  }
+  const uniqueCount = new Set(cycle).size;
+  const closing = cycle[0] ?? "";
+  if (uniqueCount <= PARENT_ID_LIST_LIMIT) {
+    return `Parent cycle detected: ${cycle.join(" -> ")}.`;
+  }
+  const shown = cycle.slice(0, PARENT_ID_LIST_LIMIT);
+  const omitted = uniqueCount - PARENT_ID_LIST_LIMIT;
+  return `Parent cycle detected: ${shown.join(" -> ")}, and ${omitted} more, returning to ${closing}.`;
+}
+
+function parentCycle(
+  startId: string,
+  byId: ReadonlyMap<string, EntityDefinition>,
+): string[] | undefined {
+  const stack = [startId];
+  const index = new Map<string, number>([[startId, 0]]);
+  let cursor = byId.get(startId)?.parentId;
+
+  while (cursor) {
+    const seenAt = index.get(cursor);
+    if (seenAt !== undefined) {
+      return [...stack.slice(seenAt), cursor];
+    }
+    index.set(cursor, stack.length);
+    stack.push(cursor);
+    cursor = byId.get(cursor)?.parentId;
+  }
+
+  return undefined;
+}
+
 function validateParentCycles(scene: SceneDefinition, issues: ValidationIssue[]): void {
   const byId = new Map(scene.entities.map((entity) => [entity.id, entity]));
+  const reported = new Set<string>();
 
   for (const entity of scene.entities) {
-    const visited = new Set<string>([entity.id]);
-    let cursor = entity.parentId;
-
-    while (cursor) {
-      if (visited.has(cursor)) {
-        issues.push({
-          path: `scenes[${scene.id}].entities[${entity.id}].parentId`,
-          code: "entity.parent.cycle",
-          message: `Parent cycle detected for entity "${entity.id}"`,
-        });
-        break;
-      }
-
-      visited.add(cursor);
-      cursor = byId.get(cursor)?.parentId;
+    const cycle = parentCycle(entity.id, byId);
+    if (!cycle) {
+      continue;
     }
+    const key = [...new Set(cycle)].sort().join("\0");
+    if (reported.has(key)) {
+      continue;
+    }
+    reported.add(key);
+    issues.push({
+      path: `scenes[${scene.id}].entities[${entity.id}].parentId`,
+      code: "entity.parent.cycle",
+      message: describeParentCycle(cycle),
+    });
   }
 }
 

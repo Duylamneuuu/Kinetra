@@ -211,6 +211,10 @@ Not yet implemented:
 - multiple enemy types;
 - complex enemy behavior trees or AI perception models.
 
+### Project hierarchy
+
+- A missing parent id names up to 12 entity ids in that scene. A parent cycle names the path (`entity_a -> entity_b -> entity_a`) and is reported once per distinct cycle, capped at 12 entities. Proof level: project-model unit test. Command-bus mutation errors are separate.
+
 ## Open implementation references
 
 ### PR #29 — P2 Electron runtime bridge
