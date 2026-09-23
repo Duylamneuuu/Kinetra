@@ -160,6 +160,7 @@ blank project
  -> Windows executable is built
  -> packaged executable launches
  -> packaged acceptance suite passes
+ -> Linux x64 portable KinetraGame is a separate packaged proof, not a substitute for KinetraGame.exe
 ```
 
 ## Do not infer implementation status from folder names
