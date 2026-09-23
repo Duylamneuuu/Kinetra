@@ -1,5 +1,6 @@
 import {
   AudioMixerModel,
+  describeUnknownAudioBus,
   type AudioBusDefinition,
   type AudioBusState,
   type AudioPlaybackState,
@@ -158,9 +159,16 @@ export class PlayerAudioController {
     return this.#mixer.hasBus(busId);
   }
 
+  #unknownBus(busId: string): string {
+    return describeUnknownAudioBus(
+      busId,
+      this.#mixer.getBuses().map((bus) => bus.id),
+    );
+  }
+
   setBusGain(busId: string, gain: number): void {
     if (!this.#mixer.hasBus(busId)) {
-      throw new Error(`Unknown audio bus "${busId}"`);
+      throw new Error(this.#unknownBus(busId));
     }
     this.#mixer.setGain(busId, gain);
     const busDef = this.#mixer.getBus(busId);
@@ -172,7 +180,7 @@ export class PlayerAudioController {
 
   setBusMuted(busId: string, muted: boolean): void {
     if (!this.#mixer.hasBus(busId)) {
-      throw new Error(`Unknown audio bus "${busId}"`);
+      throw new Error(this.#unknownBus(busId));
     }
     this.#mixer.setMuted(busId, muted);
     const busDef = this.#mixer.getBus(busId);
@@ -187,7 +195,7 @@ export class PlayerAudioController {
     if (!this.#mixer.hasBus(busId)) {
       return {
         success: false,
-        error: `Unknown audio bus "${busId}"`,
+        error: this.#unknownBus(busId),
       };
     }
 

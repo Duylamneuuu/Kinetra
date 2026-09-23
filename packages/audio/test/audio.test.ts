@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AudioMixerModel, createSyntheticWav } from "../src/index.js";
+import { AudioMixerModel, createSyntheticWav, describeUnknownAudioBus } from "../src/index.js";
 
 test("audio bus gain and mute propagate through hierarchy", () => {
   const mixer = new AudioMixerModel([
@@ -39,6 +39,39 @@ test("audio mixer query methods inspect bus states correctly", () => {
   const allStates = mixer.getAllBusStates();
   assert.equal(allStates.length, 2);
   assert.deepEqual(allStates.map((s) => s.id).sort(), ["master", "sfx"]);
+});
+
+test("unknown audio bus names the registered buses", () => {
+  const mixer = new AudioMixerModel([
+    { id: "sfx", gain: 1 },
+    { id: "master", gain: 1 },
+  ]);
+  assert.throws(
+    () => mixer.setGain("ghost", 1),
+    /Unknown audio bus "ghost"[\s\S]*Available buses: master, sfx/,
+  );
+  assert.throws(
+    () => mixer.setMuted("ghost", true),
+    /Available buses: master, sfx/,
+  );
+
+  const empty = new AudioMixerModel([]);
+  assert.throws(
+    () => empty.setGain("ghost", 1),
+    /No audio buses are registered/,
+  );
+
+  const many = Array.from({ length: 14 }, (_, index) => ({
+    id: `bus-${String(index).padStart(2, "0")}`,
+    gain: 1,
+  }));
+  const described = describeUnknownAudioBus(
+    "missing",
+    many.map((bus) => bus.id).reverse(),
+  );
+  assert.match(described, /Available buses: bus-00, bus-01/);
+  assert.match(described, /and 2 more/);
+  assert.equal(described.includes("bus-12"), false);
 });
 
 test("createSyntheticWav produces valid RIFF WAVE buffer", () => {

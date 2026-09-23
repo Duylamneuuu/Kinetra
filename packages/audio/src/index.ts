@@ -34,6 +34,26 @@ export interface AudioRuntimeState {
   activePlaybacks: AudioPlaybackState[];
 }
 
+const UNKNOWN_AUDIO_BUS_LIST_LIMIT = 12;
+
+export function describeUnknownAudioBus(
+  busId: string,
+  busIds: readonly string[],
+): string {
+  const ids = [
+    ...new Set(
+      busIds.filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ].sort();
+  if (ids.length === 0) {
+    return `Unknown audio bus "${busId}". No audio buses are registered.`;
+  }
+  const shown = ids.slice(0, UNKNOWN_AUDIO_BUS_LIST_LIMIT);
+  const hidden = ids.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Unknown audio bus "${busId}". Available buses: ${shown.join(", ")}${extra}.`;
+}
+
 export class AudioMixerModel {
   #buses = new Map<string, AudioBusDefinition>();
 
@@ -103,7 +123,9 @@ export class AudioMixerModel {
 
   #require(id: string): AudioBusDefinition {
     const bus = this.#buses.get(id);
-    if (!bus) throw new Error(`Unknown audio bus "${id}"`);
+    if (!bus) {
+      throw new Error(describeUnknownAudioBus(id, [...this.#buses.keys()]));
+    }
     return bus;
   }
 

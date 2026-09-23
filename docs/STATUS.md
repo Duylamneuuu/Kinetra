@@ -100,6 +100,7 @@ What exists:
 - semantic audio command execution (`audio.play`, `audio.stop`, `audio.setBusGain`, `audio.setBusMuted`);
 - truthful structured observation (`state.audio.initialized`, `state.audio.buses`, `state.audio.activePlaybacks`);
 - structured error handling for missing/corrupt audio assets and unknown buses;
+- unknown audio bus errors name the registered bus ids, capped at 12 in the message. Proof level: UNIT (`@kinetra/audio`). Real Electron still matches the unknown-bus failure and was not re-run for this message;
 - clean audio resource teardown and session restart;
 - real AcceptanceRunner verification and active-playback PNG frame capture.
 
