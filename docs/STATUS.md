@@ -115,6 +115,7 @@ What has meaningful proof:
 - real runtime probe adapter (`KinetraRuntimeProbe`) driving live Electron runtime host;
 - semantic input injection (`input`), structured state query (`assert.equal`, `assert.near`), structured log verification (`assert.logAbsent`), and real frame capture (`assert.screenshotValidPng` with magic bytes and size check);
 - machine-readable failure reports on deliberate assertion failures with exact failing step, expected/actual values, and `failureReason`;
+- `listAcceptanceOperations()` lists every AcceptanceManifest step type and whether each field is required, derived from the step schema. Proof level: unit test. This is not an MCP tool and it does not run Electron;
 - clean, leak-free process teardown and lifecycle management across repeated PASS/FAIL invocations;
 - process smoke runner for packaged exes;
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
