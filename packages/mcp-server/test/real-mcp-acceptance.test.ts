@@ -15,6 +15,51 @@ import {
   arenaAudioAssets,
 } from "@kinetra/reference-game";
 
+function skipPackagedAcceptance(): boolean {
+  if (process.platform !== "win32" && process.platform !== "linux") {
+    return true;
+  }
+  if (process.platform === "linux" && !process.env.DISPLAY) {
+    return true;
+  }
+  return !isPackagedExecutableAvailable();
+}
+
+function assertPackagedGamePath(executablePath: string): void {
+  if (process.platform === "win32") {
+    assert.match(
+      executablePath,
+      /KinetraGame\.exe$/i,
+      `Expected KinetraGame.exe, got: ${executablePath}`,
+    );
+    return;
+  }
+  assert.match(
+    executablePath,
+    /\/KinetraGame$/,
+    `Expected packaged KinetraGame, got: ${executablePath}`,
+  );
+  assert.equal(/electron(\.exe)?$/i.test(executablePath), false);
+}
+
+function assertPackagedHostInfo(
+  hostInfo:
+    | {
+        isPackaged?: boolean;
+        execPath?: string;
+        platform?: string;
+        arch?: string;
+      }
+    | undefined,
+): void {
+  assert.ok(hostInfo !== undefined);
+  assert.equal(hostInfo.isPackaged, true);
+  assert.equal(hostInfo.platform, process.platform);
+  assert.equal(hostInfo.arch, process.arch);
+  assert.equal(typeof hostInfo.execPath, "string");
+  assertPackagedGamePath(hostInfo.execPath ?? "");
+}
+
 const sceneId = stableId("scene", "p8-mcp-acceptance");
 const boxId = stableId("entity", "p8-mcp-box");
 const cameraId = stableId("entity", "p8-mcp-camera");
@@ -277,17 +322,12 @@ test(
 test(
   "Scenario C: PACKAGED PASS — MCP tool test.runAcceptance executes passing manifest against real KinetraGame.exe",
   {
-    skip:
-      process.platform !== "win32" ||
-      !isPackagedExecutableAvailable(),
+    skip: skipPackagedAcceptance(),
     timeout: 90_000,
   },
   async () => {
     const resolution = resolvePackagedExecutable();
-    assert.ok(
-      resolution.path.endsWith("KinetraGame.exe"),
-      `Expected KinetraGame.exe, got: ${resolution.path}`,
-    );
+    assertPackagedGamePath(resolution.path);
 
     const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
 
@@ -313,15 +353,14 @@ test(
       // Verify structured observations truthfully prove that packaged binary ran
       assert.equal(report.observations?.target, "packaged");
       const hostInfo = report.observations?.hostInfo as
-        | { isPackaged?: boolean; execPath?: string }
+        | {
+            isPackaged?: boolean;
+            execPath?: string;
+            platform?: string;
+            arch?: string;
+          }
         | undefined;
-      assert.ok(hostInfo !== undefined);
-      assert.equal(hostInfo.isPackaged, true);
-      assert.ok(
-        typeof hostInfo.execPath === "string" &&
-          /KinetraGame\.exe$/i.test(hostInfo.execPath),
-        `Expected execPath to end with KinetraGame.exe, got: ${hostInfo.execPath}`,
-      );
+      assertPackagedHostInfo(hostInfo);
     } finally {
       await client.close();
     }
@@ -331,9 +370,7 @@ test(
 test(
   "Scenario D: PACKAGED DELIBERATE FAIL — deliberate failure against KinetraGame.exe returns structured evidence and clean teardown",
   {
-    skip:
-      process.platform !== "win32" ||
-      !isPackagedExecutableAvailable(),
+    skip: skipPackagedAcceptance(),
     timeout: 90_000,
   },
   async () => {
@@ -571,23 +608,18 @@ test(
 test(
   "Scenario K: PACKAGED ARENA WIN — MCP tool test.runAcceptance executes reference game against real KinetraGame.exe",
   {
-    skip:
-      process.platform !== "win32" ||
-      !isPackagedExecutableAvailable(),
+    skip: skipPackagedAcceptance(),
     timeout: 90_000,
   },
   async () => {
     const resolution = resolvePackagedExecutable();
-    assert.ok(
-      resolution.path.endsWith("KinetraGame.exe"),
-      `Expected KinetraGame.exe, got: ${resolution.path}`,
-    );
+    assertPackagedGamePath(resolution.path);
 
     const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
 
     const arenaManifest: AcceptanceManifest = {
       schemaVersion: 1,
-      suite: "arena-packaged-win",
+      suite: process.platform === "linux" ? "arena-packaged-linux" : "arena-packaged-win",
       seed: 42,
       target: "packaged",
       steps: [
@@ -620,20 +652,22 @@ test(
 
       const report = JSON.parse(result.content[0]?.text ?? "{}") as AcceptanceReport;
       assert.equal(report.passed, true, `Report must pass: ${report.failureReason}`);
-      assert.equal(report.suite, "arena-packaged-win");
+      assert.equal(
+        report.suite,
+        process.platform === "linux" ? "arena-packaged-linux" : "arena-packaged-win",
+      );
       assert.equal(report.target, "packaged");
       assert.equal(report.observations?.target, "packaged");
 
       const hostInfo = report.observations?.hostInfo as
-        | { isPackaged?: boolean; execPath?: string }
+        | {
+            isPackaged?: boolean;
+            execPath?: string;
+            platform?: string;
+            arch?: string;
+          }
         | undefined;
-      assert.ok(hostInfo !== undefined);
-      assert.equal(hostInfo.isPackaged, true);
-      assert.ok(
-        typeof hostInfo.execPath === "string" &&
-          /KinetraGame\.exe$/i.test(hostInfo.execPath),
-        `Expected execPath to end with KinetraGame.exe, got: ${hostInfo.execPath}`,
-      );
+      assertPackagedHostInfo(hostInfo);
     } finally {
       await client.close();
     }
