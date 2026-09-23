@@ -28,6 +28,10 @@ Legend:
 
 ## Merged subsystem notes
 
+### Project files
+
+- `node packages/project-model/dist/src/cli.js <file>` reports project id, name, schema version, and per-scene entity counts for a `.kinetra.json` file, or structured validation issues. It does not modify the file. Proof level: unit test of the report function and the CLI process. Not Electron.
+
 ### Asset pipeline
 
 What has meaningful proof:
