@@ -62,13 +62,14 @@ What has meaningful proof:
 - retarget cache key;
 - root-motion extraction policy;
 - text-backed graph/state-machine semantics;
+- unknown graph parameters and triggers name up to 12 defined ids of that kind. Proof level: UNIT (`@kinetra/animation`);
 - programmatic synthetic animated GLB fixture generation (`createSyntheticAnimatedGlb`);
 - GLTF animation clip extraction via Three.js `GLTFLoader` in the Electron player runtime;
 - encapsulated `THREE.AnimationMixer` management in `ThreeSceneRuntime` behind semantic methods (`playAnimation`, `stopAnimation`, `updateAnimation`);
 - semantic command dispatch (`animation.play`, `animation.stop`) over named pipe bridge;
 - deterministic simulation advancement via `runtime.step` updating mixer and synchronizing internal node transforms;
 - truthful structured runtime state exposing `entity.model.animation` (`clips`, `activeClip`, `playing`, `time`, `duration`) and `entity.model.nodes` (`name`, `position`);
-- structured error log `animation.playFailed` on invalid clip requests without runtime crash;
+- structured error log `animation.playFailed` on invalid clip requests without runtime crash. A missing entity names up to 12 runtime entity ids. A missing clip names up to 12 clip names from `listClipNames`. Proof level: UNIT for the clip list. Electron was not re-run for the message text;
 - resource cleanup and zero-leak teardown on scene stop and restart;
 - real AcceptanceRunner proof with real PNG frame capture in live Electron.
 
@@ -101,6 +102,7 @@ What exists:
 - semantic audio command execution (`audio.play`, `audio.stop`, `audio.setBusGain`, `audio.setBusMuted`);
 - truthful structured observation (`state.audio.initialized`, `state.audio.buses`, `state.audio.activePlaybacks`);
 - structured error handling for missing/corrupt audio assets and unknown buses;
+- `audio.stop` with an unknown `playbackId` returns `success: false` and names up to 12 active playback ids. Stopping without a playback id is unchanged. Proof level: UNIT (`describeUnknownPlayback`);
 - clean audio resource teardown and session restart;
 - real AcceptanceRunner verification and active-playback PNG frame capture.
 
@@ -139,6 +141,7 @@ What has meaningful proof:
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
 - live structured entity query and semantic input injection (`runtime.injectInput`);
 - structured runtime log recording;
+- `animation.play` names up to 12 runtime entity ids when the entity is missing, and up to 12 clip names when the clip is missing. Proof level: the clip list comes from `ThreeSceneRuntime.listClipNames` (renderer unit test). The player message is not separately executed in Electron on this branch;
 - real non-empty PNG frame capture via `webContents.capturePage()`;
 - clean teardown without leaked Electron processes or dangling pipe sockets;
 - packaged Windows executable (`KinetraGame.exe`) smoke test and runtime bridge compatibility.
@@ -150,6 +153,7 @@ What remains:
 
 What has meaningful proof:
 - minimal, deterministic Rapier 3D integration via `@dimforge/rapier3d-compat` in `@kinetra/physics-rapier`;
+- unknown physics body errors name up to 12 existing body ids. Proof level: UNIT (`@kinetra/physics-rapier`);
 - fixed-step accumulator and simulation independent of render delta partition;
 - dynamic body gravity fall and static floor collision without tunneling;
 - kinematic character controller driven by semantic input (`player.moveRight`) with obstacle collision clipping (`actual displacement < requested displacement`);

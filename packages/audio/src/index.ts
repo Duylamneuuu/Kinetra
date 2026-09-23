@@ -180,3 +180,19 @@ export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Arra
 
   return new Uint8Array(buffer);
 }
+
+const PLAYBACK_ID_LIST_LIMIT = 12;
+
+export function describeUnknownPlayback(
+  playbackId: string,
+  activeIds: readonly string[],
+): string {
+  const sorted = [...new Set(activeIds.filter((id) => id.length > 0))].sort();
+  if (sorted.length === 0) {
+    return `Unknown audio playback "${playbackId}". No active playbacks exist.`;
+  }
+  const shown = sorted.slice(0, PLAYBACK_ID_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Unknown audio playback "${playbackId}". Available playbacks: ${shown.join(", ")}${extra}.`;
+}

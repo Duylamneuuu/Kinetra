@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AudioMixerModel, createSyntheticWav } from "../src/index.js";
+import {
+  AudioMixerModel,
+  createSyntheticWav,
+  describeUnknownPlayback,
+} from "../src/index.js";
 
 test("audio bus gain and mute propagate through hierarchy", () => {
   const mixer = new AudioMixerModel([
@@ -68,5 +72,20 @@ test("createSyntheticWav produces valid RIFF WAVE buffer", () => {
     }
   }
   assert.ok(nonZero > 0);
+});
+
+test("unknown playback names active ids and caps the list", () => {
+  assert.equal(
+    describeUnknownPlayback("playback_9", []),
+    'Unknown audio playback "playback_9". No active playbacks exist.',
+  );
+  assert.match(
+    describeUnknownPlayback("playback_9", ["playback_2", "playback_1"]),
+    /Available playbacks: playback_1, playback_2\./,
+  );
+  const many = Array.from({ length: 13 }, (_, index) => `p${String(index).padStart(2, "0")}`);
+  const message = describeUnknownPlayback("missing", many);
+  assert.match(message, /Available playbacks: p00, p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, and 1 more/);
+  assert.equal(message.includes("p12"), false);
 });
 

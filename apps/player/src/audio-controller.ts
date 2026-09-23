@@ -1,5 +1,6 @@
 import {
   AudioMixerModel,
+  describeUnknownPlayback,
   type AudioBusDefinition,
   type AudioBusState,
   type AudioPlaybackState,
@@ -29,6 +30,7 @@ export interface StopAudioOptions {
 export interface StopAudioResult {
   success: boolean;
   stoppedCount: number;
+  error?: string;
 }
 
 interface ActivePlaybackRecord {
@@ -298,6 +300,20 @@ export class PlayerAudioController {
   }
 
   stop(options: StopAudioOptions = {}): StopAudioResult {
+    if (
+      options.playbackId !== undefined &&
+      !this.#playbacks.has(options.playbackId)
+    ) {
+      const activeIds = [...this.#playbacks.values()]
+        .filter((record) => record.playing)
+        .map((record) => record.id);
+      return {
+        success: false,
+        stoppedCount: 0,
+        error: describeUnknownPlayback(options.playbackId, activeIds),
+      };
+    }
+
     let stoppedCount = 0;
 
     for (const record of this.#playbacks.values()) {

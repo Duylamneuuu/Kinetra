@@ -794,7 +794,11 @@ export class PlayerRuntimeController {
 
     const object = this.#runtime.getObject(entityId);
     if (!object) {
-      const error = `Entity "${entityId}" does not exist in runtime`;
+      const error = describeBoundedChoice(
+        `Entity "${entityId}" does not exist in runtime`,
+        "Available entities",
+        [...this.#runtime.objects().keys()],
+      );
       this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
       return { success: false, error };
     }
@@ -808,7 +812,11 @@ export class PlayerRuntimeController {
 
     const success = this.#runtime.playAnimation(entityId, clipName, options);
     if (!success) {
-      const error = `Clip "${clipName}" not found on entity "${entityId}"`;
+      const error = describeBoundedChoice(
+        `Clip "${clipName}" not found on entity "${entityId}"`,
+        "Available clips",
+        this.#runtime.listClipNames(entityId),
+      );
       this.#log("error", "animation.playFailed", { entityId, clip: clipName, error });
       return { success: false, error };
     }
@@ -847,11 +855,19 @@ export class PlayerRuntimeController {
 
   stopAudio(options: StopAudioOptions = {}): StopAudioResult {
     const result = this.#audio.stop(options);
-    this.#log("info", "audio.stopped", {
-      playbackId: options.playbackId,
-      entityId: options.entityId,
-      stoppedCount: result.stoppedCount,
-    });
+    if (result.success) {
+      this.#log("info", "audio.stopped", {
+        playbackId: options.playbackId,
+        entityId: options.entityId,
+        stoppedCount: result.stoppedCount,
+      });
+    } else {
+      this.#log("error", "audio.stopFailed", {
+        playbackId: options.playbackId,
+        entityId: options.entityId,
+        error: result.error,
+      });
+    }
     return result;
   }
 
@@ -1641,4 +1657,21 @@ export class PlayerRuntimeController {
       ...(data ? { data: structuredClone(data) } : {}),
     });
   }
+}
+
+const RUNTIME_ID_LIST_LIMIT = 12;
+
+function describeBoundedChoice(
+  prefix: string,
+  label: string,
+  ids: readonly string[],
+): string {
+  const sorted = [...new Set(ids.filter((id) => id.length > 0))].sort();
+  if (sorted.length === 0) {
+    return `${prefix}. ${label}: (none).`;
+  }
+  const shown = sorted.slice(0, RUNTIME_ID_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `${prefix}. ${label}: ${shown.join(", ")}${extra}.`;
 }

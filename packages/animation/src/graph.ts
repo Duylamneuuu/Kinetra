@@ -113,7 +113,7 @@ export class AnimationGraphMachine {
 
   set(name:string,value:boolean|number):void{
     const definition=this.graph.parameters[name];
-    if(!definition) throw new Error(`Unknown animation parameter "${name}"`);
+    if(!definition) throw new Error(describeAnimationParameters(name,"parameter",this.graph,"bool","number"));
     if(definition.type==="trigger") throw new Error(`Trigger "${name}" must use trigger()`);
     if(definition.type==="bool" && typeof value!=="boolean") throw new TypeError(`Parameter "${name}" expects boolean`);
     if(definition.type==="number" && typeof value!=="number") throw new TypeError(`Parameter "${name}" expects number`);
@@ -122,7 +122,9 @@ export class AnimationGraphMachine {
 
   trigger(name:string):void{
     const definition=this.graph.parameters[name];
-    if(!definition || definition.type!=="trigger") throw new Error(`Unknown trigger "${name}"`);
+    if(!definition || definition.type!=="trigger") {
+      throw new Error(describeAnimationParameters(name,"trigger",this.graph,"trigger"));
+    }
     this.#triggers.add(name);
   }
 
@@ -163,4 +165,27 @@ export class AnimationGraphMachine {
       case "<=":return typeof actual==="number"&&typeof expected==="number"&&actual<=expected;
     }
   }
+}
+
+const ANIMATION_ID_LIST_LIMIT = 12;
+
+function describeAnimationParameters(
+  name: string,
+  kind: "parameter" | "trigger",
+  graph: AnimationGraphDefinition,
+  ...types: Array<"bool" | "number" | "trigger">
+): string {
+  const ids = Object.entries(graph.parameters)
+    .filter(([, definition]) => types.includes(definition.type))
+    .map(([id]) => id)
+    .sort();
+  const label = kind === "trigger" ? "Unknown trigger" : "Unknown animation parameter";
+  if (ids.length === 0) {
+    return `${label} "${name}". No ${kind}s are defined.`;
+  }
+  const shown = ids.slice(0, ANIMATION_ID_LIST_LIMIT);
+  const hidden = ids.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  const noun = kind === "trigger" ? "triggers" : "parameters";
+  return `${label} "${name}". Available ${noun}: ${shown.join(", ")}${extra}.`;
 }

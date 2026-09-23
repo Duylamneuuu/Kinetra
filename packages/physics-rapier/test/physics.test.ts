@@ -225,3 +225,20 @@ test("physics world disposal is clean and idempotent", async () => {
   physics.dispose();
 });
 
+test("unknown physics body names the bodies that exist", async () => {
+  const physics = await RapierPhysicsWorld.create();
+  try {
+    physics.addFixedBox({
+      id: "ground",
+      position: { x: 0, y: 0, z: 0 },
+      halfExtents: { x: 1, y: 1, z: 1 },
+    });
+    assert.throws(
+      () => physics.state("missing-body"),
+      /Unknown physics body "missing-body"\. Available bodies: ground\./,
+    );
+  } finally {
+    physics.dispose();
+  }
+});
+

@@ -232,6 +232,10 @@ export class ThreeSceneRuntime {
     return this.#models.get(entityId);
   }
 
+  listClipNames(entityId: string): string[] {
+    return (this.#clips.get(entityId) ?? []).map((clip) => clip.name).sort();
+  }
+
   models(): ReadonlyMap<string, ModelMetadata> {
     return this.#models;
   }

@@ -80,6 +80,18 @@ function graph():AnimationGraphDefinition{
   };
 }
 
+test("unknown animation parameter and trigger name the defined ids", () => {
+  const machine = new AnimationGraphMachine(graph());
+  assert.throws(
+    () => machine.set("missing", 1),
+    /Unknown animation parameter "missing"\. Available parameters: grounded, speed\./,
+  );
+  assert.throws(
+    () => machine.trigger("speed"),
+    /Unknown trigger "speed"\. Available triggers: jump\./,
+  );
+});
+
 test("animation graph uses priorities and consumes triggers",()=>{
   const machine=new AnimationGraphMachine(graph());
   machine.set("speed",1);

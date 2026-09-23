@@ -218,6 +218,7 @@ test("loads animated GLTF, discovers clips, plays, deterministically advances, s
   assert.ok(metadata.animation);
   assert.equal(metadata.animation.clips.length, 1);
   assert.equal(metadata.animation.clips[0]!.name, "MoveX");
+  assert.deepEqual(runtime.listClipNames(rootId), ["MoveX"]);
   assert.equal(metadata.animation.clips[0]!.duration, 1.0);
   assert.equal(metadata.animation.playing, false);
 

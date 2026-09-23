@@ -377,8 +377,21 @@ export class RapierPhysicsWorld {
   #require(id: string): BodyEntry {
     const entry = this.#bodies.get(id);
     if (!entry) {
-      throw new Error(`Unknown physics body "${id}"`);
+      throw new Error(describeUnknownPhysicsBody(id, [...this.#bodies.keys()]));
     }
     return entry;
   }
+}
+
+const PHYSICS_ID_LIST_LIMIT = 12;
+
+function describeUnknownPhysicsBody(id: string, ids: readonly string[]): string {
+  const sorted = [...new Set(ids.filter((item) => item.length > 0))].sort();
+  if (sorted.length === 0) {
+    return `Unknown physics body "${id}". No physics bodies exist.`;
+  }
+  const shown = sorted.slice(0, PHYSICS_ID_LIST_LIMIT);
+  const hidden = sorted.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Unknown physics body "${id}". Available bodies: ${shown.join(", ")}${extra}.`;
 }
