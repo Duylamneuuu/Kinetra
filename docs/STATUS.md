@@ -204,7 +204,7 @@ What has meaningful proof:
 - automated `AcceptanceManifest` execution against both dev Electron runtime and packaged Windows executable (`KinetraGame.exe`) via MCP `test.runAcceptance`;
 - real valid PNG capture for Main Menu, HUD, Objective 1, Objective 2, Victory, Defeat, and Combat states;
 - deliberate failure producing structured machine-readable step evidence and clean zero-leak teardown.
-- builtin player script ids are `listBuiltinPlayerScriptIds()`: `ArenaEnemyController`, `ArenaGameManager`, `ArenaPlayerController`, `PlayerController`. `ScriptRegistry.ids()` returns the ids actually registered, sorted. Proof level: core and player unit tests. Not an MCP tool.
+- builtin player script ids are `listBuiltinPlayerScriptIds()`: `ArenaEnemyController`, `ArenaGameManager`, `ArenaPlayerController`, `PlayerController`. `ScriptRegistry.ids()` returns the ids actually registered, sorted. A script id that does not resolve names up to 12 registered ids. Proof level: core and player unit tests. Not an MCP tool.
 
 Not yet implemented:
 - multiple levels / procedural rooms;

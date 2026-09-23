@@ -16,7 +16,7 @@ import {
   type ScriptLifecycleState,
   type PreparedScriptRestore,
 } from "@kinetra/core";
-import { BUILTIN_PLAYER_SCRIPTS } from "./builtin-scripts.js";
+import { BUILTIN_PLAYER_SCRIPTS, describeUnresolvedScript } from "./builtin-scripts.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
@@ -494,7 +494,7 @@ export class PlayerRuntimeController {
         const scriptId = scriptComp.scriptId;
         const factory = this.#scriptRegistry.resolve(scriptId);
         if (!factory) {
-          const error = `Script "${scriptId}" could not be resolved`;
+          const error = describeUnresolvedScript(scriptId, this.#scriptRegistry.ids());
           this.#unresolvedScripts.set(entity.id, { scriptId, error });
           this.#log("error", "script.resolveFailed", {
             entityId: entity.id,
