@@ -157,6 +157,33 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
   ],
 };
 
+const UNKNOWN_INPUT_ACTION_LIST_LIMIT = 12;
+
+export function listInputActionIds(map: InputMap): string[] {
+  return map.actions
+    .map((action) => action.id)
+    .filter((id) => typeof id === "string" && id.length > 0)
+    .sort();
+}
+
+export function describeUnknownInputAction(
+  actionId: string,
+  actionIds: readonly string[],
+): string {
+  const ids = [
+    ...new Set(
+      actionIds.filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ].sort();
+  if (ids.length === 0) {
+    return `Unknown input action "${actionId}". No input actions are registered.`;
+  }
+  const shown = ids.slice(0, UNKNOWN_INPUT_ACTION_LIST_LIMIT);
+  const hidden = ids.length - shown.length;
+  const extra = hidden > 0 ? `, and ${hidden} more` : "";
+  return `Unknown input action "${actionId}". Available actions: ${shown.join(", ")}${extra}.`;
+}
+
 export class InputRouter {
   #map: InputMap;
   #semanticActions = new Map<string, { phase: InputPhase; value: number }>();
@@ -167,12 +194,16 @@ export class InputRouter {
 
   remap(actionId: string, bindings: InputBinding[]): void {
     const action = this.#map.actions.find(candidate => candidate.id === actionId);
-    if (!action) throw new Error(`Unknown input action "${actionId}"`);
+    if (!action) throw this.#unknownAction(actionId);
     action.bindings = structuredClone(bindings);
   }
 
   hasAction(actionId: string): boolean {
     return this.#map.actions.some(candidate => candidate.id === actionId);
+  }
+
+  listActionIds(): string[] {
+    return listInputActionIds(this.#map);
   }
 
   setSemanticAction(actionId: string, phase: InputPhase, value?: number): void {
@@ -222,7 +253,7 @@ export class InputRouter {
 
   value(actionId: string, snapshot: PhysicalInputSnapshot): number {
     const action = this.#map.actions.find(candidate => candidate.id === actionId);
-    if (!action) throw new Error(`Unknown input action "${actionId}"`);
+    if (!action) throw this.#unknownAction(actionId);
 
     let value = 0;
     for (const binding of action.bindings) {
@@ -256,5 +287,11 @@ export class InputRouter {
 
   exportMap(): InputMap {
     return structuredClone(this.#map);
+  }
+
+  #unknownAction(actionId: string): Error {
+    return new Error(
+      describeUnknownInputAction(actionId, listInputActionIds(this.#map)),
+    );
   }
 }

@@ -87,6 +87,7 @@ What exists:
 - deterministic script lifecycle;
 - scene lifecycle;
 - action-based input + remapping;
+- unknown input action errors from `remap` and `value` name the registered action ids, capped at 12. `InputRouter.listActionIds()` returns the sorted ids. Proof level: UNIT (`@kinetra/input`). This is not an MCP tool;
 - versioned save migration/store contracts;
 - engine-owned file-backed desktop save storage (`FileKeyValueStorage`) with crash-resistant atomic replacement of completed temp files (fsync before rename) and bounded Windows retry;
 - renderer IPC storage bridge (`IpcKeyValueStorage`) keeping filesystem paths outside renderer and project JSON;
