@@ -137,7 +137,7 @@ What has meaningful proof:
 - one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow;
 - handshake synchronization (document load + renderer ready via `.cts` preload script);
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
-- `runtime.start` and `ThreeSceneRuntime.instantiate` name up to 12 existing scene ids when the requested scene is missing, or say the project has no scenes. Proof level: UNIT (`describeMissingScene` and renderer instantiate). Real Electron was not re-run;
+- `runtime.start` and `ThreeSceneRuntime.instantiate` name up to 12 existing scene ids when the requested scene is missing, or say the project has no scenes. Proof level: UNIT (`describeMissingScene` and renderer instantiate) plus REAL ELECTRON under xvfb (`real-missing-scene`, 1 passed / 0 failed): `runtime.start` with scene id `scene-does-not-exist` rejects with a structured error naming both fixture scene ids, `runtime.query` stays `running: false`, a following valid `runtime.start` succeeds, stop returns the runtime to idle, and `/proc` shows no leftover process for the user-data directory;
 - live structured entity query and semantic input injection (`runtime.injectInput`);
 - structured runtime log recording;
 - real non-empty PNG frame capture via `webContents.capturePage()`;
