@@ -18,7 +18,7 @@ Legend:
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
 | Linux x64 packaged player | PACKAGED SLICE PROVEN | Portable Linux x64 `KinetraGame` (`package:linux`, `smoke:linux:packaged`) uses the same Electron runtime bridge as Windows. Proof is the packaged binary, not dev Electron: `hostInfo.platform === "linux"`, `arch === "x64"`, `isPackaged === true`, Arena semantic input, real PNG capture, save/load across a packaged-process restart, and clean teardown. |
-| P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. |
+| P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. Linux cloud smoke proven via cross-platform stdio bridge under xvfb (`pnpm --filter @kinetra/player smoke:linux` + Linux CI): ping/hostInfo/start/query/step/injectInput/captureFrame/stop against Kinetra Arena with valid-PNG and zero-leak teardown proof. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
 | P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
@@ -121,7 +121,8 @@ What has meaningful proof:
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
 - engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` on Windows and `KinetraGame` on Linux, with `KINETRA_RUNTIME_EXECUTABLE` as an explicit override;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
-- end-to-end acceptance suite running against both dev Electron and packaged Windows executable.
+- end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
+- command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
 
 What remains:
 - perceptual/AI visual critique;
@@ -132,6 +133,8 @@ What remains:
 
 What has meaningful proof:
 - Electron player runtime controlled over Windows named pipes (`ElectronRuntimeHost`);
+- cross-platform stdio bridge transport (`transport: "stdio"`) with identical request/response protocol, proven by Linux cloud smoke;
+- one-command Linux runtime smoke (`pnpm --filter @kinetra/player smoke:linux`): real Electron under xvfb, stdio bridge, Kinetra Arena start/query/step/semantic-input/valid-PNG-capture/stop, repeated runs with zero-leak `/proc` proof, frames + `report.json` artifacts, Linux CI workflow;
 - handshake synchronization (document load + renderer ready via `.cts` preload script);
 - project scene instantiation with primitives (box, sphere, plane), lights, and cameras;
 - live structured entity query and semantic input injection (`runtime.injectInput`);

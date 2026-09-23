@@ -51,6 +51,9 @@ importers:
       '@electron/packager':
         specifier: ^18.3.6
         version: 18.4.4
+      '@kinetra/verification':
+        specifier: workspace:*
+        version: link:../../packages/verification
       '@types/three':
         specifier: 0.180.0
         version: 0.180.0

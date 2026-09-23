@@ -24,3 +24,38 @@ pnpm --filter @kinetra/player smoke:win
 pnpm --filter @kinetra/player package:linux
 pnpm --filter @kinetra/player smoke:linux:packaged
 ~~~
+
+## Linux cloud smoke
+
+`smoke:linux` is fast real-Electron development/runtime proof on Linux. It
+builds nothing itself; build first, then run one command:
+
+~~~bash
+pnpm build
+pnpm --filter @kinetra/player smoke:linux
+~~~
+
+What it does:
+
+- launches the real Electron player under `xvfb` (auto re-exec when no
+  `DISPLAY` is set) with Linux-only software-rendering switches;
+- connects through the existing cross-platform stdio runtime bridge
+  (`transport: "stdio"` in `@kinetra/verification`, no new protocol);
+- drives the real Kinetra Arena reference game: `ping`, `runtime.hostInfo`
+  (must report `linux`), `runtime.start`, `runtime.query`, `runtime.step`,
+  `runtime.injectInput` (asserts the player actually moves), real PNG frame
+  capture (magic bytes + size validated), structured log observation, and
+  `runtime.stop`;
+- repeats the run and asserts no leaked Electron processes via a `/proc` scan;
+- writes frames + machine-readable `report.json` to
+  `apps/player/dist/linux-smoke/` (uploaded as a CI artifact).
+
+Verification hierarchy (unchanged):
+
+- Linux smoke = real-Electron development/runtime proof.
+- Windows CI (`smoke:win`) = native Windows package/platform proof.
+- `KinetraGame.exe` acceptance = packaged Windows proof.
+
+Linux proof is never claimed as Windows proof. The bridge window is shown
+under xvfb (`KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW=1`) because hidden windows
+yield DOM-stale `capturePage()` frames; Windows defaults are untouched.
