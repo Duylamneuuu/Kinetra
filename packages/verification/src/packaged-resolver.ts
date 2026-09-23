@@ -32,7 +32,59 @@ export interface PackagedExecutableResolution {
   source: "env" | "repository";
 }
 
-export function resolvePackagedExecutable(): PackagedExecutableResolution {
+export interface ResolvePackagedExecutableOptions {
+  platform?: NodeJS.Platform;
+  repositoryRoot?: string;
+}
+
+export function packagedExecutableRelativePath(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "win32":
+      return "apps/player/release/KinetraGame-win32-x64/KinetraGame.exe";
+    case "linux":
+      return "apps/player/release/KinetraGame-linux-x64/KinetraGame";
+    default:
+      throw new InfrastructureError(
+        `No packaged Kinetra executable is defined for platform "${platform}".`,
+        "PACKAGED_PLATFORM_UNSUPPORTED",
+      );
+  }
+}
+
+export function packagedBuildCommand(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "win32":
+      return "pnpm --filter @kinetra/player package:win";
+    case "linux":
+      return "pnpm --filter @kinetra/player package:linux";
+    default:
+      throw new InfrastructureError(
+        `No packaged Kinetra build command is defined for platform "${platform}".`,
+        "PACKAGED_PLATFORM_UNSUPPORTED",
+      );
+  }
+}
+
+/**
+ * Windows always launches real Electron acceptance.
+ * Linux launches it only for an explicit packaged executable under a display.
+ * Dev-Electron Linux proof is a separate lane and must not be implied here.
+ */
+export function canLaunchHostedElectronAcceptance(): boolean {
+  if (process.platform === "win32") {
+    return true;
+  }
+  if (process.platform === "linux") {
+    return Boolean(process.env.DISPLAY) && Boolean(process.env.KINETRA_RUNTIME_EXECUTABLE);
+  }
+  return false;
+}
+
+export function resolvePackagedExecutable(
+  options: ResolvePackagedExecutableOptions = {},
+): PackagedExecutableResolution {
+  const platform = options.platform ?? process.platform;
+
   if (process.env.KINETRA_RUNTIME_EXECUTABLE) {
     const envPath = resolve(process.env.KINETRA_RUNTIME_EXECUTABLE);
     if (existsSync(envPath)) {
@@ -44,18 +96,16 @@ export function resolvePackagedExecutable(): PackagedExecutableResolution {
     );
   }
 
-  const repoRoot = findRepositoryRoot();
-  const repoCandidate = resolve(
-    repoRoot,
-    "apps/player/release/KinetraGame-win32-x64/KinetraGame.exe",
-  );
+  const relativePath = packagedExecutableRelativePath(platform);
+  const repoRoot = options.repositoryRoot ?? findRepositoryRoot();
+  const repoCandidate = resolve(repoRoot, relativePath);
 
   if (existsSync(repoCandidate)) {
     return { path: repoCandidate, source: "repository" };
   }
 
   throw new InfrastructureError(
-    `Packaged executable not found at "${repoCandidate}". Build it first with: pnpm --filter @kinetra/player package:win`,
+    `Packaged executable not found at "${repoCandidate}". Build it first with: ${packagedBuildCommand(platform)}`,
     "PACKAGED_EXECUTABLE_NOT_FOUND",
   );
 }
