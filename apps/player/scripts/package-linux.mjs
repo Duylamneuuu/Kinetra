@@ -1,3 +1,3 @@
 import { packageDesktop } from "./package-desktop.mjs";
 
-await packageDesktop("win32");
+await packageDesktop("linux");
