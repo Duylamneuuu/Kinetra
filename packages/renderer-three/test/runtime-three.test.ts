@@ -108,6 +108,47 @@ test("instantiates project data into Three.js runtime objects", () => {
   assert.equal(runtime.scene.children.includes(box), true);
 });
 
+test("unsupported projection kinds name the allowed values", () => {
+  const bad = project();
+  const scene = bad.scenes[0];
+  assert.ok(scene);
+  scene.entities = [
+    {
+      id: cameraId,
+      name: "Camera",
+      components: { Camera: { type: "orthographic" } },
+    },
+  ];
+  assert.throws(
+    () => ThreeSceneRuntime.instantiate(bad, sceneId),
+    /Unsupported Camera\.type "orthographic" for entity ".*\. Available Camera\.type values: perspective\./,
+  );
+
+  scene.entities = [
+    {
+      id: lightId,
+      name: "Light",
+      components: { Light: { kind: "spot" } },
+    },
+  ];
+  assert.throws(
+    () => ThreeSceneRuntime.instantiate(bad, sceneId),
+    /Unsupported Light\.kind "spot" for entity ".*\. Available Light\.kind values: ambient, directional, point\./,
+  );
+
+  scene.entities = [
+    {
+      id: boxId,
+      name: "Box",
+      components: { Primitive: { kind: "cylinder" } },
+    },
+  ];
+  assert.throws(
+    () => ThreeSceneRuntime.instantiate(bad, sceneId),
+    /Unsupported Primitive\.kind "cylinder" for entity ".*\. Available Primitive\.kind values: box, plane, sphere\./,
+  );
+});
+
 test("dispose tears down runtime projection deterministically", () => {
   const runtime = ThreeSceneRuntime.instantiate(project(), sceneId);
   assert.equal(runtime.objects().size, 6);

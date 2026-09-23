@@ -211,6 +211,10 @@ Not yet implemented:
 - multiple enemy types;
 - complex enemy behavior trees or AI perception models.
 
+### Runtime projection kinds
+
+- Instantiating a scene rejects an unknown `Camera.type`, `Light.kind`, or `Primitive.kind` and names the supported values (`perspective`; `ambient`, `directional`, `point`; `box`, `plane`, `sphere`). Proof level: renderer unit test. This does not add new kinds.
+
 ## Open implementation references
 
 ### PR #29 — P2 Electron runtime bridge

@@ -9,12 +9,22 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 
+const CAMERA_TYPES = ["perspective"] as const;
+const LIGHT_KINDS = ["ambient", "directional", "point"] as const;
+const PRIMITIVE_KINDS = ["box", "plane", "sphere"] as const;
+
+function describeSupportedValues(label: string, values: readonly string[]): string {
+  return `Available ${label} values: ${values.join(", ")}.`;
+}
+
 function makeObject(entity: EntityDefinition): THREE.Object3D {
   const camera = asObject(entity.components.Camera);
   if (camera) {
     const type = stringValue(camera.type, "perspective");
     if (type !== "perspective") {
-      throw new Error(`Unsupported Camera.type "${type}" for entity "${entity.id}"`);
+      throw new Error(
+        `Unsupported Camera.type "${type}" for entity "${entity.id}". ${describeSupportedValues("Camera.type", CAMERA_TYPES)}`,
+      );
     }
 
     return new THREE.PerspectiveCamera(
@@ -39,7 +49,9 @@ function makeObject(entity: EntityDefinition): THREE.Object3D {
       case "directional":
         return new THREE.DirectionalLight(color, intensity);
       default:
-        throw new Error(`Unsupported Light.kind "${kind}" for entity "${entity.id}"`);
+        throw new Error(
+          `Unsupported Light.kind "${kind}" for entity "${entity.id}". ${describeSupportedValues("Light.kind", LIGHT_KINDS)}`,
+        );
     }
   }
 
@@ -87,7 +99,9 @@ function makePrimitive(entity: EntityDefinition): THREE.Object3D | null {
       break;
     }
     default:
-      throw new Error(`Unsupported Primitive.kind "${kind}" for entity "${entity.id}"`);
+      throw new Error(
+        `Unsupported Primitive.kind "${kind}" for entity "${entity.id}". ${describeSupportedValues("Primitive.kind", PRIMITIVE_KINDS)}`,
+      );
   }
 
   return new THREE.Mesh(geometry, material);
