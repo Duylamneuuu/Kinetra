@@ -66,6 +66,20 @@ test("prefab instantiation creates stable hierarchy and explicit overrides",()=>
   assert.throws(
     ()=>instantiatePrefab({
       prefab:{
+        id:"prefab_dup",
+        name:"Dup",
+        entities:[
+          {localId:"root",name:"A",components:{}},
+          {localId:"root",name:"B",components:{}},
+        ],
+      },
+      instanceId:"dup-1",
+    }),
+    /Prefab local IDs must be unique\. Duplicates: root\./,
+  );
+  assert.throws(
+    ()=>instantiatePrefab({
+      prefab:{
         ...prefab,
         entities:[
           ...prefab.entities,

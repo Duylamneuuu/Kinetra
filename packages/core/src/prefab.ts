@@ -29,7 +29,16 @@ export function instantiatePrefab(input:{
   overrides?:PrefabOverride[];
 }):EntityDefinition[]{
   const localIds=new Set(input.prefab.entities.map(entity=>entity.localId));
-  if(localIds.size!==input.prefab.entities.length) throw new Error("Prefab local IDs must be unique");
+  if(localIds.size!==input.prefab.entities.length){
+    const seen=new Set<string>();
+    const duplicates:string[]=[];
+    for(const entity of input.prefab.entities){
+      if(seen.has(entity.localId)) duplicates.push(entity.localId);
+      else seen.add(entity.localId);
+    }
+    const unique=[...new Set(duplicates)].sort().slice(0,12);
+    throw new Error(`Prefab local IDs must be unique. Duplicates: ${unique.join(", ")}.`);
+  }
 
   for(const entity of input.prefab.entities){
     if(entity.parentLocalId&&!localIds.has(entity.parentLocalId)){

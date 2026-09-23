@@ -84,7 +84,7 @@ Still missing:
 ### Complete-game contracts
 
 What exists:
-- prefab template/override semantics. A missing parent local id or override local id names up to 12 local ids in that prefab. Proof level: UNIT (`@kinetra/core`);
+- prefab template/override semantics. A missing parent local id or override local id names up to 12 local ids in that prefab. Duplicate local ids name the repeated ids. Proof level: UNIT (`@kinetra/core`);
 - deterministic script lifecycle;
 - scene lifecycle;
 - action-based input + remapping;
