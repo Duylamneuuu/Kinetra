@@ -14,15 +14,17 @@ import {
   ARENA_ENTITY_MANAGER,
 } from "@kinetra/reference-game";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
-  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     ...(saveDir ? { saveDir } : {}),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
@@ -45,7 +47,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Combat Foundation Slice 4 — Player Attack, Damage Model, Enemy Defeated State, Multi-Process Save/Load, Packaged Proof",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Player attacks Enemy, Enemy health decreases

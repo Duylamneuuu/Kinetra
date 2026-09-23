@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -76,6 +78,7 @@ function fixtureProject(): ProjectDocument {
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
@@ -85,7 +88,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes passing acceptance manifest with semantic input, state query, and real PNG capture",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -155,7 +158,7 @@ test(
 
 test(
   "deliberately failing acceptance scenario returns structured failure report and performs clean teardown",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({
@@ -202,7 +205,7 @@ test(
 
 test(
   "clean teardown leaves zero orphan processes and is idempotent",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

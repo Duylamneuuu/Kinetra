@@ -24,15 +24,17 @@ import {
 } from "@kinetra/save-state";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
-  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     ...(saveDir ? { saveDir } : {}),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
@@ -56,7 +58,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Game Shell & Controller Slice 2 — Main Menu, HUD, Pause, Settings, Gamepad, Save/Continue, Result Screens",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Main Menu Startup & PNG Proof

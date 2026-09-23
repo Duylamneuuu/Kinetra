@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -146,6 +148,7 @@ function physicsFixtureProject(): ProjectDocument {
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
@@ -155,7 +158,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime executes deterministic Rapier physics simulation, gravity fall, floor collision, and kinematic character constraint",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const host = createTestHost();
     const probe = new KinetraRuntimeProbe({

@@ -1,0 +1,34 @@
+name: Linux verification tests
+
+on:
+  pull_request:
+    paths:
+      - "apps/player/**"
+      - "packages/**"
+      - "examples/**"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "scripts/**"
+      - ".kinetra/**"
+      - ".github/workflows/linux-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-electron-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Ensure xvfb
+        run: command -v xvfb-run || (sudo apt-get update && sudo apt-get install -y xvfb)
+      - run: pnpm build
+      - run: xvfb-run -a pnpm --filter @kinetra/verification test

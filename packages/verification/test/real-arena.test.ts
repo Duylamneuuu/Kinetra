@@ -18,10 +18,11 @@ import {
   ARENA_SFX_LOSE_ASSET_ID,
 } from "@kinetra/reference-game";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
-  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
@@ -43,6 +44,7 @@ async function waitForLog(
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     ...(saveDir ? { saveDir } : {}),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
@@ -53,7 +55,7 @@ function createArenaHost(saveDir?: string): ElectronRuntimeHost {
 
 test(
   "Arena Reference Game Slice 1 — Boot, Semantic Movement, Enemy Navmesh Chase, Win, Lose, Save/Load, and Failure Evidence",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Arena boots into scene_arena with NavMesh, Player, Enemy, Manager

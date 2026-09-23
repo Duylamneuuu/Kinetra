@@ -7,10 +7,11 @@ import test from "node:test";
 
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
-  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
@@ -86,6 +87,7 @@ function desktopSaveFixtureProject(): ProjectDocument {
 
 function createDesktopHost(saveDir: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     saveDir,
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
@@ -125,7 +127,7 @@ function assertNoForbiddenObjects(obj: unknown, path = "root"): void {
 
 test(
   "file-backed desktop save persistence: real Process A saves to disk -> terminates -> fresh Process B loads from disk -> verifies gameplay -> captures frame",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 90_000 },
+  { skip: !canRunRealElectronTests(), timeout: 90_000 },
   async () => {
     const tempSaveDir = await mkdtemp(
       join(tmpdir(), "kinetra-desktop-save-suite-"),
@@ -366,7 +368,7 @@ test(
 
 test(
   "file-backed save migration: synthetic v1 on-disk save document migrates to v2 and restores in fresh Electron session",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const tempSaveDir = await mkdtemp(
       join(tmpdir(), "kinetra-desktop-migration-"),
@@ -439,7 +441,7 @@ test(
 
 test(
   "file-backed corrupt save, missing slot, and path traversal rejection return structured failure without crashing Electron",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const tempSaveDir = await mkdtemp(
       join(tmpdir(), "kinetra-desktop-corrupt-"),

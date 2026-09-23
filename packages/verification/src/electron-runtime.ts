@@ -105,9 +105,10 @@ export interface ElectronRuntimeHostOptions {
   transport?: ElectronRuntimeTransport;
   /**
    * Extra argv entries passed to Electron ahead of the player entry point
-   * (Chromium/Electron switches such as `--no-sandbox`). Empty by default.
-   * Linux cloud smoke passes software-rendering/sandbox switches here;
-   * Windows flows pass nothing and are unaffected.
+   * (Chromium/Electron switches such as `--no-sandbox`). Empty by default,
+   * and forwarded by both the pipe and stdio transports. Linux verification
+   * tests pass software-rendering switches here. Windows flows and the
+   * default host pass nothing and are unaffected.
    */
   electronArgs?: string[];
 }
@@ -618,8 +619,13 @@ export class ElectronRuntimeHost implements RuntimeHost {
     const executable = this.runtimeExecutable ?? this.electronExecutable;
     const platformArgs = this.#platformLaunchArgs();
     const args = this.runtimeExecutable
-      ? [...platformArgs, ...this.#appArgs(effectiveUserDataDir)]
+      ? [
+          ...this.electronArgs,
+          ...platformArgs,
+          ...this.#appArgs(effectiveUserDataDir),
+        ]
       : [
+          ...this.electronArgs,
           this.playerEntry,
           ...platformArgs,
           ...this.#appArgs(effectiveUserDataDir),
@@ -906,4 +912,44 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.#resolveReady = undefined;
     this.#rejectReady = undefined;
   }
+}
+
+/**
+ * Whether the current machine can launch real Electron for runtime tests.
+ *
+ * - Windows: yes (native display; existing CI behavior, unchanged).
+ * - Linux: yes when an X display is available (`DISPLAY` set, e.g. under
+ *   `xvfb-run`). Headless shells without X skip instead of failing.
+ * - Other platforms: no (not a Kinetra test target).
+ */
+export function canRunRealElectronTests(): boolean {
+  if (process.platform === "win32") {
+    return true;
+  }
+  if (process.platform === "linux") {
+    return Boolean(process.env.DISPLAY);
+  }
+  return false;
+}
+
+/**
+ * Chromium switches for real Electron verification hosts on Linux CI and
+ * cloud VMs. The chrome-sandbox helper there is not installed setuid, and
+ * there is no GPU. Windows returns an empty list so existing CI behavior
+ * stays unchanged.
+ *
+ * The switch list is `LINUX_ELECTRON_LAUNCH_ARGS`. `ElectronRuntimeHost`
+ * already applies that list on Linux through `#platformLaunchArgs` for both
+ * the dev player and the packaged executable. Tests may also pass this
+ * function as `electronArgs`; that forwards the same list and does not
+ * introduce a second policy. On Linux this also shows the bridge window so
+ * `capturePage()` composites the WebGL canvas instead of a stale hidden DOM
+ * layer. The default host constructor leaves `electronArgs` empty.
+ */
+export function realElectronLaunchArgs(): string[] {
+  if (process.platform !== "linux") {
+    return [];
+  }
+  process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
+  return [...LINUX_ELECTRON_LAUNCH_ARGS];
 }

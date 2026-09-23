@@ -16,15 +16,17 @@ import {
   ARENA_ENTITY_GOAL,
 } from "@kinetra/reference-game";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
-  canLaunchHostedElectronAcceptance,
   type AcceptanceManifest,
 } from "../src/index.js";
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     ...(saveDir ? { saveDir } : {}),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
@@ -47,7 +49,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Gameplay Loop Expansion Slice 3 — Run Status, 3 Objectives, Lockdown Challenge, Multi-Process Save/Load, Win/Lose Flow",
-  { skip: !canLaunchHostedElectronAcceptance(), timeout: 120_000 },
+  { skip: !canRunRealElectronTests(), timeout: 120_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: New Game Run Initialization & HUD State Projection

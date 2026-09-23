@@ -4,6 +4,8 @@ import test from "node:test";
 import { createSyntheticAnimatedGlb } from "@kinetra/asset-pipeline";
 import { stableId, type ProjectDocument } from "@kinetra/project-model";
 import {
+  canRunRealElectronTests,
+  realElectronLaunchArgs,
   AcceptanceRunner,
   ElectronRuntimeHost,
   KinetraRuntimeProbe,
@@ -78,6 +80,7 @@ function animationFixtureProject(targetAssetId: string = testAssetId): ProjectDo
 
 function createTestHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
+    electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
@@ -87,7 +90,7 @@ function createTestHost(): ElectronRuntimeHost {
 
 test(
   "real Electron runtime loads animated GLB, discovers clips, plays via semantic command, advances deterministically, and verifies via AcceptanceRunner",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     // 1. Generate deterministic synthetic animated GLB (MoveX clip, 1.0s, X translation 0 -> 1)
     const glbBytes = await createSyntheticAnimatedGlb({
@@ -244,7 +247,7 @@ test(
 
 test(
   "requesting a nonexistent clip produces structured error log evidence without crashing",
-  { skip: process.platform !== "win32", timeout: 60_000 },
+  { skip: !canRunRealElectronTests(), timeout: 60_000 },
   async () => {
     const glbBytes = await createSyntheticAnimatedGlb();
     const glbBase64 = Buffer.from(glbBytes).toString("base64");
@@ -295,7 +298,7 @@ test(
 
 test(
   "lifecycle cleanup: restarting scene resets animation state and leaves zero orphan actions",
-  { skip: process.platform !== "win32", timeout: 45_000 },
+  { skip: !canRunRealElectronTests(), timeout: 45_000 },
   async () => {
     const glbBytes = await createSyntheticAnimatedGlb();
     const glbBase64 = Buffer.from(glbBytes).toString("base64");
