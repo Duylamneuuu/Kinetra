@@ -17,6 +17,7 @@ Legend:
 | P0 Three.js projection | DONE | Minimal runtime projection exists without making Three.js authoritative. |
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
+| Linux x64 packaged player | PACKAGED SLICE PROVEN | Portable Linux x64 `KinetraGame` (`package:linux`, `smoke:linux:packaged`) uses the same Electron runtime bridge as Windows. Proof is the packaged binary, not dev Electron: `hostInfo.platform === "linux"`, `arch === "x64"`, `isPackaged === true`, Arena semantic input, real PNG capture, save/load across a packaged-process restart, and clean teardown. |
 | P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. Linux cloud smoke proven via cross-platform stdio bridge under xvfb (`pnpm --filter @kinetra/player smoke:linux` + Linux CI): ping/hostInfo/start/query/step/injectInput/captureFrame/stop against Kinetra Arena with valid-PNG and zero-leak teardown proof. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
@@ -122,7 +123,7 @@ What has meaningful proof:
 - clean, leak-free process teardown and lifecycle management across repeated PASS/FAIL invocations;
 - process smoke runner for packaged exes;
 - MCP semantic tool `test.runAcceptance` exposing typed `AcceptanceManifest` execution over `@modelcontextprotocol/server`;
-- engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` without arbitrary process execution;
+- engine-owned packaged executable resolution (`resolvePackagedExecutable`) targeting real `KinetraGame.exe` on Windows and `KinetraGame` on Linux, with `KINETRA_RUNTIME_EXECUTABLE` as an explicit override;
 - truthful process observations proving executed target (`observations.hostInfo: { isPackaged, execPath, platform, arch }`);
 - end-to-end acceptance suite running against both dev Electron and packaged Windows executable;
 - command failures carry a stable `CommandError` code plus a remediation hint naming the next query or edit. MCP tool failures with a string `code`, and project validation failures with structured `issues`, are returned as JSON text. Schema failures that have no code stay plain text. Proof level: command-bus unit tests and in-memory MCP tool calls.
