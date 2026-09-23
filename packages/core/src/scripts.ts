@@ -120,6 +120,10 @@ export class ScriptRegistry implements ScriptResolver {
   has(scriptId: string): boolean {
     return this.#factories.has(scriptId);
   }
+
+  ids(): string[] {
+    return [...this.#factories.keys()].sort();
+  }
 }
 
 interface ScriptEntry {

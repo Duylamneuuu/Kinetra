@@ -69,6 +69,10 @@ test("ScriptRegistry and PlayerControllerScript with execution state tracking",a
   registry.register("PlayerController", () => new PlayerControllerScript());
   assert.equal(registry.has("PlayerController"), true);
   assert.equal(registry.has("Unknown"), false);
+  assert.deepEqual(registry.ids(), ["PlayerController"]);
+  registry.register("ZebraScript", () => new PlayerControllerScript());
+  registry.register("PlayerController", () => new PlayerControllerScript());
+  assert.deepEqual(registry.ids(), ["PlayerController", "ZebraScript"]);
 
   const script = registry.resolve("PlayerController")!({ entityId: "player", sceneId: "main" });
   const host = new ScriptHost();

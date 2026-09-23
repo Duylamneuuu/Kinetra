@@ -11,12 +11,12 @@ import { ThreeSceneRuntime, type AssetResolver } from "@kinetra/renderer-three";
 import {
   ScriptHost,
   ScriptRegistry,
-  PlayerControllerScript,
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
   type PreparedScriptRestore,
 } from "@kinetra/core";
+import { BUILTIN_PLAYER_SCRIPTS } from "./builtin-scripts.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
@@ -25,11 +25,6 @@ import {
   BrowserGamepadSnapshotProvider,
   type PhysicalInputSnapshot,
 } from "@kinetra/input";
-import {
-  ArenaPlayerController,
-  ArenaEnemyController,
-  ArenaGameManager,
-} from "@kinetra/reference-game";
 import {
   JsonDocumentStore,
   MemoryStorage,
@@ -244,10 +239,9 @@ export class PlayerRuntimeController {
       "saves",
     );
 
-    this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
-    this.#scriptRegistry.register("ArenaPlayerController", () => new ArenaPlayerController());
-    this.#scriptRegistry.register("ArenaEnemyController", () => new ArenaEnemyController());
-    this.#scriptRegistry.register("ArenaGameManager", () => new ArenaGameManager());
+    for (const [scriptId, factory] of BUILTIN_PLAYER_SCRIPTS) {
+      this.#scriptRegistry.register(scriptId, factory);
+    }
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
