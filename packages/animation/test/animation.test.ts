@@ -100,3 +100,46 @@ test("invalid animation graph reports missing state and parameter",()=>{
   assert.ok(codes.includes("anim.transition.to.missing"));
   assert.ok(codes.includes("anim.condition.parameter.missing"));
 });
+
+test("invalid animation graph names bounded state and parameter choices",()=>{
+  const bad=graph();
+  bad.entryState="missing";
+  bad.transitions.push({
+    id:"bad-target",
+    from:"idle",
+    to:"missing-target",
+    conditions:[{parameter:"wat",op:"==",value:true}],
+  });
+  bad.transitions.push({
+    id:"bad-source",
+    from:"missing-source",
+    to:"idle",
+    conditions:[{parameter:"speed",op:"triggered"}],
+  });
+  const diagnostics=validateAnimationGraph(bad);
+  const byCode=new Map(diagnostics.map((diagnostic)=>[diagnostic.code,diagnostic.message]));
+  assert.match(byCode.get("anim.entry.missing")??"",/Entry state "missing" does not exist\. Available states: idle, jump, run\./);
+  assert.match(byCode.get("anim.transition.to.missing")??"",/target "missing-target" does not exist\. Available states: idle, jump, run\./);
+  assert.match(byCode.get("anim.transition.from.missing")??"",/source "missing-source" does not exist\. Available states: idle, jump, run\./);
+  assert.match(byCode.get("anim.condition.parameter.missing")??"",/Condition parameter "wat" is missing\. Available parameters: grounded, jump, speed\./);
+  assert.match(byCode.get("anim.condition.trigger.type")??"",/Parameter "speed" is not a trigger\. Trigger parameters: jump\./);
+
+  const many=graph();
+  many.states=Array.from({length:13},(_,index)=>({
+    id:`state-${String(index).padStart(2,"0")}`,
+    clipId:"clip",
+  }));
+  many.entryState="missing";
+  many.transitions=[];
+  const entry=validateAnimationGraph(many).find((diagnostic)=>diagnostic.code==="anim.entry.missing");
+  assert.ok(entry);
+  assert.match(entry.message,/Available states: state-00, state-01, state-02, state-03, state-04, state-05, state-06, state-07, state-08, state-09, state-10, state-11, and 1 more\./);
+  assert.equal(entry.message.includes("state-12"),false);
+
+  const empty=graph();
+  empty.states=[];
+  empty.transitions=[];
+  empty.entryState="missing";
+  const emptyEntry=validateAnimationGraph(empty).find((diagnostic)=>diagnostic.code==="anim.entry.missing");
+  assert.match(emptyEntry?.message??"",/Available states: \(none\)\./);
+});

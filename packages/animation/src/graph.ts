@@ -40,6 +40,17 @@ export interface AnimationGraphDiagnostic {
   message:string;
 }
 
+const ANIMATION_ID_LIST_LIMIT=12;
+
+function describeAnimationChoices(label:string, ids:readonly string[]):string{
+  const sorted=[...new Set(ids.filter((id)=>id.length>0))].sort();
+  if(sorted.length===0) return `${label}: (none).`;
+  const shown=sorted.slice(0,ANIMATION_ID_LIST_LIMIT);
+  const hidden=sorted.length-shown.length;
+  const extra=hidden>0?`, and ${hidden} more`:"";
+  return `${label}: ${shown.join(", ")}${extra}.`;
+}
+
 export function validateAnimationGraph(graph:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
   const diagnostics:AnimationGraphDiagnostic[]=[];
   const states=new Set<string>();
@@ -54,23 +65,43 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     }
   }
 
+  const stateIds=[...states];
   if(!states.has(graph.entryState)){
-    diagnostics.push({code:"anim.entry.missing",message:`Entry state "${graph.entryState}" does not exist`});
+    diagnostics.push({
+      code:"anim.entry.missing",
+      message:`Entry state "${graph.entryState}" does not exist. ${describeAnimationChoices("Available states",stateIds)}`,
+    });
   }
+
+  const triggerIds=Object.entries(graph.parameters)
+    .filter(([,definition])=>definition.type==="trigger")
+    .map(([name])=>name);
 
   for(const transition of graph.transitions){
     if(!states.has(transition.from)){
-      diagnostics.push({code:"anim.transition.from.missing",message:`Transition "${transition.id}" source is missing`});
+      diagnostics.push({
+        code:"anim.transition.from.missing",
+        message:`Transition "${transition.id}" source "${transition.from}" does not exist. ${describeAnimationChoices("Available states",stateIds)}`,
+      });
     }
     if(!states.has(transition.to)){
-      diagnostics.push({code:"anim.transition.to.missing",message:`Transition "${transition.id}" target is missing`});
+      diagnostics.push({
+        code:"anim.transition.to.missing",
+        message:`Transition "${transition.id}" target "${transition.to}" does not exist. ${describeAnimationChoices("Available states",stateIds)}`,
+      });
     }
     for(const condition of transition.conditions){
       const parameter=graph.parameters[condition.parameter];
       if(!parameter){
-        diagnostics.push({code:"anim.condition.parameter.missing",message:`Condition parameter "${condition.parameter}" is missing`});
+        diagnostics.push({
+          code:"anim.condition.parameter.missing",
+          message:`Condition parameter "${condition.parameter}" is missing. ${describeAnimationChoices("Available parameters",Object.keys(graph.parameters))}`,
+        });
       }else if(condition.op==="triggered" && parameter.type!=="trigger"){
-        diagnostics.push({code:"anim.condition.trigger.type",message:`Parameter "${condition.parameter}" is not a trigger`});
+        diagnostics.push({
+          code:"anim.condition.trigger.type",
+          message:`Parameter "${condition.parameter}" is not a trigger. ${describeAnimationChoices("Trigger parameters",triggerIds)}`,
+        });
       }
     }
   }

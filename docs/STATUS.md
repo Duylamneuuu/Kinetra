@@ -62,6 +62,7 @@ What has meaningful proof:
 - retarget cache key;
 - root-motion extraction policy;
 - text-backed graph/state-machine semantics;
+- invalid animation graphs name the missing entry state, transition endpoint, or condition parameter and list up to 12 alternatives. Proof level: animation unit test. This does not change playback.
 - programmatic synthetic animated GLB fixture generation (`createSyntheticAnimatedGlb`);
 - GLTF animation clip extraction via Three.js `GLTFLoader` in the Electron player runtime;
 - encapsulated `THREE.AnimationMixer` management in `ThreeSceneRuntime` behind semantic methods (`playAnimation`, `stopAnimation`, `updateAnimation`);
