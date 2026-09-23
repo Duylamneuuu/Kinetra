@@ -16,7 +16,7 @@ const runtimeBridgeMode =
   process.argv.includes("--runtime-bridge-stdio");
 // Hidden bridge windows produce DOM-stale capturePage() frames (the menu layer
 // freezes at first paint while the WebGL canvas keeps updating). Linux cloud
-// smoke runs under xvfb with this flag so captures composite truthfully.
+// smoke and packaged launches set this flag so captures composite truthfully.
 // Default stays hidden: Windows behavior is unchanged.
 const bridgeShowWindow =
   process.env.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW === "1";
