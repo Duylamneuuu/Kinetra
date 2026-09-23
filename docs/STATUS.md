@@ -93,7 +93,7 @@ What exists:
 - renderer IPC storage bridge (`IpcKeyValueStorage`) keeping filesystem paths outside renderer and project JSON;
 - isolated test storage root (`KINETRA_SAVE_DIR` / `--save-dir=`);
 - strict storage key validation and path traversal protection;
-- save slot discovery: `KeyValueStorage.list`, `JsonDocumentStore.list`, player `save.list`, and a missing-slot `save.load` error that names existing slot ids (message capped at 12) and points at `save.list`. Proof level: UNIT (`@kinetra/save-state` tests). Real Electron and packaged listing are not yet proven;
+- save slot discovery: `KeyValueStorage.list`, `JsonDocumentStore.list`, player `save.list`, and a missing-slot `save.load` error that names existing slot ids (message capped at 12) and points at `save.list`. Proof level: UNIT (`@kinetra/save-state` tests) plus REAL ELECTRON under xvfb (`real-save-list`, 1 passed / 0 failed): slots `A` and `B` are written, `save.list` returns both, `save.load("missing-slot")` fails with `Available slots: A, B` and `availableSlots: ["A", "B"]`, the error contains no filesystem path, and `runtime.query` stays running. Packaged listing is still unproven;
 - multi-process save persistence (Process A saves -> terminates -> fresh Process B restores and continues gameplay);
 - file-backed schema migration (v1 -> v2) and corrupt file/missing slot resilience;
 - hierarchical audio buses (@kinetra/audio) with truthful gain/mute computation;
