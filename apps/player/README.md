@@ -50,11 +50,14 @@ What it does:
 - writes frames + machine-readable `report.json` to
   `apps/player/dist/linux-smoke/` (uploaded as a CI artifact).
 
-Verification hierarchy (unchanged):
+Verification hierarchy:
 
-- Linux smoke = real-Electron development/runtime proof.
-- Windows CI (`smoke:win`) = native Windows package/platform proof.
-- `KinetraGame.exe` acceptance = packaged Windows proof.
+- `smoke:linux` = Linux x64 dev Electron proof under xvfb. CI: `.github/workflows/linux-player.yml` on pull requests (green on PR #48 and again on PR #49 and PR #50).
+- `package:linux` + `smoke:linux:packaged` = Linux x64 packaged `KinetraGame` proof, including Arena semantic input, combat, gameplay loop, desktop save/load, and process teardown. CI: `.github/workflows/linux-packaged-player.yml` (green on PR #50 and PR #49).
+- `xvfb-run -a pnpm --filter @kinetra/verification test` = the dev Electron acceptance suite, including combat and save/load. CI: `.github/workflows/linux-verification.yml` (green on PR #49, job `real-electron-tests`).
+- Windows CI (`smoke:win`) and `KinetraGame.exe` acceptance remain the Windows package proof. A green Linux run is not Windows proof.
+
+Not in this milestone: ARM64, AppImage, Flatpak, Snap, deb/rpm, Wayland-specific certification, Steam, signing, an installer, or auto-update.
 
 Linux proof is never claimed as Windows proof. The bridge window is shown
 under xvfb (`KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW=1`) because hidden windows

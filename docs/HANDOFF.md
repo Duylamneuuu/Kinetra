@@ -1,4 +1,4 @@
-# Kinetra handoff — 2026-09-19
+# Kinetra handoff — 2026-09-24
 
 This document exists so the next coding agent can continue without reconstructing the entire development history.
 
@@ -43,6 +43,58 @@ Windows packaged executable
 ```
 
 The source of truth is text/schema data. Three.js scene objects are runtime projections only.
+
+## Current milestone
+
+**Linux x64 runtime milestone complete.**
+
+`main` is `8e05113`. The Linux implementation is already merged. Do not reopen it as new infrastructure work.
+
+### Proven
+
+- Dev Electron on Linux x64 under xvfb (`smoke:linux`, PR #48).
+- Packaged Linux x64 `KinetraGame` (`package:linux`, `smoke:linux:packaged`, PR #50).
+- The existing semantic stdio runtime bridge. There is no second protocol.
+- Real gameplay acceptance on dev Electron (PR #49 `real-electron-tests`).
+- Combat acceptance on dev Electron (PR #49) and on the packaged binary (`smoke:linux:packaged`).
+- Save/load across processes on dev Electron and on the packaged binary.
+- Linux package smoke and clean process teardown.
+- Linux CI workflows on those pull requests: `linux-player.yml`, `linux-packaged-player.yml`, `linux-verification.yml`.
+
+Push of `8e05113` to `main` ran Foundation checks only. Linux workflows trigger on pull requests, not on every push.
+
+### Not proven
+
+- ARM64
+- AppImage, Flatpak, Snap, deb, or rpm
+- Wayland-specific certification
+- Steam
+- Linux signing, installer, or auto-update
+
+Windows `KinetraGame.exe` proof is separate. Do not treat a Linux run as Windows proof.
+
+### Next development direction
+
+Return to the core Kinetra roadmap on the developer machine. Do not continue Linux infrastructure work unless a real requirement appears.
+
+Recommended order from here:
+
+1. Use `docs/STATUS.md` as the implementation source of truth.
+2. Pick one non-Linux roadmap gap (authoring, discovery, or a still-unproven gameplay contract).
+3. Branch from current `main`.
+4. Do not stack another Linux packager, display server, or runtime protocol.
+
+### Unmerged work that still needs maintainer action
+
+These are not part of the closed Linux milestone. Do not merge them just to finish Linux.
+
+- **PR #53** — canonical Arena `.kinetra.json` snapshot. Open, mergeable, CI green including Linux smoke, packaged player, and real-Electron tests. Boot still does not load that file. Optional authoring fixture, not a Linux blocker.
+- **PR #47** — Cloud Agent environment. Draft. Foundation checks only.
+- **PR #28** — Windows release and Steam contracts. Draft. Not Linux distribution, and not proven with credentials.
+- **PR #29** — old Electron bridge experiment. Conflicts with `main`. Superseded by the merged runtime. Do not merge.
+- **PR #26** — old Rapier/Recast experiment. Conflicts with `main` and failed CI. Superseded by the merged physics and navigation slices. Do not merge.
+
+Many `cursor/*` branches exist from later cloud sessions (diagnostics, catalogs, launch-policy notes, starter projects). They are not merged and are not required to close this milestone. Inspect `docs/STATUS.md` before treating any of them as accepted.
 
 ## What is safely on main
 
@@ -89,47 +141,27 @@ Treat the following only as implementation references until re-proven:
   - use as a reference for editor shape only;
   - do not merge as-is.
 
-## Why development paused here
+## Why this handoff exists
 
-A long coding run created too much parallel WIP. Continuing to add more systems before consolidating would increase hidden integration errors.
-
-The next agent should **not** continue by implementing every roadmap phase in one run.
-
-Instead:
-
-1. pick one phase;
-2. define one acceptance gate;
-3. use a fresh branch from current `main`;
-4. port only the necessary ideas from WIP PRs;
-5. run CI;
-6. merge only when the behavioral gate passes.
+The Linux x64 runtime milestone is complete on `main`. The next agent should continue the core roadmap locally and should not start another Linux packaging or display-server loop.
 
 ## Recommended continuation order
 
-### 1. Finish P2 — real runtime bridge
+### 1. P2 runtime bridge is already proven
 
-Goal: prove an agent can run the real project, query it, inject semantic input, capture a real frame and read logs.
-
-Do this before the editor.
+Dev Electron, the semantic bridge, and the Linux x64 packaged player are on `main`. Do not rebuild that bridge. The observer editor is still not the next required step unless a milestone explicitly asks for it.
 
 ### 2. Rebuild/port P3 observer editor on top of accepted P2
 
 The editor must call the same command bus as AI tools. It must not become a second hidden authoring path.
 
-### 3. Finish P7 physics/navigation as a small vertical slice
+### 3. P7 physics/navigation slices are already on main
 
-Prove:
-- one dynamic rigid body;
-- one authoritative character movement path;
-- one baked navmesh;
-- one path query;
-- deterministic cleanup.
+Rapier and Recast runtime slices are proven in Electron. Do not merge PR #26. Crowds, LOD, and performance extras are still out of scope.
 
-Do not start crowds/LOD/perf extras first.
+### 4. P8 acceptance runner is already on main
 
-### 4. Wire P8 acceptance runner into the runtime/MCP
-
-P8 MCP acceptance execution (`test.runAcceptance`) and packaged-runtime verification are proven against dev Electron and `KinetraGame.exe`.
+P8 MCP acceptance execution (`test.runAcceptance`) and packaged-runtime verification are proven against dev Electron and `KinetraGame.exe`. Linux packaged acceptance is covered by the closed milestone above.
 
 ### 5. Reference game (P10 Slice 1, Slice 2, Slice 3, Slice 4 Proven)
 

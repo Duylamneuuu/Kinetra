@@ -2,15 +2,16 @@
 
 Kinetra's roadmap is ordered by dependency and proof, not by editor spectacle.
 
-> **Status note (2026-09-19):** This file describes intended phases. It is not the implementation source of truth. Read [docs/STATUS.md](./docs/STATUS.md) before coding.
+> **Status note (2026-09-24):** This file describes intended phases. It is not the implementation source of truth. Read [docs/STATUS.md](./docs/STATUS.md) before coding.
 
 ## Current checkpoint
 
-- P0 and P1 foundation gates were completed.
-- P4, P5, P6 and P8 have meaningful **core** work merged, but their full production gates are still broader than the merged core.
-- P2, P3, P7 and P9 have WIP/experimental branches or PRs that should not be assumed merge-ready.
-- P10 should not begin until the real runtime/verification path is consolidated.
-- Linux x64 portable packaging (`KinetraGame`) is a first-class packaged target beside Windows. It is not a second engine, and it does not replace `KinetraGame.exe` proof.
+- **Linux x64 Runtime Milestone — COMPLETE.** Dev Electron, packaged `KinetraGame` x64, the semantic bridge, gameplay and combat acceptance, save/load, package smoke, teardown, and the Linux pull-request CI workflows are proven. See `docs/STATUS.md`.
+- That milestone does not include ARM64, AppImage, Flatpak, Snap, deb/rpm, Wayland certification, Steam, signing, an installer, or auto-update. Do not continue Linux infrastructure work unless a real requirement appears.
+- Linux proof does not replace Windows `KinetraGame.exe` proof.
+- P0 and P1 foundation gates were completed. P2 real Electron bridge and P7 physics/navigation slices are on `main`, not only on experimental branches.
+- P4, P5, P6, P8, and P10 have proven runtime slices on `main`. Their full production gates are still broader than those slices. P10 Arena combat is on `main`; it is not a finished game.
+- P3 observer editor and P9 distribution remain unaccepted. PR #22, PR #26, PR #28, and PR #29 are references, not the Linux milestone.
 
 ## Phase 0 — Runtime contracts
 

@@ -1,7 +1,34 @@
 # Implementation status
 
-**Snapshot:** 2026-09-19  
-**Authoritative base:** `main` at the documentation handoff point.
+**Snapshot:** 2026-09-24  
+**Authoritative base:** `main` at `8e05113` (`fix(verification): add truthful missing-path diagnostics`).
+
+## Linux x64 Runtime Milestone — COMPLETE
+
+This milestone is closed. Do not continue Linux infrastructure work unless a real requirement appears. It does not replace Windows `KinetraGame.exe` proof, and it does not certify ARM64 or a Linux installer.
+
+Proven on `main`:
+
+| Proof | Level | Where it was verified |
+|---|---|---|
+| Dev Electron runtime | REAL ELECTRON, Linux x64, xvfb | `pnpm --filter @kinetra/player smoke:linux`. PR [#48](https://github.com/Duylamneuuu/Kinetra/pull/48) `smoke-linux` succeeded. |
+| Semantic runtime bridge | Same stdio bridge as Windows. No second protocol. | Smoke and packaged bridge: `ping`, `runtime.hostInfo`, `runtime.start`, `runtime.query`, `runtime.step`, `runtime.injectInput`, `runtime.captureFrame`, `runtime.readLogs`, `runtime.stop`. |
+| Real gameplay acceptance | REAL ELECTRON dev suite under xvfb | PR [#49](https://github.com/Duylamneuuu/Kinetra/pull/49) job `real-electron-tests` (`xvfb-run -a pnpm --filter @kinetra/verification test`) succeeded. That suite includes arena, game shell, gameplay loop, gameplay scripts, physics, navigation, models, animation, and audio. |
+| Combat acceptance | Dev Electron and packaged binary | Dev: the same #49 verification suite (`real-combat.test.ts`). Packaged: `smoke:linux:packaged` runs that file with `KINETRA_RUNTIME_EXECUTABLE` set to `KinetraGame`. PR [#50](https://github.com/Duylamneuuu/Kinetra/pull/50) and PR [#49](https://github.com/Duylamneuuu/Kinetra/pull/49) `Linux packaged player` / `package-and-launch` succeeded. |
+| Save/load across processes | Dev Electron and packaged binary | Dev: `real-save-load.test.ts` and `real-desktop-save.test.ts` in the #49 suite. Packaged: `smoke:linux:packaged` runs `real-desktop-save.test.ts` against `KinetraGame`. |
+| Linux package smoke | LINUX PACKAGED, x64 | `package:linux` then `smoke:linux:packaged`: boot `--smoke-test`, `hostInfo.platform === "linux"`, `arch === "x64"`, `isPackaged === true`, Arena semantic `player.moveRight`, PNG capture, then the packaged suites above. |
+| Linux CI | Pull-request workflows, not every push to `main` | `.github/workflows/linux-player.yml`, `linux-packaged-player.yml`, `linux-verification.yml`. Green on the PRs named above. Push of `8e05113` ran Foundation checks only. |
+| Process teardown | `/proc` scan after dev smoke; packaged PID scan after each packaged iteration and suite | Both smoke scripts fail if a player or `KinetraGame` process remains. |
+
+Intentionally not proven:
+
+- ARM64
+- AppImage, Flatpak, Snap, deb, or rpm
+- Wayland-specific certification
+- Steam on Linux
+- Linux signing, installer, or auto-update
+
+Next milestone for local development: return to the core roadmap in `ROADMAP.md` and `docs/HANDOFF.md`. Do not add another Linux packaging format.
 
 Legend:
 

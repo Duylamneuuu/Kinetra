@@ -10,9 +10,9 @@ The core product thesis is simple:
 
 ## Current development state
 
-Kinetra is currently at a **pre-alpha architecture/handoff checkpoint**.
+**Linux x64 Runtime Milestone — COMPLETE** on `main` (`8e05113`). Dev Electron, packaged `KinetraGame` x64, the semantic bridge, gameplay and combat acceptance, save/load, package smoke, and process teardown are proven. ARM64, AppImage, Flatpak, Snap, deb/rpm, Wayland certification, Steam, signing, an installer, and auto-update are not. Linux proof is not Windows proof.
 
-Several foundational and subsystem cores are merged, while the real Electron runtime bridge, observer editor, physics/navigation integration and release/Steam work remain experimental/WIP.
+The next work is the core roadmap on a developer machine, not more Linux infrastructure. The observer editor and Steam distribution are still not accepted.
 
 Before implementing anything, read:
 
