@@ -475,18 +475,24 @@ test(
         try {
           await probe.start(ARENA_SCENE_ID, 306);
 
-          // Step 1: Enemy attacks -> HP 2
+          // Step 1: Enemy telegraphs attack -> state is telegraph, HP remains 3
+          await probe.step(1);
+          const snapTelegraph = await probe.snapshot();
+          assert.equal((snapTelegraph.state.game as any)?.enemyState, "telegraph");
+          assert.equal((snapTelegraph.state.game as any)?.playerHealth, 3);
+
+          // Step 2: Telegraph concludes, Enemy attacks -> HP 2
           await probe.step(1);
           const snap1 = await probe.snapshot();
           assert.equal((snap1.state.game as any)?.playerHealth, 2);
 
-          // Step 2-3: Cooldown ticks down, Step 3: Enemy attacks -> HP 1
-          await probe.step(2);
+          // Steps 3-5: Cooldown and telegraph conclude, Enemy attacks -> HP 1
+          await probe.step(3);
           const snap2 = await probe.snapshot();
           assert.equal((snap2.state.game as any)?.playerHealth, 1);
 
-          // Step 4-5: Cooldown ticks down, Step 5: Enemy attacks -> HP 0 -> LOST!
-          await probe.step(2);
+          // Steps 6-8: Cooldown and telegraph conclude, Enemy attacks -> HP 0 -> LOST!
+          await probe.step(3);
           const snap3 = await probe.snapshot();
           const game = snap3.state.game as any;
           assert.equal(game?.playerHealth, 0, "Player health must reach 0");

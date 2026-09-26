@@ -66,6 +66,10 @@ const suites = [
     join(repoRoot, "packages/verification/dist/test/real-combat.test.js"),
   ],
   [
+    "Combat progression",
+    join(repoRoot, "packages/verification/dist/test/real-combat-progression.test.js"),
+  ],
+  [
     "Desktop save",
     join(repoRoot, "packages/verification/dist/test/real-desktop-save.test.js"),
   ],

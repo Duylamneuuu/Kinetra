@@ -131,13 +131,14 @@ Do not start crowds/LOD/perf extras first.
 
 P8 MCP acceptance execution (`test.runAcceptance`) and packaged-runtime verification are proven against dev Electron and `KinetraGame.exe`.
 
-### 5. Reference game (P10 Slice 1, Slice 2, Slice 3, Slice 4 Proven)
+### 5. Reference game (P10 Slice 1, Slice 2, Slice 3, Slice 4 & Slice 5 Proven)
 
 The bounded reference-game vertical slice ("Kinetra Arena") is proven on top of P2, P6, P7, and P8 against both dev Electron and packaged `KinetraGame.exe`. It verifies the autonomous loop: author -> run -> observe -> test -> fix -> package -> verify packaged build.
 Slice 1 proved core movement, NavMesh chase, win/lose, audio, and save/load.
 Slice 2 proved the player-facing shell: Main Menu, HUD, Pause, Settings, Gamepad snapshot provider, and Result screens.
 Slice 3 proved the repeatable gameplay loop: explicit run status (`idle` -> `active` -> `completed`/`failed`), 3 structured deterministic objectives (Security Console, Power Core, Escape Goal), HUD projection with completed count, Lockdown Survival Challenge with 1.6x enemy speed boost, and multi-process save/restore preserving exact progress.
 Slice 4 proved the combat foundation: deterministic player combat action (`player.attack`), cooldown and 2.0m range check, structured hit/miss events, bidirectional damage model (player damages enemy, enemy damages player, health bounded in [0, 3]), enemy defeated state halting navigation and attacks, combat audio feedback, multi-process save/restore of combat state, and full 5-scenario acceptance against packaged `KinetraGame.exe`.
+Slice 5 proved combat feel and encounter progression: enemy attack telegraph state machine (`chasing` -> `telegraph` -> `attacking` -> `cooldown` -> `chasing`) with deterministic reaction window, hurt reactions and cooldowns (`player.hurt`, `enemy.hurt`), encounter completion and extraction unlock progression (`encounter.extractionUnlocked = true`), authoritative run summary statistics (`elapsedSteps`, `elapsedTimeMs`, `damageDealt`, `damageTaken`, `enemiesDefeated`), multi-process save/restore across process restarts, and full 7-scenario acceptance against packaged `KinetraGame.exe`.
 
 ## Completion definition
 

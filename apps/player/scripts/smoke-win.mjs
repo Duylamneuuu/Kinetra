@@ -177,3 +177,30 @@ if (combatRun.status !== 0) {
 
 console.log("Packaged Windows combat tests passed successfully.");
 
+const progressionTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-combat-progression.test.js",
+);
+
+console.log("Running real packaged combat progression test suite...");
+const progressionRun = spawnSync(process.execPath, ["--test", progressionTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (progressionRun.status !== 0) {
+  throw new Error(`Packaged combat progression test failed with exit code ${String(progressionRun.status)}`);
+}
+
+console.log("Packaged Windows combat progression tests passed successfully.");
+

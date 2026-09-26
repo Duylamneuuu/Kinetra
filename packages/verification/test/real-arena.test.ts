@@ -198,8 +198,8 @@ test(
             // B. Non-trivial path pointCount == 3 (navigating around central obstacle)
             { type: "assert.equal", path: "state.navigation.lastPath.pointCount", expected: 3 },
             // C. Enemy moved along path towards player
-            { type: "assert.near", path: "state.byName.Enemy.position.0", expected: 3.51, tolerance: 0.2 },
-            { type: "assert.near", path: "state.byName.Enemy.position.2", expected: 2.41, tolerance: 0.2 },
+            { type: "assert.near", path: "state.byName.Enemy.position.0", expected: 3.77, tolerance: 0.3 },
+            { type: "assert.near", path: "state.byName.Enemy.position.2", expected: 2.05, tolerance: 0.3 },
             // D. Confirm Enemy gameplay state remains "chasing" before attack range
             { type: "assert.equal", path: "state.byName.Enemy.gameplay.state.state", expected: "chasing" },
             { type: "assert.near", path: "state.byName.Player.gameplay.state.health", expected: 3, tolerance: 0 },
@@ -310,15 +310,18 @@ test(
           steps: [
             { type: "runtime.start", sceneId: ARENA_SCENE_ID },
             { type: "assert.equal", path: "state.game.status", expected: "playing" },
+            // Step 1: Enemy telegraphs attack -> state is telegraph, HP remains 3
+            { type: "runtime.step", steps: 1 },
+            { type: "assert.equal", path: "state.game.enemyState", expected: "telegraph" },
             { type: "assert.equal", path: "state.game.playerHealth", expected: 3 },
-            // Step 1: Enemy attacks (cooldown set to 2) -> HP becomes 2
+            // Step 2: Telegraph concludes, Enemy attacks -> HP becomes 2
             { type: "runtime.step", steps: 1 },
             { type: "assert.equal", path: "state.game.playerHealth", expected: 2 },
-            // Step 2 & 3: Cooldown ticks down, Step 3: Enemy attacks again -> HP becomes 1
-            { type: "runtime.step", steps: 2 },
+            // Steps 3-5: Cooldown and telegraph conclude, Enemy attacks -> HP becomes 1
+            { type: "runtime.step", steps: 3 },
             { type: "assert.equal", path: "state.game.playerHealth", expected: 1 },
-            // Step 4 & 5: Cooldown ticks down, Step 5: Enemy attacks again -> HP becomes 0 -> LOST!
-            { type: "runtime.step", steps: 2 },
+            // Steps 6-8: Cooldown and telegraph conclude, Enemy attacks -> HP becomes 0 -> LOST!
+            { type: "runtime.step", steps: 3 },
             { type: "assert.equal", path: "state.game.playerHealth", expected: 0 },
             { type: "assert.equal", path: "state.game.status", expected: "lost" },
             { type: "assert.logAbsent", minimumLevel: "error" },

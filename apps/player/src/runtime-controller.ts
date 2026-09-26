@@ -513,9 +513,18 @@ export class PlayerRuntimeController {
             entityId,
             sceneId,
           });
+          const order =
+            typeof scriptComp.order === "number"
+              ? scriptComp.order
+              : scriptId === "ArenaPlayerController"
+                ? -10
+                : scriptId === "ArenaGameManager"
+                  ? 10
+                  : 0;
           this.#scripts.register({
             id: entityId,
             scriptId,
+            order,
             context: {
               entityId,
               sceneId,

@@ -25,7 +25,7 @@ Legend:
 | P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
-| P10 reference game | COMBAT FOUNDATION PROVEN | Reference game vertical slice ("Kinetra Arena") expanded with deterministic combat foundation: semantic input `player.attack` (with cooldown, 2.0m range check, structured hit/miss events), bidirectional damage model (authoritative health in [0, 3] on player and enemy), enemy death state (`defeated`) halting navigation/attacks and emitting defeat events, audio/event combat feedback, and multi-process save/restore preserving player HP, enemy HP, enemy state, and cooldowns. Full 5-scenario acceptance suite (`real-combat.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`). |
+| P10 reference game | COMBAT FEEL & PROGRESSION PROVEN | Reference game vertical slice ("Kinetra Arena") expanded with deterministic combat feel, enemy telegraphing, hurt reactions, extraction unlock progression, and run summary statistics. 7-scenario progression acceptance suite (`real-combat-progression.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`). |
 
 ## Merged subsystem notes
 
@@ -181,7 +181,7 @@ Still missing:
 - crowd agent steering / crowd simulation;
 - dynamic obstacle avoidance / tile cache.
 
-### Reference game (P10 Slice 1, Slice 2, Slice 3 & Slice 4)
+### Reference game (P10 Slice 1, Slice 2, Slice 3, Slice 4 & Slice 5)
 
 What has meaningful proof:
 - complete reference game vertical slice authored as standard Kinetra project data (`@kinetra/reference-game`);
@@ -198,13 +198,16 @@ What has meaningful proof:
 - deterministic combat foundation: semantic input `player.attack` (mapped to `KeyF`, `KeyJ`, gamepad button 2) with simulation cooldown (2 steps), range check (2.0m), and structured events (`player.attackHit`, `player.attackMiss`);
 - bidirectional authoritative damage model: Player deals damage to Enemy via `gameplay.enemyDamage` (reducing enemy HP), Enemy deals damage to Player via `gameplay.damage` (reducing player HP), with both health values bounded in `[0, 3]`;
 - enemy defeat state: when Enemy health reaches 0, transitions to `state: "defeated"`, emits `enemy.defeated` and `gameplay.enemyDefeated`, and halts navigation, chase pathfinding, and attack execution;
-- combat audio feedback: triggers hit sound (`ARENA_SFX_HIT_ASSET_ID`) on the `sfx` bus upon player and enemy attacks;
+- combat feedback layer: hurt state reactions (`player.hurt`, `enemy.hurt` events), `hurtCooldown` (1 step) preventing multi-hit stuns, and hit sound (`ARENA_SFX_HIT_ASSET_ID`) on the `sfx` bus;
+- enemy attack telegraph state machine: explicit deterministic transitions (`chasing` -> `telegraph` -> `attacking` -> `cooldown` -> `chasing`) providing a 1-step reaction window where the player can evade or trade attacks;
+- encounter completion & extraction progression: defeating enemy unlocks extraction (`encounter.extractionUnlocked = true`), required to complete `obj_survive_escape` and achieve run victory;
+- authoritative run summary statistics: tracks `elapsedSteps`, `elapsedTimeMs`, `damageDealt`, `damageTaken`, and `enemiesDefeated` during active runs;
 - Pause & Settings: `game.pause` freezes simulation, physics, and input; persistent audio and keybinding settings across process restarts;
 - deterministic WIN state (`run.status == "completed"`, `status == "won"`) and LOSE state (`run.status == "failed"`, `status == "lost"`);
 - real deterministic synthetic audio playback via assetId (`asset_arena_sfx_hit`, `asset_arena_sfx_win`, `asset_arena_sfx_lose`);
-- multi-process save & restore persistence across process boundaries: Process A saves intermediate run progress -> terminates -> Process B restores exact player position, player health, enemy health, enemy state, attack cooldown, objective progress, and challenge state, finishing the run;
+- multi-process save & restore persistence across process boundaries: Process A saves intermediate run progress -> terminates -> Process B restores exact player position, player health, enemy health, enemy state, attack cooldown, telegraph timer, hurt cooldown, objective progress, challenge state, extraction unlocked state, and run statistics, finishing the run;
 - automated `AcceptanceManifest` execution against both dev Electron runtime and packaged Windows executable (`KinetraGame.exe`) via MCP `test.runAcceptance`;
-- real valid PNG capture for Main Menu, HUD, Objective 1, Objective 2, Victory, Defeat, and Combat states;
+- real valid PNG capture for Main Menu, HUD, Objective 1, Objective 2, Victory, Defeat, Combat, and Progression states;
 - deliberate failure producing structured machine-readable step evidence and clean zero-leak teardown.
 
 Not yet implemented:
