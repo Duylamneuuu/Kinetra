@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   createArenaProject,
@@ -15,6 +19,16 @@ import {
   KinetraRuntimeProbe,
   realElectronLaunchArgs,
 } from "../src/index.js";
+
+function findReferenceGameFile(relPath: string): string {
+  let curr = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(curr, relPath);
+    if (existsSync(candidate)) return candidate;
+    curr = dirname(curr);
+  }
+  return resolve(process.cwd(), relPath);
+}
 
 function createArenaHost(saveDir?: string): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
@@ -135,6 +149,21 @@ test(
             !logs.some((l) => l.message === "model.loadFailed"),
             "Zero model.loadFailed error logs expected",
           );
+
+          // Requirement 5: Truthful Kinetra synthetic provenance without external claims
+          const assetJsonPath = findReferenceGameFile(
+            "examples/reference-game/assets/characters/enemy-bot.asset.json",
+          );
+          if (existsSync(assetJsonPath)) {
+            const assetJson = JSON.parse(await readFile(assetJsonPath, "utf8"));
+            assert.equal(assetJson.id, ARENA_ENEMY_MODEL_ASSET_ID);
+            assert.equal(assetJson.metadata?.provenance?.provider, "kinetra");
+            assert.equal(assetJson.metadata?.provenance?.generator, "createSyntheticCharacterGlb");
+            assert.equal(assetJson.metadata?.provenance?.creativeUnitsCost, undefined);
+            assert.equal(assetJson.metadata?.provenance?.sourceAssetId, undefined);
+            assert.equal(assetJson.metadata?.provenance?.model, undefined);
+            assert.notEqual(assetJson.metadata?.provenance?.provider, "scenario");
+          }
         } finally {
           await probe.close();
         }

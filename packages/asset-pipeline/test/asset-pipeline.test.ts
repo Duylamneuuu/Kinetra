@@ -74,6 +74,104 @@ test("validator emits structured policy diagnostics", () => {
   assert.ok(!validateAssetRecord(value).some(d=>d.code.startsWith("asset.provenance")));
 });
 
+test("validator rejects deterministic synthetic fixture claiming external provider provenance", () => {
+  const value = record("synthetic_enemy");
+
+  // Synthetic generator claiming external provider
+  value.metadata.provenance = {
+    provider: "scenario",
+    generator: "createSyntheticCharacterGlb",
+    model: "gpt-6-astra-3d-biped",
+  };
+  const d1 = validateAssetRecord(value);
+  assert.ok(d1.some((d) => d.code === "asset.provenance.synthetic.invalidProvider"));
+
+  // Kinetra synthetic claiming external creativeUnitsCost
+  value.metadata.provenance = {
+    provider: "kinetra",
+    generator: "createSyntheticCharacterGlb",
+    creativeUnitsCost: 45,
+  };
+  const d2 = validateAssetRecord(value);
+  assert.ok(d2.some((d) => d.code === "asset.provenance.synthetic.externalCost"));
+
+  // Kinetra synthetic claiming external model
+  value.metadata.provenance = {
+    provider: "kinetra",
+    generator: "createSyntheticCharacterGlb",
+    model: "gpt-6-astra-3d-biped",
+  };
+  const d3 = validateAssetRecord(value);
+  assert.ok(d3.some((d) => d.code === "asset.provenance.synthetic.externalModel"));
+
+  // Kinetra synthetic claiming external sourceAssetId
+  value.metadata.provenance = {
+    provider: "kinetra",
+    generator: "createSyntheticCharacterGlb",
+    sourceAssetId: "scenario_asset_enemy_bot_001",
+  };
+  const d4 = validateAssetRecord(value);
+  assert.ok(d4.some((d) => d.code === "asset.provenance.synthetic.externalAssetId"));
+
+  // Truthful Kinetra synthetic provenance passes with zero provenance diagnostics
+  value.metadata.provenance = {
+    provider: "kinetra",
+    generator: "createSyntheticCharacterGlb",
+    license: "MIT",
+  };
+  const d5 = validateAssetRecord(value);
+  assert.ok(!d5.some((d) => d.code.startsWith("asset.provenance")));
+});
+
+test("canonical character asset fixture enemy-bot.asset.json has truthful Kinetra synthetic provenance", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { join, resolve, dirname } = await import("node:path");
+  const { existsSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { createHash } = await import("node:crypto");
+  const { createSyntheticCharacterGlb } = await import("../src/index.js");
+
+  let curr = dirname(fileURLToPath(import.meta.url));
+  let candidate = "";
+  for (let i = 0; i < 5; i++) {
+    const probe = join(curr, "examples/reference-game/assets/characters/enemy-bot.asset.json");
+    if (existsSync(probe)) {
+      candidate = probe;
+      break;
+    }
+    curr = dirname(curr);
+  }
+  if (!candidate) {
+    candidate = resolve(process.cwd(), "examples/reference-game/assets/characters/enemy-bot.asset.json");
+  }
+  assert.ok(existsSync(candidate), `enemy-bot.asset.json must exist at ${candidate}`);
+
+  const content = await readFile(candidate, "utf8");
+  const parsed = JSON.parse(content) as AssetRecord;
+
+  // Validation must pass with zero errors
+  const diagnostics = validateAssetRecord(parsed);
+  assert.equal(diagnostics.filter((d) => d.severity === "error").length, 0);
+
+  // Must have truthful synthetic provenance
+  const prov = parsed.metadata.provenance;
+  assert.ok(prov, "Provenance must be present");
+  assert.equal(prov.provider, "kinetra", "Provider must be kinetra, not external provider");
+  assert.equal(prov.generator, "createSyntheticCharacterGlb", "Generator must identify synthetic function");
+  assert.equal(prov.license, "MIT");
+
+  // Must NOT claim any external provider artifacts
+  assert.equal(prov.model, undefined, "Must not claim external model");
+  assert.equal(prov.sourceAssetId, undefined, "Must not claim external sourceAssetId");
+  assert.equal(prov.creativeUnitsCost, undefined, "Must not claim external Creative Units cost");
+  assert.notEqual(prov.provider, "scenario", "Must not claim Scenario provider");
+
+  // Must match hash of createSyntheticCharacterGlb
+  const syntheticBytes = await createSyntheticCharacterGlb({ name: "EnemyBot" });
+  const syntheticHash = createHash("sha256").update(syntheticBytes).digest("hex");
+  assert.equal(parsed.source.contentHash, syntheticHash, "contentHash must match createSyntheticCharacterGlb output");
+});
+
 test("GLB header validation rejects malformed files and accepts v2 header", () => {
   const bytes=new Uint8Array(12);
   const view=new DataView(bytes.buffer);

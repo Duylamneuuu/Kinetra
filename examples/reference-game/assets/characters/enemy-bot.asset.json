@@ -29,13 +29,9 @@
     ],
     "boundsRadius": 1.1,
     "provenance": {
-      "provider": "scenario",
-      "model": "gpt-6-astra-3d-biped",
-      "prompt": "stylized armored sci-fi combat droid biped with 6 combat animations",
-      "sourceAssetId": "scenario_asset_enemy_bot_001",
-      "generatedAt": "2026-09-26T10:00:00.000Z",
-      "license": "MIT",
-      "creativeUnitsCost": 45
+      "provider": "kinetra",
+      "generator": "createSyntheticCharacterGlb",
+      "license": "MIT"
     }
   }
 }
