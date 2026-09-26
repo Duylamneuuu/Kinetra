@@ -54,6 +54,24 @@ test("validator emits structured policy diagnostics", () => {
   const value=record("hero");
   value.metadata.polycount=3_000_000;
   assert.ok(validateAssetRecord(value).some(d=>d.code==="model.polycount.high"));
+
+  value.metadata.boundsRadius = -5;
+  assert.ok(validateAssetRecord(value).some(d=>d.code==="model.bounds.invalid"));
+
+  value.metadata.boundsRadius = 600;
+  assert.ok(validateAssetRecord(value).some(d=>d.code==="model.bounds.large"));
+
+  value.metadata.boundsRadius = 1.5;
+  value.metadata.provenance = { provider: "" };
+  assert.ok(validateAssetRecord(value).some(d=>d.code==="asset.provenance.provider.empty"));
+
+  value.metadata.provenance = {
+    provider: "scenario",
+    model: "gpt-6-astra-3d",
+    prompt: "sci-fi energy crate",
+    creativeUnitsCost: 15,
+  };
+  assert.ok(!validateAssetRecord(value).some(d=>d.code.startsWith("asset.provenance")));
 });
 
 test("GLB header validation rejects malformed files and accepts v2 header", () => {
@@ -125,5 +143,29 @@ test("creates deterministic synthetic animated GLB with animation clip", async (
   assert.equal(channels.length, 1);
   assert.equal(channels[0]!.getTargetPath(), "translation");
   assert.equal(channels[0]!.getTargetNode()!.getName(), "AnimatedBoxNode");
+});
+
+test("creates deterministic synthetic prop GLB with multiple nodes, meshes, and materials", async () => {
+  const { createSyntheticPropGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticPropGlb({
+    name: "EnergyCrate",
+    frameSize: [0.8, 0.8, 0.8],
+    coreSize: [0.45, 0.45, 0.45],
+  });
+
+  assert.ok(bytes.byteLength > 200);
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.version, 2);
+  assert.equal(header.length, bytes.byteLength);
+
+  const io = new NodeIO();
+  const doc = await io.readBinary(bytes);
+  const nodes = doc.getRoot().listNodes();
+  assert.equal(nodes.length, 3); // Root, Frame, Core
+  const meshes = doc.getRoot().listMeshes();
+  assert.equal(meshes.length, 2); // FrameMesh, CoreMesh
+  const materials = doc.getRoot().listMaterials();
+  assert.equal(materials.length, 2); // FrameMaterial, CoreMaterial
 });
 

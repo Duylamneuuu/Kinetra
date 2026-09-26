@@ -139,6 +139,15 @@ Slice 2 proved the player-facing shell: Main Menu, HUD, Pause, Settings, Gamepad
 Slice 3 proved the repeatable gameplay loop: explicit run status (`idle` -> `active` -> `completed`/`failed`), 3 structured deterministic objectives (Security Console, Power Core, Escape Goal), HUD projection with completed count, Lockdown Survival Challenge with 1.6x enemy speed boost, and multi-process save/restore preserving exact progress.
 Slice 4 proved the combat foundation: deterministic player combat action (`player.attack`), cooldown and 2.0m range check, structured hit/miss events, bidirectional damage model (player damages enemy, enemy damages player, health bounded in [0, 3]), enemy defeated state halting navigation and attacks, combat audio feedback, multi-process save/restore of combat state, and full 5-scenario acceptance against packaged `KinetraGame.exe`.
 Slice 5 proved combat feel and encounter progression: enemy attack telegraph state machine (`chasing` -> `telegraph` -> `attacking` -> `cooldown` -> `chasing`) with deterministic reaction window, hurt reactions and cooldowns (`player.hurt`, `enemy.hurt`), encounter completion and extraction unlock progression (`encounter.extractionUnlocked = true`), authoritative run summary statistics (`elapsedSteps`, `elapsedTimeMs`, `damageDealt`, `damageTaken`, `enemiesDefeated`), multi-process save/restore across process restarts, and full 7-scenario acceptance against packaged `KinetraGame.exe`.
+ 
+### 6. AI Asset Production (Scenario Vertical Slice Proven)
+
+The external AI asset generation pipeline is proven via the Scenario-to-Kinetra vertical slice:
+- Scenario MCP boundary isolated from runtime player;
+- Kinetra-owned orchestration skill (`.agents/skills/kinetra-scenario-asset/SKILL.md`);
+- Ingestion pipeline with validation, normalization, sha256 content hashing, stable `assetId`, and provider-neutral `AssetProvenance` metadata;
+- Real static prop fixture (`examples/reference-game/assets/props/energy-crate.glb`);
+- 5-scenario acceptance suite (`packages/verification/test/real-scenario-asset.test.ts`) verifying ingestion, command bus mutation, real Electron WebGL projection, structured model queries, deliberate missing-asset failure resilience, and clean teardown.
 
 ## Completion definition
 

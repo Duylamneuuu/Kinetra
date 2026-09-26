@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "asset_prop_energy_crate",
+  "name": "SciFi Energy Crate",
+  "kind": "model",
+  "source": {
+    "path": "assets/props/energy-crate.glb",
+    "kind": "generated",
+    "contentHash": "88bf1a87eee8b74a30fd8f759fd02b816dc64503e752d5f1a54ea8ab010fe79c"
+  },
+  "importedPath": "assets/props/energy-crate.glb",
+  "recipe": {
+    "importer": "kinetra-gltf",
+    "importerVersion": "1.0.0",
+    "settings": {
+      "dedup": true,
+      "prune": true
+    }
+  },
+  "fingerprint": "20ba619c20fbbcd3587be96420cab546bb62d6bcc891b51c9f71b2d94b66e5ce",
+  "dependencies": [],
+  "diagnostics": [],
+  "metadata": {
+    "polycount": 24,
+    "dimensions": [
+      0.8,
+      0.8,
+      0.8
+    ],
+    "boundsRadius": 0.69,
+    "provenance": {
+      "provider": "scenario",
+      "model": "gpt-6-astra-3d",
+      "prompt": "stylized sci-fi energy crate prop with metallic frame and glowing power core",
+      "sourceAssetId": "scenario_asset_energy_crate_001",
+      "generatedAt": "2026-09-26T09:20:00.000Z",
+      "license": "MIT",
+      "creativeUnitsCost": 15
+    }
+  }
+}
