@@ -85,6 +85,8 @@ export interface PlayerRuntimeModelState {
   loaded: boolean;
   meshCount: number;
   nodeCount: number;
+  skinnedMeshCount?: number;
+  hasSkin?: boolean;
   bounds?: {
     min: [number, number, number];
     max: [number, number, number];
@@ -509,6 +511,7 @@ export class PlayerRuntimeController {
           });
         } else {
           const entityId = entity.id;
+          const self = this;
           const script = factory({
             entityId,
             sceneId,
@@ -592,6 +595,23 @@ export class PlayerRuntimeController {
               audio: {
                 play: async (options) => {
                   return await this.playAudio(options);
+                },
+              },
+              animation: {
+                play: (clipName: string, options?: { loop?: boolean }): boolean => {
+                  const res = this.playAnimation(entityId, clipName, options);
+                  return res.success;
+                },
+                stop: (): void => {
+                  this.stopAnimation(entityId);
+                },
+                get activeClip(): string | undefined {
+                  const meta = self.#runtime?.getModelMetadata(entityId);
+                  return meta?.animation?.activeClip;
+                },
+                get playing(): boolean {
+                  const meta = self.#runtime?.getModelMetadata(entityId);
+                  return meta?.animation?.playing ?? false;
                 },
               },
               emit: (event, payload) => {
@@ -1389,6 +1409,12 @@ export class PlayerRuntimeController {
                 loaded: modelMeta.loaded,
                 meshCount: modelMeta.meshCount,
                 nodeCount: modelMeta.nodeCount,
+                ...(modelMeta.skinnedMeshCount !== undefined
+                  ? { skinnedMeshCount: modelMeta.skinnedMeshCount }
+                  : {}),
+                ...(modelMeta.hasSkin !== undefined
+                  ? { hasSkin: modelMeta.hasSkin }
+                  : {}),
                 ...(modelMeta.bounds ? { bounds: modelMeta.bounds } : {}),
                 ...(modelMeta.animation ? { animation: modelMeta.animation } : {}),
                 ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),

@@ -40,6 +40,8 @@ export interface ModelMetadata {
   loaded: boolean;
   meshCount: number;
   nodeCount: number;
+  skinnedMeshCount?: number;
+  hasSkin?: boolean;
   bounds?: ModelBounds;
   animation?: ModelAnimationState;
   nodes?: ModelNodeState[];

@@ -66,6 +66,9 @@ importers:
 
   examples/reference-game:
     dependencies:
+      '@kinetra/asset-pipeline':
+        specifier: workspace:*
+        version: link:../../packages/asset-pipeline
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../../packages/audio

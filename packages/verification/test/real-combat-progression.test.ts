@@ -300,11 +300,11 @@ test(
       try {
         await probe.start(ARENA_SCENE_ID, 504);
 
-        // Player deals damage to enemy (damageDealt += 1)
-        await probe.input({ action: "player.attack", phase: "press", value: 1 });
+        // Step 1: Enemy telegraphs attack
         await probe.step(1);
 
-        // Enemy attacks player (damageTaken += 1)
+        // Step 2: Player attacks and trades damage (damageDealt += 1, damageTaken += 1)
+        await probe.input({ action: "player.attack", phase: "press", value: 1 });
         await probe.step(1);
 
         const snap1 = await probe.snapshot();
@@ -316,6 +316,8 @@ test(
         assert.ok(stats1.elapsedTimeMs > 0, "elapsedTimeMs must be greater than 0");
 
         // Defeat enemy
+        await probe.input({ action: "player.moveBackward", phase: "press", value: 1 });
+        await probe.step(1);
         await probe.input({ action: "player.attack", phase: "press", value: 1 });
         await probe.step(1);
         await probe.input({ action: "player.moveBackward", phase: "press", value: 1 });

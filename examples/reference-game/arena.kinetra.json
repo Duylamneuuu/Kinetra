@@ -72,6 +72,9 @@
           "id": "entity_arena_enemy",
           "name": "Enemy",
           "components": {
+            "Model": {
+              "assetId": "asset_character_enemy_bot"
+            },
             "Primitive": {
               "color": "#ef4444",
               "kind": "box",

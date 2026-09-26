@@ -73,6 +73,10 @@ const suites = [
     "Desktop save",
     join(repoRoot, "packages/verification/dist/test/real-desktop-save.test.js"),
   ],
+  [
+    "Character animation",
+    join(repoRoot, "packages/verification/dist/test/real-character-animation.test.js"),
+  ],
 ];
 
 for (const [label, testFile] of suites) {

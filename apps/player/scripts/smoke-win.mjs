@@ -204,3 +204,30 @@ if (progressionRun.status !== 0) {
 
 console.log("Packaged Windows combat progression tests passed successfully.");
 
+const characterAnimationTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-character-animation.test.js",
+);
+
+console.log("Running real packaged character animation test suite...");
+const characterAnimationRun = spawnSync(process.execPath, ["--test", characterAnimationTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (characterAnimationRun.status !== 0) {
+  throw new Error(`Packaged character animation test failed with exit code ${String(characterAnimationRun.status)}`);
+}
+
+console.log("Packaged Windows character animation tests passed successfully.");
+

@@ -28,6 +28,40 @@ export interface RuntimeEntityState {
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
+  model?: {
+    assetId: string;
+    loaded: boolean;
+    meshCount: number;
+    nodeCount: number;
+    skinnedMeshCount?: number;
+    hasSkin?: boolean;
+    bounds?: {
+      min: [number, number, number];
+      max: [number, number, number];
+      size: [number, number, number];
+    };
+    animation?: {
+      clips: Array<{ name: string; duration: number }>;
+      activeClip?: string;
+      playing: boolean;
+      time: number;
+      duration?: number;
+    };
+    nodes?: Array<{
+      name: string;
+      position: [number, number, number];
+      rotation?: [number, number, number, number];
+      scale?: [number, number, number];
+    }>;
+    error?: string;
+  };
+  gameplay?: {
+    scriptId: string;
+    lifecycleState: string;
+    updateCount: number;
+    state?: Record<string, unknown>;
+    error?: string;
+  };
 }
 
 export interface RuntimeQuery {

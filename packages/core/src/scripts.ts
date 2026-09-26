@@ -41,6 +41,13 @@ export interface GameScriptAudioService {
   }): Promise<{ success: boolean; playbackId?: string; error?: string }>;
 }
 
+export interface GameScriptAnimationService {
+  play(clipName: string, options?: { loop?: boolean }): boolean;
+  stop(): void;
+  readonly activeClip?: string | undefined;
+  readonly playing?: boolean | undefined;
+}
+
 export interface GameScriptContext {
   readonly entityId: string;
   readonly sceneId: string;
@@ -49,6 +56,7 @@ export interface GameScriptContext {
   readonly scene?: GameScriptSceneQuery;
   readonly navigation?: GameScriptNavigationService;
   readonly audio?: GameScriptAudioService;
+  readonly animation?: GameScriptAnimationService;
   emit?(event: string, payload?: unknown): void;
   log?(level: "debug" | "info" | "warning" | "error", category: string, data?: Record<string, unknown>): void;
 }

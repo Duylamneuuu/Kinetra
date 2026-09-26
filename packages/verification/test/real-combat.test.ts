@@ -413,7 +413,9 @@ test(
             { type: "input", action: "player.attack", phase: "press", value: 1 },
             { type: "runtime.step", steps: 1 },
             { type: "assert.equal", path: "state.game.enemyHealth", expected: 2 },
-            // Enemy attacks player
+            // Enemy attacks player (telegraph warning phase -> attack connects)
+            { type: "runtime.step", steps: 1 },
+            { type: "assert.equal", path: "state.game.enemyState", expected: "telegraph" },
             { type: "runtime.step", steps: 1 },
             { type: "assert.equal", path: "state.game.playerHealth", expected: 2 },
             { type: "assert.screenshotValidPng" },

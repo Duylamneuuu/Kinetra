@@ -258,4 +258,67 @@ test("ArenaGameManager stats accumulation, encounter progression, and state rest
   assert.equal(manager.encounter.extractionUnlocked, true);
 });
 
+test("ArenaEnemyController drives semantic animation service across all combat states", () => {
+  const enemy = new ArenaEnemyController();
+  const playedClips: Array<{ clip: string; loop?: boolean }> = [];
+  let currentClip: string | undefined;
 
+  const mockAnimation = {
+    play(clipName: string, options?: { loop?: boolean }): boolean {
+      playedClips.push({ clip: clipName, ...(options?.loop !== undefined ? { loop: options.loop } : {}) });
+      currentClip = clipName;
+      return true;
+    },
+    stop(): void {
+      currentClip = undefined;
+    },
+    get activeClip() {
+      return currentClip;
+    },
+    get playing() {
+      return currentClip !== undefined;
+    },
+  };
+
+  const context: any = {
+    entityId: "enemy",
+    animation: mockAnimation,
+    transform: {
+      getPosition: () => [5, 0.5, 5],
+      translate: () => {},
+    },
+    scene: {
+      findEntityByName: () => ({ entityId: "player", name: "Player" }),
+      getEntityTransform: () => [5, 0.5, 5], // within attack range 1.6
+    },
+    emit: () => {},
+    log: () => {},
+  };
+
+  // Start -> chasing -> walk
+  enemy.onStart(context);
+  assert.equal(mockAnimation.activeClip, "walk");
+  assert.equal(enemy.getState().animationClip, "walk");
+
+  // Step 1 -> player in range -> enters telegraph -> telegraph clip
+  enemy.onUpdate(context, 1 / 60);
+  assert.equal(enemy.state, "telegraph");
+  assert.equal(mockAnimation.activeClip, "telegraph");
+  assert.equal(enemy.getState().animationClip, "telegraph");
+
+  // Step 2 -> telegraph completes -> attacks -> attack clip
+  enemy.onUpdate(context, 1 / 60);
+  assert.equal(mockAnimation.activeClip, "attack");
+  assert.equal(enemy.getState().animationClip, "attack");
+
+  // Enemy takes damage -> hurt reaction
+  enemy.onEvent("gameplay.enemyDamage", { amount: 1 }, context);
+  assert.equal(mockAnimation.activeClip, "hurt");
+  assert.equal(enemy.getState().animationClip, "hurt");
+
+  // Enemy takes lethal damage -> defeat clip
+  enemy.onEvent("gameplay.enemyDamage", { amount: 2 }, context);
+  assert.equal(enemy.state, "defeated");
+  assert.equal(mockAnimation.activeClip, "defeat");
+  assert.equal(enemy.getState().animationClip, "defeat");
+});
