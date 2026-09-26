@@ -206,6 +206,7 @@ export function createArenaProject(): ProjectDocument {
               },
               Script: {
                 scriptId: "ArenaPlayerController",
+                order: -10,
               },
             },
           },
@@ -225,6 +226,7 @@ export function createArenaProject(): ProjectDocument {
               },
               Script: {
                 scriptId: "ArenaEnemyController",
+                order: 0,
               },
             },
           },
@@ -239,6 +241,7 @@ export function createArenaProject(): ProjectDocument {
               },
               Script: {
                 scriptId: "ArenaGameManager",
+                order: 10,
               },
             },
           },

@@ -406,12 +406,18 @@ test(
 
       try {
         await probeLose.start(ARENA_SCENE_ID, 1);
-        // Step 1: Enemy attacks -> HP 2
+        // Step 1: Enemy telegraphs attack -> state is telegraph, HP remains 3
         await probeLose.step(1);
-        // Step 2-3: Cooldown -> HP 1
-        await probeLose.step(2);
-        // Step 4-5: Cooldown -> HP 0 -> LOST
-        await probeLose.step(2);
+        const snapTelegraph = await probeLose.snapshot();
+        assert.equal((snapTelegraph.state.game as any)?.enemyState, "telegraph");
+        assert.equal((snapTelegraph.state.game as any)?.playerHealth, 3);
+
+        // Step 2: Telegraph concludes, Enemy attacks -> HP 2
+        await probeLose.step(1);
+        // Steps 3-5: Cooldown and telegraph conclude, Enemy attacks -> HP 1
+        await probeLose.step(3);
+        // Steps 6-8: Cooldown and telegraph conclude, Enemy attacks -> HP 0 -> LOST
+        await probeLose.step(3);
 
         const snapLose = await probeLose.snapshot();
         assert.equal((snapLose.state.game as any)?.status, "lost");

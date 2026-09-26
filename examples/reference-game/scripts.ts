@@ -16,6 +16,7 @@ export class ArenaPlayerController implements GameScript {
   readonly attackCooldownDuration = 2;
   readonly attackRange = 2.0;
   lastAction?: string | undefined;
+  hurtCooldown = 0;
 
   onCreate(context: GameScriptContext): void {
     context.log?.("info", "script.lifecycle", {
@@ -34,6 +35,10 @@ export class ArenaPlayerController implements GameScript {
   onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
     if (this.health <= 0) {
       return; // incapacitated
+    }
+
+    if (this.hurtCooldown > 0) {
+      this.hurtCooldown--;
     }
 
     if (this.attackCooldown > 0) {
@@ -122,8 +127,19 @@ export class ArenaPlayerController implements GameScript {
           ? (payload as { amount: number }).amount
           : 1;
 
+      this.hurtCooldown = 1;
       const previous = this.health;
       this.health = Math.max(0, Math.min(3, this.health - amount));
+      context?.log?.("info", "player.hurt", {
+        entityId: context?.entityId,
+        damage: amount,
+        health: this.health,
+      });
+      context?.emit?.("player.hurt", {
+        entityId: context?.entityId,
+        damage: amount,
+        health: this.health,
+      });
       context?.log?.("info", "gameplay.playerDamaged", {
         entityId: context?.entityId,
         previousHealth: previous,
@@ -142,6 +158,8 @@ export class ArenaPlayerController implements GameScript {
       health: this.health,
       moveCount: this.moveCount,
       attackCooldown: this.attackCooldown,
+      isHurt: this.hurtCooldown > 0,
+      hurtCooldown: this.hurtCooldown,
       ...(this.lastAction ? { lastAction: this.lastAction } : {}),
     };
   }
@@ -180,6 +198,15 @@ export class ArenaPlayerController implements GameScript {
         return { valid: false, error: "attackCooldown must be a non-negative finite number" };
       }
     }
+    if ("hurtCooldown" in state && state.hurtCooldown !== undefined) {
+      if (
+        typeof state.hurtCooldown !== "number" ||
+        !Number.isFinite(state.hurtCooldown) ||
+        state.hurtCooldown < 0
+      ) {
+        return { valid: false, error: "hurtCooldown must be a non-negative finite number" };
+      }
+    }
     if ("lastAction" in state && state.lastAction !== undefined) {
       if (typeof state.lastAction !== "string") {
         return { valid: false, error: "lastAction must be a string" };
@@ -198,6 +225,7 @@ export class ArenaPlayerController implements GameScript {
     const priorMoveCount = this.moveCount;
     const priorCooldown = this.attackCooldown;
     const priorLastAction = this.lastAction;
+    const priorHurtCooldown = this.hurtCooldown;
 
     const nextHealth =
       typeof state.health === "number" ? state.health : this.health;
@@ -207,6 +235,8 @@ export class ArenaPlayerController implements GameScript {
       typeof state.attackCooldown === "number" ? state.attackCooldown : this.attackCooldown;
     const nextLastAction =
       typeof state.lastAction === "string" ? state.lastAction : this.lastAction;
+    const nextHurtCooldown =
+      typeof state.hurtCooldown === "number" ? state.hurtCooldown : this.hurtCooldown;
 
     return {
       commit: () => {
@@ -214,12 +244,14 @@ export class ArenaPlayerController implements GameScript {
         this.moveCount = nextMoveCount;
         this.attackCooldown = nextCooldown;
         this.lastAction = nextLastAction;
+        this.hurtCooldown = nextHurtCooldown;
       },
       rollback: () => {
         this.health = priorHealth;
         this.moveCount = priorMoveCount;
         this.attackCooldown = priorCooldown;
         this.lastAction = priorLastAction;
+        this.hurtCooldown = priorHurtCooldown;
       },
     };
   }
@@ -233,8 +265,11 @@ export class ArenaPlayerController implements GameScript {
 export class ArenaEnemyController implements GameScript {
   health = 3;
   readonly maxHealth = 3;
-  state: "idle" | "chasing" | "attacking" | "defeated" = "chasing";
+  state: "idle" | "chasing" | "telegraph" | "attacking" | "cooldown" | "defeated" = "chasing";
   damageCooldown = 0;
+  telegraphTimer = 0;
+  telegraphDuration = 1;
+  hurtCooldown = 0;
   targetName = "Player";
   attackRange = 1.6;
   speed = 0.8;
@@ -258,8 +293,8 @@ export class ArenaEnemyController implements GameScript {
       return; // Defeated enemies stop navigation, attacks, and state transitions
     }
 
-    if (this.damageCooldown > 0) {
-      this.damageCooldown--;
+    if (this.hurtCooldown > 0) {
+      this.hurtCooldown--;
     }
 
     if (!context.transform || !context.scene) {
@@ -281,11 +316,11 @@ export class ArenaEnemyController implements GameScript {
 
     const dist = Math.hypot(playerPos[0] - enemyPos[0], playerPos[2] - enemyPos[2]);
 
-    if (dist <= this.attackRange) {
-      this.state = "attacking";
-      context.emit?.("enemy.stateChanged", { state: this.state });
-
-      if (this.damageCooldown <= 0) {
+    if (this.state === "telegraph") {
+      if (dist <= this.attackRange) {
+        // Warning phase complete and player still within range -> attack connects!
+        this.state = "attacking";
+        context.emit?.("enemy.stateChanged", { state: this.state });
         context.emit?.("gameplay.damage", { amount: 1 });
         void context.audio?.play({ assetId: ARENA_SFX_HIT_ASSET_ID, bus: "sfx" });
         this.damageCooldown = 2; // deterministic simulation-step cooldown
@@ -295,7 +330,63 @@ export class ArenaEnemyController implements GameScript {
           dist,
           cooldown: this.damageCooldown,
         });
+        this.state = "cooldown";
+        context.emit?.("enemy.stateChanged", { state: this.state });
+      } else {
+        // Player evaded attack range during telegraph window!
+        this.state = "chasing";
+        context.emit?.("enemy.stateChanged", { state: this.state });
+        context.log?.("info", "enemy.attackEvaded", {
+          entityId: context.entityId,
+          targetId: playerEntity.entityId,
+          dist,
+          attackRange: this.attackRange,
+        });
       }
+      return;
+    }
+
+    if (this.state === "cooldown") {
+      if (this.damageCooldown > 0) {
+        this.damageCooldown--;
+      }
+      if (this.damageCooldown <= 0) {
+        if (dist <= this.attackRange) {
+          this.state = "telegraph";
+          this.telegraphTimer = this.telegraphDuration;
+          context.emit?.("enemy.stateChanged", { state: this.state });
+          context.emit?.("enemy.telegraph", {
+            entityId: context.entityId,
+            targetId: playerEntity.entityId,
+            dist,
+          });
+          context.log?.("info", "enemy.attackTelegraph", {
+            entityId: context.entityId,
+            targetId: playerEntity.entityId,
+            dist,
+          });
+        } else {
+          this.state = "chasing";
+          context.emit?.("enemy.stateChanged", { state: this.state });
+        }
+      }
+      return;
+    }
+
+    if (dist <= this.attackRange) {
+      this.state = "telegraph";
+      this.telegraphTimer = this.telegraphDuration;
+      context.emit?.("enemy.stateChanged", { state: this.state });
+      context.emit?.("enemy.telegraph", {
+        entityId: context.entityId,
+        targetId: playerEntity.entityId,
+        dist,
+      });
+      context.log?.("info", "enemy.attackTelegraph", {
+        entityId: context.entityId,
+        targetId: playerEntity.entityId,
+        dist,
+      });
     } else {
       this.state = "chasing";
       context.emit?.("enemy.stateChanged", { state: this.state });
@@ -352,8 +443,19 @@ export class ArenaEnemyController implements GameScript {
           ? (payload as { amount: number }).amount
           : 1;
 
+      this.hurtCooldown = 1;
       const previous = this.health;
       this.health = Math.max(0, Math.min(this.maxHealth, this.health - amount));
+      context?.log?.("info", "enemy.hurt", {
+        entityId: context?.entityId,
+        damage: amount,
+        health: this.health,
+      });
+      context?.emit?.("enemy.hurt", {
+        entityId: context?.entityId,
+        damage: amount,
+        health: this.health,
+      });
       context?.log?.("info", "gameplay.enemyDamaged", {
         entityId: context?.entityId,
         previousHealth: previous,
@@ -385,6 +487,10 @@ export class ArenaEnemyController implements GameScript {
       state: this.state,
       damageCooldown: this.damageCooldown,
       speed: this.speed,
+      telegraphTimer: this.telegraphTimer,
+      telegraphDuration: this.telegraphDuration,
+      isHurt: this.hurtCooldown > 0,
+      hurtCooldown: this.hurtCooldown,
     };
   }
 
@@ -408,12 +514,14 @@ export class ArenaEnemyController implements GameScript {
       if (
         state.state !== "idle" &&
         state.state !== "chasing" &&
+        state.state !== "telegraph" &&
         state.state !== "attacking" &&
+        state.state !== "cooldown" &&
         state.state !== "defeated"
       ) {
         return {
           valid: false,
-          error: 'state must be "idle", "chasing", "attacking", or "defeated"',
+          error: 'state must be "idle", "chasing", "telegraph", "attacking", "cooldown", or "defeated"',
         };
       }
     }
@@ -424,6 +532,24 @@ export class ArenaEnemyController implements GameScript {
         state.damageCooldown < 0
       ) {
         return { valid: false, error: "damageCooldown must be a non-negative finite number" };
+      }
+    }
+    if ("telegraphTimer" in state && state.telegraphTimer !== undefined) {
+      if (
+        typeof state.telegraphTimer !== "number" ||
+        !Number.isFinite(state.telegraphTimer) ||
+        state.telegraphTimer < 0
+      ) {
+        return { valid: false, error: "telegraphTimer must be a non-negative finite number" };
+      }
+    }
+    if ("hurtCooldown" in state && state.hurtCooldown !== undefined) {
+      if (
+        typeof state.hurtCooldown !== "number" ||
+        !Number.isFinite(state.hurtCooldown) ||
+        state.hurtCooldown < 0
+      ) {
+        return { valid: false, error: "hurtCooldown must be a non-negative finite number" };
       }
     }
     if ("speed" in state && state.speed !== undefined) {
@@ -448,13 +574,17 @@ export class ArenaEnemyController implements GameScript {
     const priorState = this.state;
     const priorCooldown = this.damageCooldown;
     const priorSpeed = this.speed;
+    const priorTelegraphTimer = this.telegraphTimer;
+    const priorHurtCooldown = this.hurtCooldown;
 
     const nextHealth =
       typeof state.health === "number" ? state.health : this.health;
     const nextState =
       state.state === "idle" ||
       state.state === "chasing" ||
+      state.state === "telegraph" ||
       state.state === "attacking" ||
+      state.state === "cooldown" ||
       state.state === "defeated"
         ? state.state
         : this.state;
@@ -464,6 +594,14 @@ export class ArenaEnemyController implements GameScript {
         : this.damageCooldown;
     const nextSpeed =
       typeof state.speed === "number" ? state.speed : this.speed;
+    const nextTelegraphTimer =
+      typeof state.telegraphTimer === "number"
+        ? state.telegraphTimer
+        : this.telegraphTimer;
+    const nextHurtCooldown =
+      typeof state.hurtCooldown === "number"
+        ? state.hurtCooldown
+        : this.hurtCooldown;
 
     return {
       commit: () => {
@@ -471,12 +609,16 @@ export class ArenaEnemyController implements GameScript {
         this.state = nextState;
         this.damageCooldown = nextCooldown;
         this.speed = nextSpeed;
+        this.telegraphTimer = nextTelegraphTimer;
+        this.hurtCooldown = nextHurtCooldown;
       },
       rollback: () => {
         this.health = priorHealth;
         this.state = priorState;
         this.damageCooldown = priorCooldown;
         this.speed = priorSpeed;
+        this.telegraphTimer = priorTelegraphTimer;
+        this.hurtCooldown = priorHurtCooldown;
       },
     };
   }
@@ -502,6 +644,20 @@ export interface ArenaChallengeState {
   alertTriggered: boolean;
 }
 
+export interface ArenaRunStats {
+  elapsedSteps: number;
+  elapsedTimeMs: number;
+  damageDealt: number;
+  damageTaken: number;
+  enemiesDefeated: number;
+}
+
+export interface ArenaEncounterState {
+  status: "active" | "defeated";
+  enemyDefeated: boolean;
+  extractionUnlocked: boolean;
+}
+
 export interface ArenaSessionState {
   status: "playing" | "won" | "lost";
   playerHealth: number;
@@ -513,6 +669,8 @@ export interface ArenaSessionState {
   };
   objectives: ArenaObjective[];
   challenge: ArenaChallengeState;
+  encounter: ArenaEncounterState;
+  stats: ArenaRunStats;
 }
 
 export class ArenaGameManager implements GameScript {
@@ -545,6 +703,18 @@ export class ArenaGameManager implements GameScript {
     enemySpeedMultiplier: 1.0,
     alertTriggered: false,
   };
+  encounter: ArenaEncounterState = {
+    status: "active",
+    enemyDefeated: false,
+    extractionUnlocked: false,
+  };
+  stats: ArenaRunStats = {
+    elapsedSteps: 0,
+    elapsedTimeMs: 0,
+    damageDealt: 0,
+    damageTaken: 0,
+    enemiesDefeated: 0,
+  };
   readonly terminalPosition: [number, number, number] = [-5, 0.5, 2];
   readonly terminalRadius = 1.8;
   readonly corePosition: [number, number, number] = [5, 0.5, 2];
@@ -566,10 +736,13 @@ export class ArenaGameManager implements GameScript {
     });
   }
 
-  onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
+  onUpdate(context: GameScriptContext, deltaSeconds: number): void {
     if (this.status !== "playing") {
       return;
     }
+
+    this.stats.elapsedSteps++;
+    this.stats.elapsedTimeMs += Math.round((deltaSeconds || 0.016) * 1000);
 
     // Check player interactions with objectives and goal
     const playerEntity = context.scene?.findEntityByName?.("Player");
@@ -651,6 +824,12 @@ export class ArenaGameManager implements GameScript {
             goalPos: this.goalPosition,
             runStatus: this.runStatus,
           });
+          context.log?.("info", "gameplay.runSummary", {
+            status: this.status,
+            runStatus: this.runStatus,
+            stats: { ...this.stats },
+            encounter: { ...this.encounter },
+          });
           return;
         }
       }
@@ -668,6 +847,12 @@ export class ArenaGameManager implements GameScript {
       context.log?.("info", "gameplay.lose", {
         playerHealth: this.playerHealth,
         runStatus: this.runStatus,
+      });
+      context.log?.("info", "gameplay.runSummary", {
+        status: this.status,
+        runStatus: this.runStatus,
+        stats: { ...this.stats },
+        encounter: { ...this.encounter },
       });
     }
   }
@@ -693,8 +878,32 @@ export class ArenaGameManager implements GameScript {
             playerHealth: this.playerHealth,
             runStatus: this.runStatus,
           });
+          context?.log?.("info", "gameplay.runSummary", {
+            status: this.status,
+            runStatus: this.runStatus,
+            stats: { ...this.stats },
+            encounter: { ...this.encounter },
+          });
         }
       }
+    } else if (event === "gameplay.damage") {
+      const amount =
+        typeof payload === "object" &&
+        payload !== null &&
+        "amount" in payload &&
+        typeof (payload as { amount: unknown }).amount === "number"
+          ? (payload as { amount: number }).amount
+          : 1;
+      this.stats.damageTaken += amount;
+    } else if (event === "gameplay.enemyDamage") {
+      const amount =
+        typeof payload === "object" &&
+        payload !== null &&
+        "amount" in payload &&
+        typeof (payload as { amount: unknown }).amount === "number"
+          ? (payload as { amount: number }).amount
+          : 1;
+      this.stats.damageDealt += amount;
     } else if (event === "enemy.stateChanged") {
       if (
         typeof payload === "object" &&
@@ -714,6 +923,18 @@ export class ArenaGameManager implements GameScript {
         this.enemyHealth = (payload as { health: number }).health;
       }
     } else if (event === "enemy.defeated") {
+      this.stats.enemiesDefeated += 1;
+      this.encounter.enemyDefeated = true;
+      this.encounter.extractionUnlocked = true;
+      this.encounter.status = "defeated";
+      context?.emit?.("gameplay.extractionUnlocked", {
+        unlocked: true,
+        enemiesDefeated: this.stats.enemiesDefeated,
+      });
+      context?.log?.("info", "gameplay.extractionUnlocked", {
+        unlocked: true,
+        enemiesDefeated: this.stats.enemiesDefeated,
+      });
       context?.log?.("info", "gameplay.enemyDefeated", {
         enemyHealth: this.enemyHealth,
         enemyState: this.enemyState,
@@ -733,6 +954,8 @@ export class ArenaGameManager implements GameScript {
       },
       objectives: this.objectives.map((obj) => ({ ...obj })),
       challenge: { ...this.challenge },
+      encounter: { ...this.encounter },
+      stats: { ...this.stats },
     };
     return {
       session,
@@ -746,6 +969,8 @@ export class ArenaGameManager implements GameScript {
       },
       objectives: this.objectives.map((obj) => ({ ...obj })),
       challenge: { ...this.challenge },
+      encounter: { ...this.encounter },
+      stats: { ...this.stats },
     };
   }
 
@@ -847,6 +1072,50 @@ export class ArenaGameManager implements GameScript {
         };
       }
     }
+    if ("encounter" in sessionData && sessionData.encounter !== undefined) {
+      if (
+        typeof sessionData.encounter !== "object" ||
+        sessionData.encounter === null
+      ) {
+        return { valid: false, error: "encounter must be an object" };
+      }
+      const enc = sessionData.encounter as Record<string, unknown>;
+      if (enc.status !== "active" && enc.status !== "defeated") {
+        return { valid: false, error: 'encounter.status must be "active" or "defeated"' };
+      }
+      if (typeof enc.enemyDefeated !== "boolean") {
+        return { valid: false, error: "encounter.enemyDefeated must be a boolean" };
+      }
+      if (typeof enc.extractionUnlocked !== "boolean") {
+        return { valid: false, error: "encounter.extractionUnlocked must be a boolean" };
+      }
+    }
+    if ("stats" in sessionData && sessionData.stats !== undefined) {
+      if (
+        typeof sessionData.stats !== "object" ||
+        sessionData.stats === null
+      ) {
+        return { valid: false, error: "stats must be an object" };
+      }
+      const st = sessionData.stats as Record<string, unknown>;
+      for (const field of [
+        "elapsedSteps",
+        "elapsedTimeMs",
+        "damageDealt",
+        "damageTaken",
+        "enemiesDefeated",
+      ]) {
+        if (
+          field in st &&
+          st[field] !== undefined &&
+          (typeof st[field] !== "number" ||
+            !Number.isFinite(st[field]) ||
+            (st[field] as number) < 0)
+        ) {
+          return { valid: false, error: `stats.${field} must be a non-negative finite number` };
+        }
+      }
+    }
     return { valid: true };
   }
 
@@ -869,6 +1138,8 @@ export class ArenaGameManager implements GameScript {
     const priorRunStatus = this.runStatus;
     const priorObjectives = this.objectives.map((o) => ({ ...o }));
     const priorChallenge = { ...this.challenge };
+    const priorEncounter = { ...this.encounter };
+    const priorStats = { ...this.stats };
 
     const nextStatus =
       sessionData.status === "playing" ||
@@ -922,6 +1193,44 @@ export class ArenaGameManager implements GameScript {
           }
         : { ...this.challenge };
 
+    const nextEncounter =
+      typeof sessionData.encounter === "object" && sessionData.encounter !== null
+        ? {
+            status:
+              (sessionData.encounter as Record<string, unknown>).status === "defeated"
+                ? ("defeated" as const)
+                : ("active" as const),
+            enemyDefeated: Boolean((sessionData.encounter as Record<string, unknown>).enemyDefeated),
+            extractionUnlocked: Boolean((sessionData.encounter as Record<string, unknown>).extractionUnlocked),
+          }
+        : { ...this.encounter };
+
+    const nextStats =
+      typeof sessionData.stats === "object" && sessionData.stats !== null
+        ? {
+            elapsedSteps:
+              typeof (sessionData.stats as Record<string, unknown>).elapsedSteps === "number"
+                ? ((sessionData.stats as Record<string, unknown>).elapsedSteps as number)
+                : this.stats.elapsedSteps,
+            elapsedTimeMs:
+              typeof (sessionData.stats as Record<string, unknown>).elapsedTimeMs === "number"
+                ? ((sessionData.stats as Record<string, unknown>).elapsedTimeMs as number)
+                : this.stats.elapsedTimeMs,
+            damageDealt:
+              typeof (sessionData.stats as Record<string, unknown>).damageDealt === "number"
+                ? ((sessionData.stats as Record<string, unknown>).damageDealt as number)
+                : this.stats.damageDealt,
+            damageTaken:
+              typeof (sessionData.stats as Record<string, unknown>).damageTaken === "number"
+                ? ((sessionData.stats as Record<string, unknown>).damageTaken as number)
+                : this.stats.damageTaken,
+            enemiesDefeated:
+              typeof (sessionData.stats as Record<string, unknown>).enemiesDefeated === "number"
+                ? ((sessionData.stats as Record<string, unknown>).enemiesDefeated as number)
+                : this.stats.enemiesDefeated,
+          }
+        : { ...this.stats };
+
     return {
       commit: () => {
         this.status = nextStatus;
@@ -932,6 +1241,8 @@ export class ArenaGameManager implements GameScript {
         this.runStatus = nextRunStatus;
         this.objectives = nextObjectives;
         this.challenge = nextChallenge;
+        this.encounter = nextEncounter;
+        this.stats = nextStats;
       },
       rollback: () => {
         this.status = priorStatus;
@@ -942,6 +1253,8 @@ export class ArenaGameManager implements GameScript {
         this.runStatus = priorRunStatus;
         this.objectives = priorObjectives;
         this.challenge = priorChallenge;
+        this.encounter = priorEncounter;
+        this.stats = priorStats;
       },
     };
   }

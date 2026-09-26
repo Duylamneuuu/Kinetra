@@ -141,7 +141,22 @@ test(
         const snapInit = await probe.snapshot();
         assert.equal((snapInit.state.game as any)?.playerHealth, 3);
 
-        // Advance 1 step without player attacking: enemy attacks player
+        // Advance 1 step: enemy telegraphs attack (warning phase)
+        await probe.step(1);
+
+        const snapTelegraph = await probe.snapshot();
+        assert.equal(
+          (snapTelegraph.state.game as any)?.enemyState,
+          "telegraph",
+          "Enemy must be in telegraph state on step 1",
+        );
+        assert.equal(
+          (snapTelegraph.state.game as any)?.playerHealth,
+          3,
+          "Player health must remain 3 during telegraph warning phase",
+        );
+
+        // Advance 1 more step: telegraph completes, enemy attacks player
         await probe.step(1);
 
         const snapPost = await probe.snapshot();
