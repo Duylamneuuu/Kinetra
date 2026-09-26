@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "asset_character_cesium_man",
+  "name": "Cesium Man External Humanoid Character",
+  "kind": "model",
+  "source": {
+    "path": "assets/characters/cesium-man.glb",
+    "kind": "source",
+    "contentHash": "659349b0a374b73d5362a61070039bc8601401bbdeacbece4f3680fb4bfd41b0"
+  },
+  "importedPath": "assets/characters/cesium-man.glb",
+  "recipe": {
+    "importer": "kinetra-gltf",
+    "importerVersion": "1.0.0",
+    "settings": {
+      "dedup": true,
+      "prune": true
+    }
+  },
+  "fingerprint": "afa5d010a662d52a814bef17e3d56edc8b1e257427afa0b2739a622d4dd7e528",
+  "dependencies": [],
+  "diagnostics": [],
+  "metadata": {
+    "polycount": 4672,
+    "dimensions": [
+      0.31,
+      1.14,
+      1.51
+    ],
+    "boundsRadius": 1.1,
+    "provenance": {
+      "provider": "khronos",
+      "author": "Analytical Graphics, Inc. (Cesium)",
+      "license": "CC-BY-4.0",
+      "sourceUrl": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/CesiumMan/glTF-Binary/CesiumMan.glb"
+    }
+  }
+}

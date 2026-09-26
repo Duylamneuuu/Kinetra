@@ -164,10 +164,23 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
   async playAnimation(
     entityId: string,
     clip: string,
-    options?: { loop?: boolean },
+    options?: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    },
   ): Promise<void> {
     if (typeof this.#host.playAnimation === "function") {
       await this.#host.playAnimation(entityId, clip, options);
+    }
+  }
+
+  async registerAnimationClip(
+    entityId: string,
+    clip: unknown,
+  ): Promise<void> {
+    if (typeof this.#host.registerAnimationClip === "function") {
+      await this.#host.registerAnimationClip(entityId, clip);
     }
   }
 

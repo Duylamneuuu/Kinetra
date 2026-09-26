@@ -10,5 +10,12 @@
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
     "test":"node --test dist/test/animation.test.js"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.5.0",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0"
   }
 }

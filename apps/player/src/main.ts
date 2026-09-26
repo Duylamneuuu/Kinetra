@@ -118,9 +118,22 @@ async function handleRuntimeCommand(request: {
       const entityId = requireString(params.entityId, "entityId");
       const clip = requireString(params.clip, "clip");
       const loop = typeof params.loop === "boolean" ? params.loop : undefined;
+      const retargetSource =
+        typeof params.retargetSource === "string" ? params.retargetSource : undefined;
+      const retargetCacheKey =
+        typeof params.retargetCacheKey === "string" ? params.retargetCacheKey : undefined;
       const result = runtime.playAnimation(entityId, clip, {
         ...(loop !== undefined ? { loop } : {}),
+        ...(retargetSource !== undefined ? { retargetSource } : {}),
+        ...(retargetCacheKey !== undefined ? { retargetCacheKey } : {}),
       });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.registerClip": {
+      const entityId = requireString(params.entityId, "entityId");
+      const clip = params.clip;
+      const result = runtime.registerAnimationClip(entityId, clip);
       return { ...result, ...runtime.query() };
     }
 

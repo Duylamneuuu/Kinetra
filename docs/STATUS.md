@@ -102,11 +102,23 @@ What has meaningful proof:
 - structured error log `animation.playFailed` on invalid clip requests without runtime crash;
 - resource cleanup and zero-leak teardown on scene stop and restart;
 - real AcceptanceRunner proof with real PNG frame capture in live Electron;
-- full 10-scenario real Electron verification suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
+- full 10-scenario real Electron verification suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`);
+- ingestion of real external humanoid/skinned GLB (`CesiumMan.glb`, CC-BY 4.0, Khronos Group / Cesium) with truthful provenance in `cesium-man.asset.json` and license policy tracking (`allowedWithNotice`);
+- skeleton inspection via `@gltf-transform/core` (`inspectSkeletonFromGlb`) discovering source joints (`Skeleton_torso_joint_1`, etc.) and target joints (`Hips`, `Spine`, etc.);
+- semantic humanoid bone mapping (`sourceBone -> semanticBone -> targetBone`) bridging distinct artist naming conventions;
+- real transform retarget baking (`bakeRetargetedClip`) generating target-specific `THREE.AnimationClip` referencing target skeleton bone names with normalized delta quaternions relative to rest poses;
+- explicit hips translation policy (`"ignore"` by default for clean separation from Rapier physics);
+- deterministic retarget cache key (`computeRetargetCacheKey`) sensitive to sourceAssetId, targetAssetId, clipName, and settings;
+- structured diagnostics for missing/incompatible bones with actionable remediation hints (`retarget.bone.missing-required`, `retarget.clip.no-usable-tracks`);
+- dynamic runtime clip registration (`ThreeSceneRuntime.registerAnimationClip`) and IPC handler (`animation.registerClip`);
+- live Electron runtime playback of baked retargeted clip on target SkinnedMesh (`EnemyBot`);
+- deterministic simulation stepping advancing retargeted clip mixer time and updating target bone rotations;
+- runtime state observation exposing `retargetSource` and `retargetCacheKey`;
+- real WebGL frame capture producing valid PNG during retargeted animation playback;
+- scene reload/restart clearing stale mixer state and allowing clean re-playback without leaks;
+- full 11-scenario real Electron verification suite (`real-humanoid-retarget.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
 
 Still missing:
-- actual Three.js `AnimationClip` retarget baking;
-- humanoid retargeting / Mixamo / skeleton mapping;
 - animation graph runtime and complex blend trees;
 - root-motion extraction driving character physics;
 - morph-target runtime;

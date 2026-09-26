@@ -17,6 +17,7 @@
     "smoke:linux:packaged": "node scripts/smoke-linux-packaged.mjs"
   },
   "dependencies": {
+    "@kinetra/animation": "workspace:*",
     "@kinetra/audio": "workspace:*",
     "@kinetra/core": "workspace:*",
     "@kinetra/input": "workspace:*",

@@ -46,6 +46,8 @@ export interface RuntimeEntityState {
       playing: boolean;
       time: number;
       duration?: number;
+      retargetSource?: string;
+      retargetCacheKey?: string;
     };
     nodes?: Array<{
       name: string;
@@ -307,13 +309,30 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async playAnimation(
     entityId: string,
     clip: string,
-    options?: { loop?: boolean },
+    options?: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    },
   ): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("animation.play", {
       entityId,
       clip,
       ...(options?.loop !== undefined ? { loop: options.loop } : {}),
+      ...(options?.retargetSource !== undefined ? { retargetSource: options.retargetSource } : {}),
+      ...(options?.retargetCacheKey !== undefined ? { retargetCacheKey: options.retargetCacheKey } : {}),
+    });
+  }
+
+  async registerAnimationClip(
+    entityId: string,
+    clip: unknown,
+  ): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("animation.registerClip", {
+      entityId,
+      clip,
     });
   }
 
