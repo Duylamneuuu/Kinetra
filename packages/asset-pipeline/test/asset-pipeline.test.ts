@@ -172,6 +172,139 @@ test("canonical character asset fixture enemy-bot.asset.json has truthful Kinetr
   assert.equal(parsed.source.contentHash, syntheticHash, "contentHash must match createSyntheticCharacterGlb output");
 });
 
+test("canonical prop asset fixture energy-crate.asset.json has truthful Kinetra synthetic provenance and matches createSyntheticPropGlb", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { join, resolve, dirname } = await import("node:path");
+  const { existsSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { createHash } = await import("node:crypto");
+  const { createSyntheticPropGlb } = await import("../src/index.js");
+
+  let curr = dirname(fileURLToPath(import.meta.url));
+  let candidate = "";
+  for (let i = 0; i < 5; i++) {
+    const probe = join(curr, "examples/reference-game/assets/props/energy-crate.asset.json");
+    if (existsSync(probe)) {
+      candidate = probe;
+      break;
+    }
+    curr = dirname(curr);
+  }
+  if (!candidate) {
+    candidate = resolve(process.cwd(), "examples/reference-game/assets/props/energy-crate.asset.json");
+  }
+  assert.ok(existsSync(candidate), `energy-crate.asset.json must exist at ${candidate}`);
+
+  const content = await readFile(candidate, "utf8");
+  const parsed = JSON.parse(content) as AssetRecord;
+
+  // Validation must pass with zero errors
+  const diagnostics = validateAssetRecord(parsed);
+  assert.equal(diagnostics.filter((d) => d.severity === "error").length, 0);
+
+  // Must have truthful synthetic provenance
+  const prov = parsed.metadata.provenance;
+  assert.ok(prov, "Provenance must be present");
+  assert.equal(prov.provider, "kinetra", "Provider must be kinetra, not external provider");
+  assert.equal(prov.generator, "createSyntheticPropGlb", "Generator must identify synthetic function");
+  assert.equal(prov.license, "MIT");
+
+  // Must NOT claim any external provider artifacts
+  assert.equal(prov.model, undefined, "Must not claim external model");
+  assert.equal(prov.sourceAssetId, undefined, "Must not claim external sourceAssetId");
+  assert.equal(prov.creativeUnitsCost, undefined, "Must not claim external Creative Units cost");
+  assert.notEqual(prov.provider, "scenario", "Must not claim Scenario provider");
+
+  // Must match hash of createSyntheticPropGlb({ name: "EnergyCrate" })
+  const syntheticBytes = await createSyntheticPropGlb({ name: "EnergyCrate" });
+  const syntheticHash = createHash("sha256").update(syntheticBytes).digest("hex");
+  assert.equal(parsed.source.contentHash, syntheticHash, "contentHash must match createSyntheticPropGlb output");
+
+  // Check actual .glb file on disk matches hash as well
+  const glbPath = join(dirname(candidate), "energy-crate.glb");
+  if (existsSync(glbPath)) {
+    const glbBytes = await readFile(glbPath);
+    const onDiskHash = createHash("sha256").update(glbBytes).digest("hex");
+    assert.equal(onDiskHash, syntheticHash, "On-disk energy-crate.glb must match synthetic generator output");
+  }
+});
+
+test("all repository .asset.json fixtures adhere to provenance truthfulness guardrails", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const { join, dirname } = await import("node:path");
+  const { existsSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+
+  let repoRoot = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 5; i++) {
+    if (existsSync(join(repoRoot, "pnpm-workspace.yaml"))) break;
+    repoRoot = dirname(repoRoot);
+  }
+
+  async function findAssetJsonFiles(dir: string): Promise<string[]> {
+    const results: string[] = [];
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...(await findAssetJsonFiles(fullPath)));
+      } else if (entry.isFile() && entry.name.endsWith(".asset.json")) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  }
+
+  const assetFiles = await findAssetJsonFiles(repoRoot);
+  assert.ok(assetFiles.length >= 2, `Expected at least 2 .asset.json files in repo, found ${assetFiles.length}`);
+
+  for (const file of assetFiles) {
+    const text = await readFile(file, "utf8");
+    const record = JSON.parse(text) as AssetRecord;
+
+    // Must validate with 0 errors
+    const diagnostics = validateAssetRecord(record);
+    const errors = diagnostics.filter((d) => d.severity === "error");
+    assert.deepEqual(errors, [], `Asset record ${file} has validation errors: ${JSON.stringify(errors)}`);
+
+    const prov = record.metadata.provenance;
+    if (prov) {
+      // If fixture is generated locally, it must not claim external provider
+      if (record.source.kind === "generated" || prov.generator) {
+        assert.notEqual(
+          prov.provider,
+          "scenario",
+          `${file} is a local generated fixture and cannot claim external provider "scenario"`,
+        );
+        assert.equal(
+          prov.creativeUnitsCost,
+          undefined,
+          `${file} cannot claim external Creative Units cost`,
+        );
+        assert.equal(
+          prov.sourceAssetId,
+          undefined,
+          `${file} cannot claim external sourceAssetId`,
+        );
+        assert.equal(
+          prov.model,
+          undefined,
+          `${file} cannot claim external AI model`,
+        );
+        assert.ok(
+          prov.provider === "kinetra" || prov.provider === "kinetra-synthetic" || prov.provider === "synthetic",
+          `${file} provider must be kinetra or synthetic, got "${prov.provider}"`,
+        );
+        assert.ok(
+          typeof prov.generator === "string" && prov.generator.length > 0,
+          `${file} must specify a generator function/tool`,
+        );
+      }
+    }
+  }
+});
+
 test("GLB header validation rejects malformed files and accepts v2 header", () => {
   const bytes=new Uint8Array(12);
   const view=new DataView(bytes.buffer);

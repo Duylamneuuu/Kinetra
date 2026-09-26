@@ -136,14 +136,16 @@ test("Scenario prop fixture passes asset pipeline inspection, validation, and pr
   const computedHash = createHash("sha256").update(glbBytes).digest("hex");
   assert.equal(assetRecord.source.contentHash, computedHash);
 
-  // Verify provenance metadata exists and is structured
+  // Verify provenance metadata exists and truthfully identifies Kinetra synthetic prop generator
   const provenance = assetRecord.metadata.provenance;
   assert.ok(provenance, "Provenance metadata must be present");
-  assert.equal(provenance.provider, "scenario");
-  assert.equal(provenance.model, "gpt-6-astra-3d");
+  assert.equal(provenance.provider, "kinetra");
+  assert.equal(provenance.generator, "createSyntheticPropGlb");
   assert.equal(provenance.license, "MIT");
-  assert.equal(typeof provenance.creativeUnitsCost, "number");
-  assert.ok((provenance.creativeUnitsCost ?? 0) > 0);
+  assert.equal(provenance.model, undefined);
+  assert.equal(provenance.sourceAssetId, undefined);
+  assert.equal(provenance.creativeUnitsCost, undefined);
+  assert.notEqual(provenance.provider, "scenario");
 
   // Validate through asset pipeline policy
   const diagnostics = validateAssetRecord(assetRecord);
