@@ -29,13 +29,9 @@
     ],
     "boundsRadius": 0.69,
     "provenance": {
-      "provider": "scenario",
-      "model": "gpt-6-astra-3d",
-      "prompt": "stylized sci-fi energy crate prop with metallic frame and glowing power core",
-      "sourceAssetId": "scenario_asset_energy_crate_001",
-      "generatedAt": "2026-09-26T09:20:00.000Z",
-      "license": "MIT",
-      "creativeUnitsCost": 15
+      "provider": "kinetra",
+      "generator": "createSyntheticPropGlb",
+      "license": "MIT"
     }
   }
 }
