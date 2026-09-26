@@ -1,0 +1,4 @@
+{
+  "name": "Kinetra",
+  "install": "corepack enable && pnpm install --frozen-lockfile"
+}
