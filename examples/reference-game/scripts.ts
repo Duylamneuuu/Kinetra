@@ -273,8 +273,42 @@ export class ArenaEnemyController implements GameScript {
   targetName = "Player";
   attackRange = 1.6;
   speed = 0.8;
+  #lastContext?: GameScriptContext;
+
+  #desiredClip(): string {
+    if (this.state === "defeated" || this.health <= 0) {
+      return "defeat";
+    }
+    if (this.hurtCooldown > 0) {
+      return "hurt";
+    }
+    if (this.state === "attacking") {
+      return "attack";
+    }
+    if (this.state === "telegraph") {
+      return "telegraph";
+    }
+    if (this.state === "chasing") {
+      return "walk";
+    }
+    if (this.state === "cooldown" && this.damageCooldown > 0) {
+      return "attack";
+    }
+    return "idle";
+  }
+
+  #syncAnimation(context?: GameScriptContext): void {
+    const ctx = context ?? this.#lastContext;
+    if (!ctx?.animation) return;
+    const clip = this.#desiredClip();
+    if (ctx.animation.activeClip !== clip) {
+      const loop = clip === "walk" || clip === "telegraph" || clip === "idle";
+      ctx.animation.play(clip, { loop });
+    }
+  }
 
   onCreate(context: GameScriptContext): void {
+    this.#lastContext = context;
     context.log?.("info", "script.lifecycle", {
       phase: "onCreate",
       entityId: context.entityId,
@@ -282,22 +316,22 @@ export class ArenaEnemyController implements GameScript {
   }
 
   onStart(context: GameScriptContext): void {
+    this.#lastContext = context;
     context.log?.("info", "script.lifecycle", {
       phase: "onStart",
       entityId: context.entityId,
     });
+    this.#syncAnimation(context);
   }
 
   onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
+    this.#lastContext = context;
     if (this.state === "defeated" || this.health <= 0) {
+      this.#syncAnimation(context);
       return; // Defeated enemies stop navigation, attacks, and state transitions
     }
-
-    if (this.hurtCooldown > 0) {
-      this.hurtCooldown--;
-    }
-
     if (!context.transform || !context.scene) {
+      this.#syncAnimation(context);
       return;
     }
 
@@ -305,12 +339,14 @@ export class ArenaEnemyController implements GameScript {
     const playerEntity = context.scene.findEntityByName?.(this.targetName);
     if (!playerEntity) {
       this.state = "idle";
+      this.#syncAnimation(context);
       return;
     }
 
     const playerPos = context.scene.getEntityTransform(playerEntity.entityId);
     if (!playerPos) {
       this.state = "idle";
+      this.#syncAnimation(context);
       return;
     }
 
@@ -321,6 +357,7 @@ export class ArenaEnemyController implements GameScript {
         // Warning phase complete and player still within range -> attack connects!
         this.state = "attacking";
         context.emit?.("enemy.stateChanged", { state: this.state });
+        this.#syncAnimation(context);
         context.emit?.("gameplay.damage", { amount: 1 });
         void context.audio?.play({ assetId: ARENA_SFX_HIT_ASSET_ID, bus: "sfx" });
         this.damageCooldown = 2; // deterministic simulation-step cooldown
@@ -342,7 +379,9 @@ export class ArenaEnemyController implements GameScript {
           dist,
           attackRange: this.attackRange,
         });
+        this.#syncAnimation(context);
       }
+      if (this.hurtCooldown > 0) this.hurtCooldown--;
       return;
     }
 
@@ -365,11 +404,22 @@ export class ArenaEnemyController implements GameScript {
             targetId: playerEntity.entityId,
             dist,
           });
+          this.#syncAnimation(context);
         } else {
           this.state = "chasing";
           context.emit?.("enemy.stateChanged", { state: this.state });
+          this.#syncAnimation(context);
         }
+      } else {
+        this.#syncAnimation(context);
       }
+      if (this.hurtCooldown > 0) this.hurtCooldown--;
+      return;
+    }
+
+    if (this.hurtCooldown > 0) {
+      this.#syncAnimation(context);
+      this.hurtCooldown--;
       return;
     }
 
@@ -387,9 +437,11 @@ export class ArenaEnemyController implements GameScript {
         targetId: playerEntity.entityId,
         dist,
       });
+      this.#syncAnimation(context);
     } else {
       this.state = "chasing";
       context.emit?.("enemy.stateChanged", { state: this.state });
+      this.#syncAnimation(context);
 
       if (context.navigation) {
         const path = context.navigation.computePath(enemyPos, playerPos);
@@ -470,6 +522,7 @@ export class ArenaEnemyController implements GameScript {
 
       if (this.health <= 0) {
         this.state = "defeated";
+        this.#syncAnimation(context);
         context?.emit?.("enemy.defeated", { entityId: context?.entityId });
         context?.emit?.("enemy.stateChanged", { state: "defeated" });
         context?.log?.("info", "gameplay.enemyDefeated", {
@@ -477,6 +530,8 @@ export class ArenaEnemyController implements GameScript {
           health: this.health,
           state: this.state,
         });
+      } else {
+        this.#syncAnimation(context);
       }
     }
   }
@@ -491,6 +546,7 @@ export class ArenaEnemyController implements GameScript {
       telegraphDuration: this.telegraphDuration,
       isHurt: this.hurtCooldown > 0,
       hurtCooldown: this.hurtCooldown,
+      animationClip: this.#desiredClip(),
     };
   }
 
@@ -561,6 +617,11 @@ export class ArenaEnemyController implements GameScript {
         return { valid: false, error: "speed must be a positive finite number" };
       }
     }
+    if ("animationClip" in state && state.animationClip !== undefined) {
+      if (typeof state.animationClip !== "string") {
+        return { valid: false, error: "animationClip must be a string if defined" };
+      }
+    }
     return { valid: true };
   }
 
@@ -611,6 +672,7 @@ export class ArenaEnemyController implements GameScript {
         this.speed = nextSpeed;
         this.telegraphTimer = nextTelegraphTimer;
         this.hurtCooldown = nextHurtCooldown;
+        this.#syncAnimation();
       },
       rollback: () => {
         this.health = priorHealth;
@@ -619,6 +681,7 @@ export class ArenaEnemyController implements GameScript {
         this.speed = priorSpeed;
         this.telegraphTimer = priorTelegraphTimer;
         this.hurtCooldown = priorHurtCooldown;
+        this.#syncAnimation();
       },
     };
   }

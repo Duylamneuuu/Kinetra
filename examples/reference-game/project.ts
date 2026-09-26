@@ -1,4 +1,5 @@
 import type { ProjectDocument } from "@kinetra/project-model";
+import { ARENA_ENEMY_MODEL_ASSET_ID } from "./characters.js";
 
 export const ARENA_PROJECT_ID = "project_kinetra_arena";
 export const ARENA_SCENE_ID = "scene_arena";
@@ -223,6 +224,9 @@ export function createArenaProject(): ProjectDocument {
                 kind: "box",
                 size: [1, 1, 1],
                 color: "#ef4444",
+              },
+              Model: {
+                assetId: ARENA_ENEMY_MODEL_ASSET_ID,
               },
               Script: {
                 scriptId: "ArenaEnemyController",

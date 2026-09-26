@@ -142,6 +142,9 @@ function disposeObjectResources(object: THREE.Object3D): void {
       } else {
         disposeMaterial(child.material);
       }
+      if (child instanceof THREE.SkinnedMesh) {
+        child.skeleton?.dispose();
+      }
     }
   });
 }
@@ -437,11 +440,15 @@ export class ThreeSceneRuntime {
   ): void {
     let meshCount = 0;
     let nodeCount = 0;
+    let skinnedMeshCount = 0;
 
     modelScene.traverse((node) => {
       nodeCount++;
       if (node instanceof THREE.Mesh) {
         meshCount++;
+        if (node instanceof THREE.SkinnedMesh) {
+          skinnedMeshCount++;
+        }
       }
     });
 
@@ -452,6 +459,8 @@ export class ThreeSceneRuntime {
     metadata.loaded = true;
     metadata.meshCount = meshCount;
     metadata.nodeCount = nodeCount;
+    metadata.skinnedMeshCount = skinnedMeshCount;
+    metadata.hasSkin = skinnedMeshCount > 0;
     metadata.bounds = {
       min: [box.min.x, box.min.y, box.min.z],
       max: [box.max.x, box.max.y, box.max.z],

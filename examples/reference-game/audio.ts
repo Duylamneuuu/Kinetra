@@ -31,8 +31,23 @@ export const arenaAudioBytes: Record<string, Uint8Array> = {
   }),
 };
 
+import {
+  ARENA_ENEMY_MODEL_ASSET_ID,
+  arenaCharacterAssets,
+  arenaCharacterBytes,
+} from "./characters.js";
+
+export { ARENA_ENEMY_MODEL_ASSET_ID, arenaCharacterAssets, arenaCharacterBytes };
+
 export const arenaAudioAssets: Record<string, string> = {
   [ARENA_SFX_HIT_ASSET_ID]: toBase64(arenaAudioBytes[ARENA_SFX_HIT_ASSET_ID]!),
   [ARENA_SFX_WIN_ASSET_ID]: toBase64(arenaAudioBytes[ARENA_SFX_WIN_ASSET_ID]!),
   [ARENA_SFX_LOSE_ASSET_ID]: toBase64(arenaAudioBytes[ARENA_SFX_LOSE_ASSET_ID]!),
+  [ARENA_ENEMY_MODEL_ASSET_ID]: arenaCharacterAssets[ARENA_ENEMY_MODEL_ASSET_ID]!,
 };
+
+export const arenaAssets: Record<string, string> = {
+  ...arenaAudioAssets,
+  ...arenaCharacterAssets,
+};
+

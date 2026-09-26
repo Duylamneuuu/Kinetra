@@ -169,3 +169,42 @@ test("creates deterministic synthetic prop GLB with multiple nodes, meshes, and 
   assert.equal(materials.length, 2); // FrameMaterial, CoreMaterial
 });
 
+test("creates deterministic synthetic rigged character GLB with skin, joints, and 6 gameplay clips", async () => {
+  const { createSyntheticCharacterGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticCharacterGlb({
+    name: "EnemyBot",
+  });
+
+  assert.ok(bytes.byteLength > 1000);
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.version, 2);
+  assert.equal(header.length, bytes.byteLength);
+
+  const io = new NodeIO();
+  const doc = await io.readBinary(bytes);
+
+  // Verify skin and joints
+  const skins = doc.getRoot().listSkins();
+  assert.equal(skins.length, 1);
+  const skin = skins[0]!;
+  assert.equal(skin.getName(), "EnemyBot_Skin");
+  assert.equal(skin.listJoints().length, 7);
+
+  // Verify mesh attributes
+  const meshes = doc.getRoot().listMeshes();
+  assert.equal(meshes.length, 1);
+  const prim = meshes[0]!.listPrimitives()[0]!;
+  assert.ok(prim.getAttribute("POSITION"));
+  assert.ok(prim.getAttribute("NORMAL"));
+  assert.ok(prim.getAttribute("JOINTS_0"));
+  assert.ok(prim.getAttribute("WEIGHTS_0"));
+
+  // Verify 6 combat animation clips
+  const animations = doc.getRoot().listAnimations();
+  assert.equal(animations.length, 6);
+  const clipNames = animations.map((a) => a.getName()).sort();
+  assert.deepEqual(clipNames, ["attack", "defeat", "hurt", "idle", "telegraph", "walk"]);
+});
+
+

@@ -21,7 +21,7 @@ Legend:
 | P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. Linux cloud smoke proven via cross-platform stdio bridge under xvfb (`pnpm --filter @kinetra/player smoke:linux` + Linux CI): ping/hostInfo/start/query/step/injectInput/captureFrame/stop against Kinetra Arena with valid-PNG and zero-leak teardown proof. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
 | P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
-| P5 animation | RUNTIME PLAYBACK SLICE PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real GLB animation playback via AnimationMixer, semantic play/stop, deterministic runtime.step simulation advancement, structured observation state (model.animation, model.nodes), and AcceptanceRunner proof verified in live Electron. |
+| P5 animation | RIGGED CHARACTER COMBAT ANIMATION PROVEN | Skeleton profiles, retarget plans/cache keys, root-motion modes, clip metadata and text animation-graph semantics on main. Real rigged/skinned 3D character (`enemy-bot.glb`) with 7-bone hierarchy and 6 combat clips (`idle`, `walk`, `telegraph`, `attack`, `hurt`, `defeat`) loaded via Three.js SkinnedMesh/Skeleton. Engine-owned semantic animation layer (`entity.gameplay.animation: { activeClip, playing, speed }`) drives visual poses from combat states without scripts touching THREE.AnimationMixer. Authoritative gameplay and physics: visual pose only, Rapier owns position, independent combat timings. 10-scenario acceptance suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`). |
 | P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Game UI, settings, and broader game loop remain unfinished. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
@@ -85,14 +85,23 @@ What has meaningful proof:
 - root-motion extraction policy;
 - text-backed graph/state-machine semantics;
 - programmatic synthetic animated GLB fixture generation (`createSyntheticAnimatedGlb`);
+- programmatic synthetic rigged character GLB fixture generation (`createSyntheticCharacterGlb`) with real `SkinnedMesh`, 7-bone hierarchy (`Hips`, `Spine`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`), and 6 combat clips (`idle`, `walk`, `telegraph`, `attack`, `hurt`, `defeat`);
+- canonical rigged character fixture (`examples/reference-game/assets/characters/enemy-bot.glb` & `enemy-bot.asset.json`) with Scenario provenance metadata;
 - GLTF animation clip extraction via Three.js `GLTFLoader` in the Electron player runtime;
+- Three.js `SkinnedMesh` and `Skeleton` detection, populating structured runtime state `entity.model.skinnedMeshCount` and `entity.model.hasSkin`;
 - encapsulated `THREE.AnimationMixer` management in `ThreeSceneRuntime` behind semantic methods (`playAnimation`, `stopAnimation`, `updateAnimation`);
+- recursive skeleton and mixer disposal (`child.skeleton.dispose()`, `mixer.stopAllAction()`, `mixer.uncacheRoot()`) on model unload and scene cleanup;
+- engine-owned semantic animation layer exposed to scripts via `context.animation` (`play`, `stop`, `activeClip`, `playing`);
+- truthful structured observation via `entity.gameplay.animation: { activeClip, playing, speed }`;
+- authoritative gameplay and physics separation: visual animation pose only, Rapier owns character position, independent combat reaction and damage timing;
+- deterministic synchronization between `ArenaEnemyController` combat state machine (`chasing`, `telegraph`, `attacking`, `hurt`, `defeated`) and character animation clips;
 - semantic command dispatch (`animation.play`, `animation.stop`) over named pipe bridge;
 - deterministic simulation advancement via `runtime.step` updating mixer and synchronizing internal node transforms;
 - truthful structured runtime state exposing `entity.model.animation` (`clips`, `activeClip`, `playing`, `time`, `duration`) and `entity.model.nodes` (`name`, `position`);
 - structured error log `animation.playFailed` on invalid clip requests without runtime crash;
 - resource cleanup and zero-leak teardown on scene stop and restart;
-- real AcceptanceRunner proof with real PNG frame capture in live Electron.
+- real AcceptanceRunner proof with real PNG frame capture in live Electron;
+- full 10-scenario real Electron verification suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
 
 Still missing:
 - actual Three.js `AnimationClip` retarget baking;

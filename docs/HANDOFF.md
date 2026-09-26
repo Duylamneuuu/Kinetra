@@ -149,6 +149,19 @@ The external AI asset generation pipeline is proven via the Scenario-to-Kinetra 
 - Real static prop fixture (`examples/reference-game/assets/props/energy-crate.glb`);
 - 5-scenario acceptance suite (`packages/verification/test/real-scenario-asset.test.ts`) verifying ingestion, command bus mutation, real Electron WebGL projection, structured model queries, deliberate missing-asset failure resilience, and clean teardown.
 
+### 7. Rigged Character Combat Animation (P10 Slice 6 Proven)
+
+The rigged 3D character combat animation vertical slice is proven against dev Electron and packaged `KinetraGame.exe`:
+- Programmatic synthetic rigged character generation (`createSyntheticCharacterGlb`) with `SkinnedMesh`, 7-bone hierarchy (`Hips`, `Spine`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`), and 6 combat clips (`idle`, `walk`, `telegraph`, `attack`, `hurt`, `defeat`);
+- Canonical rigged character asset fixture (`examples/reference-game/assets/characters/enemy-bot.glb` & `enemy-bot.asset.json`) with Scenario provenance;
+- Three.js SkinnedMesh and Skeleton projection in the Electron player runtime, populating structured query fields (`entity.model.skinnedMeshCount`, `entity.model.hasSkin`);
+- Engine-owned semantic animation layer exposing `context.animation.play(clipName, options)`, `stop()`, `activeClip`, and `playing` to scripts without exposing `THREE.AnimationMixer`;
+- Truthful structured gameplay state observation via `entity.gameplay.animation: { activeClip, playing, speed }`;
+- Authoritative gameplay/physics ownership: animation drives visual mesh poses in place, while Rapier physics owns character position and combat timings operate independently;
+- Deterministic synchronization between `ArenaEnemyController` combat state machine (`chasing` -> `telegraph` -> `attack` -> `hurt` -> `defeat`) and character animation clips;
+- 10-scenario real Electron verification suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`);
+- Full regression suite passing all 7 packaged test suites: Acceptance MCP, Arena, Game Shell, Gameplay Loop, Combat, Combat Progression, and Character Animation.
+
 ## Completion definition
 
 Kinetra is not "done" when:

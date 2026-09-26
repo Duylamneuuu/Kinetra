@@ -52,6 +52,8 @@ export interface RuntimeProbeHost {
         loaded: boolean;
         meshCount: number;
         nodeCount: number;
+        skinnedMeshCount?: number;
+        hasSkin?: boolean;
         bounds?: {
           min: [number, number, number];
           max: [number, number, number];

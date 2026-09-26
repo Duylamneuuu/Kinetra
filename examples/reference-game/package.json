@@ -14,6 +14,7 @@
     "test": "node --test dist/test/*.test.js"
   },
   "dependencies": {
+    "@kinetra/asset-pipeline": "workspace:*",
     "@kinetra/audio": "workspace:*",
     "@kinetra/core": "workspace:*",
     "@kinetra/project-model": "workspace:*"

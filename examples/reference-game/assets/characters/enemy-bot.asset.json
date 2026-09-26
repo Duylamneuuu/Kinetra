@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "asset_character_enemy_bot",
+  "name": "Enemy Droid Combat Character",
+  "kind": "model",
+  "source": {
+    "path": "assets/characters/enemy-bot.glb",
+    "kind": "generated",
+    "contentHash": "5e7d23033d01a9064a7c31e85ccdd03361fe1d3663c53b82ed41c00d60a94c09"
+  },
+  "importedPath": "assets/characters/enemy-bot.glb",
+  "recipe": {
+    "importer": "kinetra-gltf",
+    "importerVersion": "1.0.0",
+    "settings": {
+      "dedup": true,
+      "prune": true
+    }
+  },
+  "fingerprint": "6fd1a08006aa16de046772afbe826d49f88e89eec5fa5c2292848ee237447b62",
+  "dependencies": [],
+  "diagnostics": [],
+  "metadata": {
+    "polycount": 84,
+    "dimensions": [
+      0.85,
+      1.8,
+      0.4
+    ],
+    "boundsRadius": 1.1,
+    "provenance": {
+      "provider": "scenario",
+      "model": "gpt-6-astra-3d-biped",
+      "prompt": "stylized armored sci-fi combat droid biped with 6 combat animations",
+      "sourceAssetId": "scenario_asset_enemy_bot_001",
+      "generatedAt": "2026-09-26T10:00:00.000Z",
+      "license": "MIT",
+      "creativeUnitsCost": 45
+    }
+  }
+}
