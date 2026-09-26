@@ -163,15 +163,20 @@ The rigged 3D character combat animation vertical slice is proven against dev El
 - 10-scenario real Electron verification suite (`real-character-animation.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`);
 - Full regression suite passing all 7 packaged test suites: Acceptance MCP, Arena, Game Shell, Gameplay Loop, Combat, Combat Progression, and Character Animation.
 
-### 8. Real External Humanoid Retargeting (P5 Proven)
+### 8. Real External Humanoid Retargeting & Persistent Bake Cache (P5 Proven)
 
-The humanoid animation retarget baking vertical slice is proven against dev Electron and packaged `KinetraGame.exe`:
+The humanoid animation retarget baking and persistent bake cache vertical slices are proven against dev Electron and packaged `KinetraGame.exe`:
 - Truthful external asset provenance: ingested real external humanoid/skinned GLB `CesiumMan.glb` (CC-BY 4.0, Khronos Group / Cesium) with truthful provenance in `cesium-man.asset.json` and license policy tracking (`allowedWithNotice`);
 - Skeleton hierarchy inspection (`inspectSkeletonFromGlb` via `@gltf-transform/core`) discovering external artist bones (`Skeleton_torso_joint_1`, `leg_joint_L_1`, etc.) and target character bones (`Hips`, `Spine`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`);
 - Semantic humanoid bone mapping (`sourceBone -> semanticBone -> targetBone`) bridging distinct artist naming conventions;
 - Real transform retarget baking (`bakeRetargetedClip`) generating target-specific `THREE.AnimationClip` referencing target skeleton bone names with normalized delta quaternions relative to rest poses;
 - Explicit hips translation policy (`"ignore"` by default for clean separation from Rapier physics);
-- Deterministic retarget cache key (`computeRetargetCacheKey`) sensitive to sourceAssetId, targetAssetId, clipName, and settings;
+- Deterministic retarget cache key (`computeRetargetCacheKey`) sensitive to sourceAssetHash, sourceClipId, source/target skeleton signatures, semantic mapping, settings, and retargetVersion;
+- Engine-owned persistent baked-retarget cache (`RetargetBakeCache`, `FileRetargetCacheStorage`) wrapping Three.js `AnimationClip` in versioned record (`RetargetCacheRecord`);
+- Multi-process cache reuse across independent Electron processes (Process A MISS/bake/persist -> Fresh Process B HIT/load/playback) without recomputing retarget transforms;
+- Deterministic cache invalidation on changed source asset hash, semantic mapping, target skeleton, or retarget settings/version;
+- Resilient recovery from corrupted cache artifacts and stale schema versions reporting structured `regenerationReason`;
+- Structured cache observation (`cacheKey`, `cacheHit`, `cachePath`/`cacheIdentity`, `bakedClipName`, `trackCount`, `regenerationReason`) without exposing arbitrary local filesystem paths to project data;
 - Structured diagnostics for missing or incompatible bones with actionable remediation hints (`retarget.bone.missing-required`, `retarget.clip.no-usable-tracks`);
 - Dynamic runtime clip registration (`ThreeSceneRuntime.registerAnimationClip`) and IPC handler (`animation.registerClip`) enabling runtime clip injection into `THREE.AnimationMixer`;
 - Electron runtime playback of baked retargeted clip on target SkinnedMesh (`EnemyBot`);
@@ -179,7 +184,7 @@ The humanoid animation retarget baking vertical slice is proven against dev Elec
 - Runtime state observation exposing `retargetSource` and `retargetCacheKey`;
 - Real WebGL frame capture producing valid PNG during retargeted animation playback;
 - Scene reload/restart clearing stale mixer state and allowing clean re-playback without leaks;
-- Complete 11-scenario real Electron verification suite (`real-humanoid-retarget.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
+- Complete 12-scenario real Electron verification suite (`real-humanoid-retarget.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
 
 ## Completion definition
 

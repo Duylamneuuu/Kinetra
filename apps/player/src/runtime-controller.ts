@@ -832,7 +832,11 @@ export class PlayerRuntimeController {
       if (clipData instanceof THREE.AnimationClip) {
         clip = clipData;
       } else if (typeof clipData === "object" && clipData !== null) {
-        clip = THREE.AnimationClip.parse(clipData as any);
+        const rawClip =
+          "clip" in (clipData as Record<string, unknown>)
+            ? (clipData as Record<string, unknown>).clip
+            : clipData;
+        clip = THREE.AnimationClip.parse(rawClip as any);
       } else {
         const error = "Invalid animation clip data provided";
         this.#log("error", "animation.registerClipFailed", { entityId, error });

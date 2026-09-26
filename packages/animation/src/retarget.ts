@@ -65,6 +65,10 @@ export interface RetargetCacheKeyOptions {
   sourceClipId: string;
   source: SkeletonProfile;
   target: SkeletonProfile;
+  semanticMapping?:
+    | import("./skeleton.js").RetargetBonePair[]
+    | Array<{ semantic: string; sourceBone: string; targetBone: string }>
+    | undefined;
   settings?: Record<string, unknown> | RetargetSettings | undefined;
   retargetVersion?: number | undefined;
 }
@@ -82,11 +86,21 @@ export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string 
     return value;
   };
 
+  const mapping = input.semanticMapping ?? buildRetargetPlan(input.source, input.target).pairs;
+  const canonicalMapping = mapping
+    .map((p) => ({
+      semantic: p.semantic,
+      sourceBone: p.sourceBone,
+      targetBone: p.targetBone,
+    }))
+    .sort((a, b) => a.semantic.localeCompare(b.semantic));
+
   const payload = {
     sourceAssetHash: input.sourceAssetHash ?? "",
     sourceClipId: input.sourceClipId,
     source: skeletonSignature(input.source),
     target: skeletonSignature(input.target),
+    mapping: canonicalMapping,
     settings: input.settings ?? {},
     retargetVersion: input.retargetVersion ?? 1,
   };
