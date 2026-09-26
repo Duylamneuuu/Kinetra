@@ -1,0 +1,563 @@
+{
+  "schemaVersion": 1,
+  "projectId": "project_kinetra_arena",
+  "name": "Kinetra Arena",
+  "scenes": [
+    {
+      "id": "scene_arena",
+      "name": "Arena Combat Room",
+      "entities": [
+        {
+          "id": "entity_arena_camera",
+          "name": "MainCamera",
+          "components": {
+            "Camera": {
+              "far": 100,
+              "fov": 50,
+              "near": 0.1,
+              "type": "perspective"
+            },
+            "Transform": {
+              "position": [
+                0,
+                14,
+                14
+              ],
+              "rotation": [
+                -0.78,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_core",
+          "name": "PowerCore",
+          "components": {
+            "Primitive": {
+              "color": "#eab308",
+              "kind": "box",
+              "size": [
+                0.8,
+                0.8,
+                0.8
+              ]
+            },
+            "Transform": {
+              "position": [
+                5,
+                0.5,
+                2
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_enemy",
+          "name": "Enemy",
+          "components": {
+            "Primitive": {
+              "color": "#ef4444",
+              "kind": "box",
+              "size": [
+                1,
+                1,
+                1
+              ]
+            },
+            "Script": {
+              "order": 0,
+              "scriptId": "ArenaEnemyController"
+            },
+            "Transform": {
+              "position": [
+                5,
+                0.5,
+                5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_floor",
+          "name": "Floor",
+          "components": {
+            "NavMesh": {
+              "indices": [
+                0,
+                2,
+                1,
+                0,
+                3,
+                2,
+                4,
+                6,
+                5,
+                4,
+                7,
+                6,
+                8,
+                10,
+                9,
+                8,
+                11,
+                10,
+                12,
+                14,
+                13,
+                12,
+                15,
+                14
+              ],
+              "positions": [
+                -8,
+                0,
+                -8,
+                8,
+                0,
+                -8,
+                8,
+                0,
+                -2,
+                -8,
+                0,
+                -2,
+                -8,
+                0,
+                2,
+                8,
+                0,
+                2,
+                8,
+                0,
+                8,
+                -8,
+                0,
+                8,
+                -8,
+                0,
+                -2,
+                -2,
+                0,
+                -2,
+                -2,
+                0,
+                2,
+                -8,
+                0,
+                2,
+                2,
+                0,
+                -2,
+                8,
+                0,
+                -2,
+                8,
+                0,
+                2,
+                2,
+                0,
+                2
+              ]
+            },
+            "Primitive": {
+              "color": "#2b303c",
+              "kind": "box",
+              "size": [
+                16,
+                0.2,
+                16
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                -0.1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_goal",
+          "name": "Goal",
+          "components": {
+            "Primitive": {
+              "color": "#10b981",
+              "kind": "box",
+              "size": [
+                2,
+                0.2,
+                2
+              ]
+            },
+            "Transform": {
+              "position": [
+                5,
+                0.1,
+                -5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_light_amb",
+          "name": "AmbientLight",
+          "components": {
+            "Light": {
+              "color": "#94a3b8",
+              "intensity": 0.6,
+              "kind": "ambient"
+            },
+            "Transform": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_light_dir",
+          "name": "DirectionalLight",
+          "components": {
+            "Light": {
+              "color": "#ffffff",
+              "intensity": 1.2,
+              "kind": "directional"
+            },
+            "Transform": {
+              "position": [
+                5,
+                10,
+                5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_manager",
+          "name": "ArenaManager",
+          "components": {
+            "Script": {
+              "order": 10,
+              "scriptId": "ArenaGameManager"
+            },
+            "Transform": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_obstacle",
+          "name": "Obstacle",
+          "components": {
+            "Primitive": {
+              "color": "#475569",
+              "kind": "box",
+              "size": [
+                4,
+                2,
+                4
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_player",
+          "name": "Player",
+          "components": {
+            "Primitive": {
+              "color": "#3b82f6",
+              "kind": "box",
+              "size": [
+                1,
+                1,
+                1
+              ]
+            },
+            "Script": {
+              "order": -10,
+              "scriptId": "ArenaPlayerController"
+            },
+            "Transform": {
+              "position": [
+                -5,
+                0.5,
+                -5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_terminal",
+          "name": "SecurityConsole",
+          "components": {
+            "Primitive": {
+              "color": "#06b6d4",
+              "kind": "box",
+              "size": [
+                1,
+                1,
+                1
+              ]
+            },
+            "Transform": {
+              "position": [
+                -5,
+                0.5,
+                2
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_wall_east",
+          "name": "WallEast",
+          "components": {
+            "Primitive": {
+              "color": "#1e293b",
+              "kind": "box",
+              "size": [
+                1,
+                2,
+                17
+              ]
+            },
+            "Transform": {
+              "position": [
+                8.5,
+                1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_wall_north",
+          "name": "WallNorth",
+          "components": {
+            "Primitive": {
+              "color": "#1e293b",
+              "kind": "box",
+              "size": [
+                17,
+                2,
+                1
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                1,
+                8.5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_wall_south",
+          "name": "WallSouth",
+          "components": {
+            "Primitive": {
+              "color": "#1e293b",
+              "kind": "box",
+              "size": [
+                17,
+                2,
+                1
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                1,
+                -8.5
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_arena_wall_west",
+          "name": "WallWest",
+          "components": {
+            "Primitive": {
+              "color": "#1e293b",
+              "kind": "box",
+              "size": [
+                1,
+                2,
+                17
+              ]
+            },
+            "Transform": {
+              "position": [
+                -8.5,
+                1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
