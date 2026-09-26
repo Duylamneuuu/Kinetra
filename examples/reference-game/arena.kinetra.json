@@ -82,6 +82,7 @@
               ]
             },
             "Script": {
+              "order": 0,
               "scriptId": "ArenaEnemyController"
             },
             "Transform": {
@@ -306,6 +307,7 @@
           "name": "ArenaManager",
           "components": {
             "Script": {
+              "order": 10,
               "scriptId": "ArenaGameManager"
             },
             "Transform": {
@@ -373,6 +375,7 @@
               ]
             },
             "Script": {
+              "order": -10,
               "scriptId": "ArenaPlayerController"
             },
             "Transform": {
