@@ -810,10 +810,64 @@ export class PlayerRuntimeController {
     return pathState;
   }
 
+  registerAnimationClip(
+    entityId: string,
+    clipData: unknown,
+  ): { success: boolean; error?: string } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.registerClipFailed", { entityId, error });
+      return { success: false, error };
+    }
+
+    const object = this.#runtime.getObject(entityId);
+    if (!object) {
+      const error = `Entity "${entityId}" does not exist in runtime`;
+      this.#log("error", "animation.registerClipFailed", { entityId, error });
+      return { success: false, error };
+    }
+
+    try {
+      let clip: THREE.AnimationClip;
+      if (clipData instanceof THREE.AnimationClip) {
+        clip = clipData;
+      } else if (typeof clipData === "object" && clipData !== null) {
+        clip = THREE.AnimationClip.parse(clipData as any);
+      } else {
+        const error = "Invalid animation clip data provided";
+        this.#log("error", "animation.registerClipFailed", { entityId, error });
+        return { success: false, error };
+      }
+
+      const success = this.#runtime.registerAnimationClip(entityId, clip);
+      if (!success) {
+        const error = `Failed to register clip "${clip.name}" on entity "${entityId}"`;
+        this.#log("error", "animation.registerClipFailed", { entityId, clip: clip.name, error });
+        return { success: false, error };
+      }
+
+      this.#log("info", "animation.clipRegistered", {
+        entityId,
+        clip: clip.name,
+        duration: clip.duration,
+        trackCount: clip.tracks.length,
+      });
+      return { success: true };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.#log("error", "animation.registerClipFailed", { entityId, error });
+      return { success: false, error };
+    }
+  }
+
   playAnimation(
     entityId: string,
     clipName: string,
-    options: { loop?: boolean } = {},
+    options: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    } = {},
   ): { success: boolean; error?: string } {
     if (!this.#runtime) {
       const error = "Runtime is not running";
@@ -846,6 +900,8 @@ export class PlayerRuntimeController {
       entityId,
       clip: clipName,
       loop: options.loop !== false,
+      ...(options.retargetSource !== undefined ? { retargetSource: options.retargetSource } : {}),
+      ...(options.retargetCacheKey !== undefined ? { retargetCacheKey: options.retargetCacheKey } : {}),
     });
     return { success: true };
   }

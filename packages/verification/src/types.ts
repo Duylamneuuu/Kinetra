@@ -122,7 +122,16 @@ export interface RuntimeProbeHost {
     end: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<unknown>;
-  playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<unknown>;
+  playAnimation?(
+    entityId: string,
+    clip: string,
+    options?: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    },
+  ): Promise<unknown>;
+  registerAnimationClip?(entityId: string, clip: unknown): Promise<unknown>;
   stopAnimation?(entityId: string): Promise<unknown>;
   playAudio?(params: {
     assetId: string;
@@ -171,7 +180,16 @@ export interface RuntimeProbe {
     end: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void>;
-  playAnimation?(entityId: string, clip: string, options?: { loop?: boolean }): Promise<void>;
+  playAnimation?(
+    entityId: string,
+    clip: string,
+    options?: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    },
+  ): Promise<void>;
+  registerAnimationClip?(entityId: string, clip: unknown): Promise<void>;
   stopAnimation?(entityId: string): Promise<void>;
   playAudio?(params: {
     assetId: string;

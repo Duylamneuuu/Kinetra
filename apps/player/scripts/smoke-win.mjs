@@ -231,3 +231,30 @@ if (characterAnimationRun.status !== 0) {
 
 console.log("Packaged Windows character animation tests passed successfully.");
 
+const humanoidRetargetTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-humanoid-retarget.test.js",
+);
+
+console.log("Running real packaged humanoid retarget test suite...");
+const humanoidRetargetRun = spawnSync(process.execPath, ["--test", humanoidRetargetTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (humanoidRetargetRun.status !== 0) {
+  throw new Error(`Packaged humanoid retarget test failed with exit code ${String(humanoidRetargetRun.status)}`);
+}
+
+console.log("Packaged Windows humanoid retarget tests passed successfully.");
+

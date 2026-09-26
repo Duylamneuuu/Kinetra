@@ -11,18 +11,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-concurrency=1 dist/test/packaged-resolver.test.js dist/test/electron-transport.test.js dist/test/verification.test.js dist/test/real-runtime.test.js dist/test/real-physics.test.js dist/test/real-navigation.test.js dist/test/real-model.test.js dist/test/real-animation.test.js dist/test/real-gameplay-script.test.js dist/test/real-save-load.test.js dist/test/real-audio.test.js dist/test/real-desktop-save.test.js dist/test/real-arena.test.js dist/test/real-game-shell.test.js dist/test/real-gameplay-loop.test.js dist/test/real-combat.test.js dist/test/real-combat-progression.test.js dist/test/real-scenario-asset.test.js dist/test/real-character-animation.test.js"
+    "test": "node --test --test-concurrency=1 dist/test/packaged-resolver.test.js dist/test/electron-transport.test.js dist/test/verification.test.js dist/test/real-runtime.test.js dist/test/real-physics.test.js dist/test/real-navigation.test.js dist/test/real-model.test.js dist/test/real-animation.test.js dist/test/real-gameplay-script.test.js dist/test/real-save-load.test.js dist/test/real-audio.test.js dist/test/real-desktop-save.test.js dist/test/real-arena.test.js dist/test/real-game-shell.test.js dist/test/real-gameplay-loop.test.js dist/test/real-combat.test.js dist/test/real-combat-progression.test.js dist/test/real-scenario-asset.test.js dist/test/real-character-animation.test.js dist/test/real-humanoid-retarget.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5.0",
+    "@kinetra/animation": "workspace:*",
     "@kinetra/asset-pipeline": "workspace:*",
     "@kinetra/audio": "workspace:*",
     "@kinetra/input": "workspace:*",
     "@kinetra/reference-game": "workspace:*",
     "@kinetra/save-state": "workspace:*",
-    "electron": "38.0.0"
+    "@types/three": "0.180.0",
+    "electron": "38.0.0",
+    "three": "0.180.0"
   }
 }

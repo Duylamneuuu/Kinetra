@@ -26,6 +26,8 @@ export interface ModelAnimationState {
   playing: boolean;
   time: number;
   duration?: number;
+  retargetSource?: string;
+  retargetCacheKey?: string;
 }
 
 export interface ModelNodeState {

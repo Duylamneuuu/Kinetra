@@ -304,10 +304,55 @@ export class ThreeSceneRuntime {
     return this.#models;
   }
 
+  registerAnimationClip(entityId: string, clip: THREE.AnimationClip): boolean {
+    if (this.#disposed) return false;
+    let clips = this.#clips.get(entityId);
+    if (!clips) {
+      clips = [];
+      this.#clips.set(entityId, clips);
+    }
+
+    const existingIndex = clips.findIndex((c) => c.name === clip.name);
+    if (existingIndex !== -1) {
+      clips[existingIndex] = clip;
+    } else {
+      clips.push(clip);
+    }
+
+    const modelScene = this.#modelScenes.get(entityId);
+    let mixer = this.#mixers.get(entityId);
+    if (!mixer && modelScene) {
+      mixer = new THREE.AnimationMixer(modelScene);
+      this.#mixers.set(entityId, mixer);
+    }
+
+    const metadata = this.#models.get(entityId);
+    if (metadata) {
+      if (!metadata.animation) {
+        metadata.animation = {
+          clips: clips.map((c) => ({ name: c.name, duration: c.duration })),
+          playing: false,
+          time: 0,
+        };
+      } else {
+        metadata.animation.clips = clips.map((c) => ({
+          name: c.name,
+          duration: c.duration,
+        }));
+      }
+    }
+
+    return true;
+  }
+
   playAnimation(
     entityId: string,
     clipName: string,
-    options: { loop?: boolean } = {},
+    options: {
+      loop?: boolean;
+      retargetSource?: string;
+      retargetCacheKey?: string;
+    } = {},
   ): boolean {
     if (this.#disposed) return false;
     const mixer = this.#mixers.get(entityId);
@@ -347,12 +392,24 @@ export class ThreeSceneRuntime {
         playing: true,
         time: 0,
         duration: clip.duration,
+        ...(options.retargetSource !== undefined
+          ? { retargetSource: options.retargetSource }
+          : {}),
+        ...(options.retargetCacheKey !== undefined
+          ? { retargetCacheKey: options.retargetCacheKey }
+          : {}),
       };
     } else {
       metadata.animation.activeClip = clipName;
       metadata.animation.playing = true;
       metadata.animation.time = 0;
       metadata.animation.duration = clip.duration;
+      if (options.retargetSource !== undefined) {
+        metadata.animation.retargetSource = options.retargetSource;
+      }
+      if (options.retargetCacheKey !== undefined) {
+        metadata.animation.retargetCacheKey = options.retargetCacheKey;
+      }
     }
 
     return true;
@@ -374,6 +431,8 @@ export class ThreeSceneRuntime {
       metadata.animation.time = 0;
       delete metadata.animation.activeClip;
       delete metadata.animation.duration;
+      delete metadata.animation.retargetSource;
+      delete metadata.animation.retargetCacheKey;
     }
     const modelScene = this.#modelScenes.get(entityId);
     if (metadata && modelScene) {

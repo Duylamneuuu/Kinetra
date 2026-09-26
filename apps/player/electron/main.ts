@@ -247,6 +247,7 @@ async function handleBridgeRequest(
     case "asset.register":
     case "animation.play":
     case "animation.stop":
+    case "animation.registerClip":
     case "audio.play":
     case "audio.stop":
     case "audio.setBusGain":

@@ -301,10 +301,14 @@ export class ArenaEnemyController implements GameScript {
     const ctx = context ?? this.#lastContext;
     if (!ctx?.animation) return;
     const clip = this.#desiredClip();
-    if (ctx.animation.activeClip !== clip) {
-      const loop = clip === "walk" || clip === "telegraph" || clip === "idle";
-      ctx.animation.play(clip, { loop });
+    if (
+      ctx.animation.activeClip === clip ||
+      ctx.animation.activeClip === `${clip}_retargeted`
+    ) {
+      return;
     }
+    const loop = clip === "walk" || clip === "telegraph" || clip === "idle";
+    ctx.animation.play(clip, { loop });
   }
 
   onCreate(context: GameScriptContext): void {
