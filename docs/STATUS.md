@@ -86,7 +86,7 @@ What has meaningful proof:
 - text-backed graph/state-machine semantics;
 - programmatic synthetic animated GLB fixture generation (`createSyntheticAnimatedGlb`);
 - programmatic synthetic rigged character GLB fixture generation (`createSyntheticCharacterGlb`) with real `SkinnedMesh`, 7-bone hierarchy (`Hips`, `Spine`, `Head`, `LeftArm`, `RightArm`, `LeftLeg`, `RightLeg`), and 6 combat clips (`idle`, `walk`, `telegraph`, `attack`, `hurt`, `defeat`);
-- canonical rigged character fixture (`examples/reference-game/assets/characters/enemy-bot.glb` & `enemy-bot.asset.json`) with Scenario provenance metadata;
+- canonical rigged character fixture (`examples/reference-game/assets/characters/enemy-bot.glb` & `enemy-bot.asset.json`) with truthful Kinetra synthetic fixture provenance metadata;
 - GLTF animation clip extraction via Three.js `GLTFLoader` in the Electron player runtime;
 - Three.js `SkinnedMesh` and `Skeleton` detection, populating structured runtime state `entity.model.skinnedMeshCount` and `entity.model.hasSkin`;
 - encapsulated `THREE.AnimationMixer` management in `ThreeSceneRuntime` behind semantic methods (`playAnimation`, `stopAnimation`, `updateAnimation`);

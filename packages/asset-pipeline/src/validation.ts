@@ -43,10 +43,57 @@ export function validateAssetRecord(record: AssetRecord): AssetDiagnostic[] {
   }
 
   const provenance = record.metadata.provenance;
-  if (provenance && !provenance.provider) {
-    diagnostics.push({
-      severity: "error", code: "asset.provenance.provider.empty", message: "Provenance provider is required when provenance is specified"
-    });
+  if (provenance) {
+    if (!provenance.provider) {
+      diagnostics.push({
+        severity: "error",
+        code: "asset.provenance.provider.empty",
+        message: "Provenance provider is required when provenance is specified",
+      });
+    }
+
+    const isSyntheticGenerator =
+      typeof provenance.generator === "string" &&
+      /^(kinetra|createSynthetic)/i.test(provenance.generator);
+    const isSyntheticProvider =
+      provenance.provider === "kinetra" ||
+      provenance.provider === "kinetra-synthetic" ||
+      provenance.provider === "synthetic";
+
+    if (isSyntheticGenerator && !isSyntheticProvider) {
+      diagnostics.push({
+        severity: "error",
+        code: "asset.provenance.synthetic.invalidProvider",
+        message: `Deterministic synthetic fixture (${provenance.generator}) cannot claim external provider provenance "${provenance.provider}"`,
+      });
+    }
+
+    if (isSyntheticProvider || isSyntheticGenerator) {
+      if (typeof provenance.creativeUnitsCost === "number" && provenance.creativeUnitsCost > 0) {
+        diagnostics.push({
+          severity: "error",
+          code: "asset.provenance.synthetic.externalCost",
+          message: `Deterministic synthetic fixture cannot claim external creative units cost (${provenance.creativeUnitsCost})`,
+        });
+      }
+      if (provenance.sourceAssetId) {
+        diagnostics.push({
+          severity: "error",
+          code: "asset.provenance.synthetic.externalAssetId",
+          message: `Deterministic synthetic fixture cannot claim external provider sourceAssetId "${provenance.sourceAssetId}"`,
+        });
+      }
+      if (
+        provenance.model &&
+        /^(gpt|claude|scenario|dall-e|stable-diffusion|midjourney)/i.test(provenance.model)
+      ) {
+        diagnostics.push({
+          severity: "error",
+          code: "asset.provenance.synthetic.externalModel",
+          message: `Deterministic synthetic fixture cannot claim external AI model "${provenance.model}"`,
+        });
+      }
+    }
   }
 
   return diagnostics;

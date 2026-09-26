@@ -21,6 +21,7 @@ export interface AssetDiagnostic {
 
 export interface AssetProvenance {
   provider: string;
+  generator?: string;
   model?: string;
   prompt?: string;
   sourceAssetId?: string;
