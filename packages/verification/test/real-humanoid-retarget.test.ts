@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,8 @@ import { NodeIO } from "@gltf-transform/core";
 import * as THREE from "three";
 
 import {
+  FileRetargetCacheStorage,
+  RetargetBakeCache,
   bakeRetargetedClip,
   buildRetargetPlan,
   computeRetargetCacheKey,
@@ -110,6 +113,7 @@ test(
   async (t) => {
     let bakedWalkClip: THREE.AnimationClip;
     let expectedCacheKey: string;
+    let cesiumWalkSourceClip: THREE.AnimationClip;
 
     // -----------------------------------------------------------------------
     // Scenario 1: Real External Source Asset Inspection & Skeleton Discovery
@@ -320,6 +324,7 @@ test(
         }
 
         const sourceClip = new THREE.AnimationClip("CesiumWalk", 2.0, sourceTracks);
+        cesiumWalkSourceClip = sourceClip;
 
         const bakeResult = bakeRetargetedClip({
           sourceClip,
@@ -601,6 +606,190 @@ test(
         } finally {
           await probe.stop();
           await host.close();
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // Scenario 12: Multi-Process Retarget Bake Cache Proof in Real Electron
+    // -----------------------------------------------------------------------
+    await t.test(
+      "Scenario 12: Multi-Process Retarget Bake Cache Proof — Process A MISS/bake/persist -> Fresh Process B HIT/load/playback",
+      async () => {
+        const cacheDir = mkdtempSync(join(tmpdir(), "kinetra-retarget-cache-proof-"));
+        const cesiumManHash = "659349b0a374b73d5362a61070039bc8601401bbdeacbece4f3680fb4bfd41b0";
+
+        try {
+          // =================================================================
+          // Process A: Inspect source -> retarget -> cache MISS -> bake -> persist -> play target clip
+          // =================================================================
+          const storageA = new FileRetargetCacheStorage({ cacheDir });
+          const cacheA = new RetargetBakeCache({ storage: storageA });
+
+          let processABakeInvoked = false;
+          const bakeResultA = await cacheA.getOrBake({
+            sourceClip: cesiumWalkSourceClip,
+            sourceProfile: cesiumManProfile,
+            targetProfile: enemyBotProfile,
+            sourceAssetHash: cesiumManHash,
+            clipName: "cesium_walk_cached",
+            settings: { hipsTranslationPolicy: "ignore", scaleFactor: 1.0, version: 1 },
+            bakeFn: (opts) => {
+              processABakeInvoked = true;
+              return bakeRetargetedClip(opts);
+            },
+          });
+
+          assert.equal(bakeResultA.success, true, "Process A bake must succeed");
+          assert.equal(bakeResultA.cacheHit, false, "Process A must be a cache MISS");
+          assert.equal(processABakeInvoked, true, "Process A must execute real retarget baking");
+          assert.ok(bakeResultA.record, "Process A must produce a serialized RetargetCacheRecord");
+          assert.equal(bakeResultA.record.schemaVersion, 1, "Schema version must be 1");
+          assert.equal(bakeResultA.cacheIdentity, `retarget/${bakeResultA.cacheKey}.json`);
+          assert.equal(await storageA.has(bakeResultA.cacheKey), true, "Baked artifact must be persisted to disk");
+
+          // Define isolated project without enemy controller script so script AI doesn't override test animation
+          const createIsolatedProject = () => {
+            const proj = createArenaProject();
+            const enemy = proj.scenes[0]!.entities.find((e) => e.id === ARENA_ENTITY_ENEMY)!;
+            delete (enemy.components as any).Script;
+            return proj;
+          };
+
+          // Play in Process A Electron host
+          const hostA = createArenaHost();
+          const probeA = new KinetraRuntimeProbe({
+            host: hostA,
+            project: createIsolatedProject,
+            initialRevision: 0,
+            assets: arenaAudioAssets,
+            closeOnStop: false,
+          });
+
+          try {
+            await probeA.start(ARENA_SCENE_ID, 707);
+            await hostA.registerAnimationClip(ARENA_ENTITY_ENEMY, bakeResultA.record);
+
+            const playResA = await hostA.playAnimation(ARENA_ENTITY_ENEMY, "cesium_walk_cached", { loop: true });
+            assert.ok(playResA, "Process A playAnimation must succeed");
+
+            await hostA.step(5, 1 / 60);
+            const queryA = await hostA.query({ entityIds: [ARENA_ENTITY_ENEMY] });
+            const enemyA = queryA.entities.find((e) => e.entityId === ARENA_ENTITY_ENEMY);
+            assert.equal(enemyA?.model?.animation?.playing, true, "EnemyBot must be playing cached animation in Process A");
+            assert.equal(enemyA?.model?.animation?.activeClip, "cesium_walk_cached");
+          } finally {
+            await probeA.stop();
+            await hostA.close();
+          }
+
+          // =================================================================
+          // Fresh Process B: Same inputs -> cache HIT -> load baked clip -> register -> play on EnemyBot
+          // =================================================================
+          const storageB = new FileRetargetCacheStorage({ cacheDir });
+          const cacheB = new RetargetBakeCache({ storage: storageB });
+
+          let processBBakeInvoked = false;
+          const bakeResultB = await cacheB.getOrBake({
+            sourceClip: cesiumWalkSourceClip,
+            sourceProfile: cesiumManProfile,
+            targetProfile: enemyBotProfile,
+            sourceAssetHash: cesiumManHash,
+            clipName: "cesium_walk_cached",
+            settings: { hipsTranslationPolicy: "ignore", scaleFactor: 1.0, version: 1 },
+            bakeFn: (opts) => {
+              processBBakeInvoked = true;
+              return bakeRetargetedClip(opts);
+            },
+          });
+
+          assert.equal(bakeResultB.success, true, "Process B cache lookup must succeed");
+          assert.equal(bakeResultB.cacheHit, true, "Process B must be a cache HIT");
+          assert.equal(processBBakeInvoked, false, "Process B must NOT recompute retargeting");
+          assert.equal(bakeResultB.cacheKey, bakeResultA.cacheKey, "Cache keys must match between processes");
+          assert.equal(bakeResultB.trackCount, bakeResultA.trackCount, "Track counts must match");
+          assert.equal(bakeResultB.duration, bakeResultA.duration, "Durations must match");
+
+          // Fresh Process B Electron Host: Zero source skeleton required at playback
+          const hostB = createArenaHost();
+          const probeB = new KinetraRuntimeProbe({
+            host: hostB,
+            project: createIsolatedProject,
+            initialRevision: 0,
+            assets: arenaAudioAssets,
+            closeOnStop: false,
+          });
+
+          try {
+            await probeB.start(ARENA_SCENE_ID, 708);
+
+            // Register baked artifact directly from cache record without source skeleton
+            await hostB.registerAnimationClip(ARENA_ENTITY_ENEMY, bakeResultB.record);
+
+            const playResB = await hostB.playAnimation(ARENA_ENTITY_ENEMY, "cesium_walk_cached", { loop: true });
+            assert.ok(playResB, "Process B playAnimation must succeed");
+
+            // Query initial bone rotations
+            const initialQuery = await hostB.query({ entityIds: [ARENA_ENTITY_ENEMY] });
+            const enemy0 = initialQuery.entities.find((e) => e.entityId === ARENA_ENTITY_ENEMY);
+            assert.equal(enemy0?.model?.loaded, true, "Enemy model must be loaded");
+            assert.equal(enemy0?.model?.hasSkin, true, "Enemy model must have skin");
+            assert.ok(enemy0?.model?.skinnedMeshCount! > 0, "Enemy model must have skinned meshes");
+
+            const leftArmRot0 = [...enemy0!.model!.nodes!.find((n) => n.name === "LeftArm")!.rotation!];
+            const leftLegRot0 = [...enemy0!.model!.nodes!.find((n) => n.name === "LeftLeg")!.rotation!];
+
+            // Deterministic step advancement
+            await hostB.step(25, 1 / 60);
+
+            const steppedQuery = await hostB.query({ entityIds: [ARENA_ENTITY_ENEMY] });
+            const enemyStepped = steppedQuery.entities.find((e) => e.entityId === ARENA_ENTITY_ENEMY);
+            assert.ok(
+              enemyStepped!.model!.animation!.time > 0.3,
+              `Animation time must advance past 0.3s, got ${enemyStepped!.model!.animation!.time}`,
+            );
+
+            // Verify target bone transforms change
+            const leftArmRotStepped = enemyStepped!.model!.nodes!.find((n) => n.name === "LeftArm")!.rotation!;
+            const leftLegRotStepped = enemyStepped!.model!.nodes!.find((n) => n.name === "LeftLeg")!.rotation!;
+
+            const armDiff =
+              Math.abs(leftArmRotStepped[0]! - leftArmRot0[0]!) +
+              Math.abs(leftArmRotStepped[1]! - leftArmRot0[1]!) +
+              Math.abs(leftArmRotStepped[2]! - leftArmRot0[2]!) +
+              Math.abs(leftArmRotStepped[3]! - leftArmRot0[3]!);
+
+            const legDiff =
+              Math.abs(leftLegRotStepped[0]! - leftLegRot0[0]!) +
+              Math.abs(leftLegRotStepped[1]! - leftLegRot0[1]!) +
+              Math.abs(leftLegRotStepped[2]! - leftLegRot0[2]!) +
+              Math.abs(leftLegRotStepped[3]! - leftLegRot0[3]!);
+
+            assert.ok(
+              armDiff > 0.0001 || legDiff > 0.0001,
+              `Target bone rotations must change after playback from cache (armDiff: ${armDiff}, legDiff: ${legDiff})`,
+            );
+
+            // Frame capture verification
+            const frame = await probeB.captureFrame();
+            assertValidPng(frame, "Process B Cached Retarget Frame");
+
+            // Verify error logs: zero animation.playFailed, zero model.loadFailed
+            const logsB = await hostB.readLogs();
+            const playFailed = logsB.filter((l) => l.message === "animation.playFailed");
+            const loadFailed = logsB.filter((l) => l.message === "model.loadFailed");
+            assert.equal(playFailed.length, 0, `Zero animation.playFailed expected in Process B, got: ${JSON.stringify(playFailed)}`);
+            assert.equal(loadFailed.length, 0, `Zero model.loadFailed expected in Process B, got: ${JSON.stringify(loadFailed)}`);
+          } finally {
+            await probeB.stop();
+            await hostB.close();
+          }
+        } finally {
+          try {
+            rmSync(cacheDir, { recursive: true, force: true });
+          } catch {
+            // ignore cleanup error
+          }
         }
       },
     );
