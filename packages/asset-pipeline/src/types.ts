@@ -19,6 +19,24 @@ export interface AssetDiagnostic {
   path?: string;
 }
 
+export interface AssetProvenance {
+  provider: string;
+  model?: string;
+  prompt?: string;
+  sourceAssetId?: string;
+  generatedAt?: string;
+  license?: string;
+  creativeUnitsCost?: number;
+}
+
+export interface AssetMetadata extends Record<string, unknown> {
+  polycount?: number;
+  maxTextureDimension?: number;
+  dimensions?: [number, number, number];
+  boundsRadius?: number;
+  provenance?: AssetProvenance;
+}
+
 export interface AssetRecord {
   id: string;
   kind: AssetKind;
@@ -28,7 +46,7 @@ export interface AssetRecord {
   fingerprint: string;
   dependencies: string[];
   diagnostics: AssetDiagnostic[];
-  metadata: Record<string, unknown>;
+  metadata: AssetMetadata;
 }
 
 export interface AssetDatabaseDocument {

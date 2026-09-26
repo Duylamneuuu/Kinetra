@@ -29,5 +29,25 @@ export function validateAssetRecord(record: AssetRecord): AssetDiagnostic[] {
     severity:"warning", code:"texture.dimension.high", message:`Texture dimension ${maxTexture} exceeds 8192`
   });
 
+  const boundsRadius = record.metadata.boundsRadius;
+  if (typeof boundsRadius === "number") {
+    if (!Number.isFinite(boundsRadius) || boundsRadius <= 0) {
+      diagnostics.push({
+        severity: "error", code: "model.bounds.invalid", message: `Bounds radius ${boundsRadius} must be a positive finite number`
+      });
+    } else if (boundsRadius > 500) {
+      diagnostics.push({
+        severity: "warning", code: "model.bounds.large", message: `Bounds radius ${boundsRadius}m exceeds 500m threshold`
+      });
+    }
+  }
+
+  const provenance = record.metadata.provenance;
+  if (provenance && !provenance.provider) {
+    diagnostics.push({
+      severity: "error", code: "asset.provenance.provider.empty", message: "Provenance provider is required when provenance is specified"
+    });
+  }
+
   return diagnostics;
 }

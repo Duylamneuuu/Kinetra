@@ -26,6 +26,7 @@ Legend:
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
 | P8 verification | MCP + PACKAGED RUNTIME ACCEPTANCE SLICE PROVEN | P8 MCP acceptance execution + packaged-runtime acceptance slice proven: test.runAcceptance tool, typed AcceptanceManifest input, semantic target (runtime vs packaged), engine-owned packaged executable resolution (KinetraGame.exe), truthful process evidence observations (hostInfo.isPackaged, execPath), machine-readable pass/fail reports with failed steps/failureReason, clean zero-leak teardown across repeated invocations, and real AcceptanceRunner proofs against both dev Electron and packaged Windows binary. |
 | P10 reference game | COMBAT FEEL & PROGRESSION PROVEN | Reference game vertical slice ("Kinetra Arena") expanded with deterministic combat feel, enemy telegraphing, hurt reactions, extraction unlock progression, and run summary statistics. 7-scenario progression acceptance suite (`real-combat-progression.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`). |
+| AI asset production | SCENARIO VERTICAL SLICE PROVEN | External Scenario MCP auth boundary documented truthfully; Kinetra-owned orchestration skill (`.agents/skills/kinetra-scenario-asset/SKILL.md`); ingestion pipeline with validation, normalization, sha256 content hashing, stable assetId, and provider-neutral AssetProvenance metadata; high-quality multi-mesh energy-crate prop fixture; verification via real Electron runtime, command-bus authoring, structured query, PNG render, error handling, and clean teardown. |
 
 ## Merged subsystem notes
 
@@ -52,6 +53,27 @@ Not yet equivalent to a production importer:
 - thumbnails;
 - Meshopt/Draco/KTX2 final policy;
 - full dependency-aware runtime reload.
+
+### AI asset production (Scenario)
+
+What has meaningful proof:
+- external Scenario MCP endpoint boundary (`https://mcp.scenario.com/mcp`) documented truthfully with clear separation from runtime player;
+- Kinetra orchestration skill (`.agents/skills/kinetra-scenario-asset/SKILL.md`) providing end-to-end guidance, prompt generation, deterministic dry-run Creative Units estimation, and verification instructions;
+- asset pipeline metadata extension (`AssetProvenance`) tracking provider (`scenario`), model, prompt, creative units cost, and license;
+- asset validation policy (`validateAssetRecord`) rejecting negative costs, invalid provider keys, and out-of-bounds prop dimensions (> 50m);
+- programmatic prop generator (`createSyntheticPropGlb`) producing deterministic multi-mesh GLB props with metallic frames and emissive cores;
+- canonical static prop fixture (`examples/reference-game/assets/props/energy-crate.glb` & `energy-crate.asset.json`);
+- command-bus authoring into project documents adhering to schema validation;
+- real Electron runtime asset resolution via `AssetResolver`, Three.js projection, and structured model query (`state.byName.EnergyCrate.model: { loaded, assetId, meshCount, bounds }`);
+- real PNG visual render capture;
+- deliberate failure testing for unresolvable assets producing structured error logs (`model.loadFailed`) without crashing Electron;
+- clean, leak-free teardown of runtime and host.
+
+What remains:
+- automated Scenario webhook ingestion when external credentials are present;
+- texture bake optimization and LOD generation;
+- sprite and audio generator integration.
+
 
 ### Animation
 
