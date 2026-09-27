@@ -127,6 +127,10 @@ export class SourceAssetWatcher {
         this.#handleFsNotification(sourcePath);
       });
 
+      if (typeof (watcher as any).unref === "function") {
+        (watcher as any).unref();
+      }
+
       watcher.on("error", (_err) => {
         // Tolerant to transient filesystem errors (e.g. atomic rename/replace)
         this.#handleFsNotification(sourcePath);
@@ -156,6 +160,10 @@ export class SourceAssetWatcher {
       this.#debounceTimers.delete(sourcePath);
       await this.#checkSource(sourcePath);
     }, this.#debounceMs);
+
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
 
     this.#debounceTimers.set(sourcePath, timer);
   }

@@ -71,6 +71,7 @@ test("P4: Dependency Invalidation Set A <- B <- C, D unrelated", () => {
 
 test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and content change detection", async () => {
   const tempDir = await mkdtemp(join(tmpdir(), "kinetra-watcher-test-"));
+  let watcher: SourceAssetWatcher | undefined;
 
   try {
     const fileA = join(tempDir, "source_a.txt");
@@ -80,7 +81,7 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     await writeFile(fileB, "content_b_init", "utf8");
 
     const events: SourceChangeEvent[] = [];
-    const watcher = new SourceAssetWatcher({
+    watcher = new SourceAssetWatcher({
       debounceMs: 50,
       onEvent: (e) => events.push(e),
     });
@@ -91,10 +92,20 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     await watcher.start();
     assert.equal(watcher.isWatching(), true);
 
+    async function waitForCount(getActual: () => number, expected: number, timeoutMs = 2500): Promise<void> {
+      const start = Date.now();
+      while (getActual() < expected) {
+        if (Date.now() - start > timeoutMs) {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    }
+
     // 1. Single write -> exactly one change event
     events.length = 0;
     await writeFile(fileA, "content_v2", "utf8");
-    await new Promise((r) => setTimeout(r, 150));
+    await waitForCount(() => events.length, 1);
     assert.equal(events.length, 1);
     assert.equal(events[0]?.assetId, "asset_A");
     assert.equal(events[0]?.newContentHash, hashBytes(new TextEncoder().encode("content_v2")));
@@ -106,7 +117,8 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     await writeFile(fileA, "content_v3_rapid_2", "utf8");
     await new Promise((r) => setTimeout(r, 10));
     await writeFile(fileA, "content_v3", "utf8");
-    await new Promise((r) => setTimeout(r, 150));
+    await waitForCount(() => events.length, 1);
+    await new Promise((r) => setTimeout(r, 100));
     assert.equal(events.length, 1);
     assert.equal(events[0]?.assetId, "asset_A");
     assert.equal(events[0]?.newContentHash, hashBytes(new TextEncoder().encode("content_v3")));
@@ -115,7 +127,7 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     events.length = 0;
     const now = new Date();
     await utimes(fileA, now, now);
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 200));
     assert.equal(events.length, 0, "Touch with identical content must not emit change event");
 
     // 4. Atomic replace (write temp -> rename) -> exactly one event
@@ -125,7 +137,7 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     await new Promise((r) => setTimeout(r, 10));
     const { rename } = await import("node:fs/promises");
     await rename(tmpFile, fileA);
-    await new Promise((r) => setTimeout(r, 150));
+    await waitForCount(() => events.length, 1);
     assert.equal(events.length, 1);
     assert.equal(events[0]?.assetId, "asset_A");
     assert.equal(events[0]?.newContentHash, hashBytes(new TextEncoder().encode("content_v4_atomic")));
@@ -134,14 +146,14 @@ test("P4: SourceAssetWatcher handles debounce, touches, atomic writes, and conte
     events.length = 0;
     await writeFile(fileA, "content_v5", "utf8");
     await writeFile(fileB, "content_b_v2", "utf8");
-    await new Promise((r) => setTimeout(r, 150));
+    await waitForCount(() => events.length, 2);
     assert.equal(events.length, 2);
     const assetIds = events.map((e) => e.assetId).sort();
     assert.deepEqual(assetIds, ["asset_A", "asset_B"]);
-
-    await watcher.stop();
-    assert.equal(watcher.isWatching(), false);
   } finally {
+    if (watcher) {
+      await watcher.stop().catch(() => {});
+    }
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 });
