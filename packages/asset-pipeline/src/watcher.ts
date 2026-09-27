@@ -123,7 +123,13 @@ export class SourceAssetWatcher {
     if (this.#watchers.has(sourcePath)) return;
 
     try {
-      const watcher = watch(sourcePath, (_eventType) => {
+      const watcher = watch(sourcePath, (eventType) => {
+        if (eventType === "rename") {
+          // On Linux (inotify), an atomic replace / rename detaches the watcher from the old inode.
+          // Re-establish watcher on the destination path so subsequent modifications are caught.
+          this.#unwatchFile(sourcePath);
+          this.#watchFile(sourcePath);
+        }
         this.#handleFsNotification(sourcePath);
       });
 
@@ -133,6 +139,8 @@ export class SourceAssetWatcher {
 
       watcher.on("error", (_err) => {
         // Tolerant to transient filesystem errors (e.g. atomic rename/replace)
+        this.#unwatchFile(sourcePath);
+        this.#watchFile(sourcePath);
         this.#handleFsNotification(sourcePath);
       });
 
@@ -169,6 +177,10 @@ export class SourceAssetWatcher {
   }
 
   async #checkSource(sourcePath: string): Promise<SourceChangeEvent | null> {
+    if (this.#running && !this.#watchers.has(sourcePath)) {
+      this.#watchFile(sourcePath);
+    }
+
     const assetId = this.#pathToAssetId.get(sourcePath);
     if (!assetId) return null;
 
