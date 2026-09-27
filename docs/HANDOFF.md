@@ -186,6 +186,20 @@ The humanoid animation retarget baking and persistent bake cache vertical slices
 - Scene reload/restart clearing stale mixer state and allowing clean re-playback without leaks;
 - Complete 12-scenario real Electron verification suite (`real-humanoid-retarget.test.ts`) passing against dev Electron and packaged Windows binary (`KinetraGame.exe`).
 
+### 9. Runtime Animation Graph & Deterministic Crossfade (P5 Proven)
+
+The text-backed animation graph runtime and deterministic crossfading slice is proven in dev Electron and packaged `KinetraGame.exe`:
+- Text-backed schema-versioned animation graph format (`AnimationGraphDefinition`, `AnimationGraphMachine`, schemaVersion: 1) supporting typed parameters (`bool`, `number`, `trigger`), conditions (`==`, `!=`, `<`, `<=`, `>`, `>=`, `triggered`), priorities, wildcard source transitions (`from: "*"`), and transition `blendSeconds`;
+- Engine-owned runtime animator session (`EntityAnimatorSession`, `AnimatorBlendSession`) on `ThreeSceneRuntime` managing concurrent `activeAction` and `outgoingAction` weights;
+- Deterministic weight shifting in `ThreeSceneRuntime.updateAnimation(deltaSeconds)` advancing weight smoothly across discrete simulation steps (`runtime.step(fixedDeltaSeconds)`) for `blendSeconds > 0`, and zero-latency immediate switching for `blendSeconds == 0`;
+- Mid-blend interruption policy stopping superseded outgoing actions immediately with zero weight and demoting active action to outgoing without action leakage;
+- Observable structured graph state (`model.animation.graph = { state, previousState, transitionId, transitioning, blendSeconds, blendElapsed, blendProgress }`) and concurrent weighted actions (`model.animation.actions = [{ clip, weight, role }]`);
+- Transparent resolution of retargeted clips (`${name}_retargeted`) in graph states and crossfades;
+- Negative proofs emitting structured diagnostics and errors for invalid graph schemas, unknown clips, unknown parameters, type mismatches, and unknown triggers without crashing the runtime;
+- Reference game integration where `ARENA_ENEMY_ANIMATION_GRAPH` drives EnemyBot combat lifecycle (idle, walk, telegraph, attack, hurt, defeat) without altering damage timing, reaction windows, or combat logic;
+- Comprehensive real Electron verification suite (`packages/verification/test/real-animation-graph.test.ts`) passing all 8 scenarios with valid PNG capture during active blend;
+- 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
+
 ## Completion definition
 
 Kinetra is not "done" when:

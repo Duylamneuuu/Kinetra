@@ -8,6 +8,11 @@ import {
 } from "@kinetra/physics-rapier";
 import { RecastNavMesh } from "@kinetra/navigation-recast";
 import { ThreeSceneRuntime, type AssetResolver } from "@kinetra/renderer-three";
+import type {
+  AnimationGraphDefinition,
+  AnimationGraphDiagnostic,
+  AnimationTransitionResult,
+} from "@kinetra/animation";
 import {
   ScriptHost,
   ScriptRegistry,
@@ -65,12 +70,32 @@ export interface PlayerRuntimeQuery {
   entityIds?: string[];
 }
 
+export interface PlayerRuntimeModelAnimationActionState {
+  clip: string;
+  weight: number;
+  role: "incoming" | "outgoing" | "active";
+}
+
+export interface PlayerRuntimeModelAnimationGraphState {
+  state: string;
+  previousState?: string | undefined;
+  transitionId?: string | undefined;
+  transitioning: boolean;
+  blendSeconds?: number | undefined;
+  blendElapsed?: number | undefined;
+  blendProgress?: number | undefined;
+}
+
 export interface PlayerRuntimeModelAnimationState {
   clips: Array<{ name: string; duration: number }>;
-  activeClip?: string;
+  activeClip?: string | undefined;
   playing: boolean;
   time: number;
-  duration?: number;
+  duration?: number | undefined;
+  retargetSource?: string | undefined;
+  retargetCacheKey?: string | undefined;
+  graph?: PlayerRuntimeModelAnimationGraphState | undefined;
+  actions?: PlayerRuntimeModelAnimationActionState[] | undefined;
 }
 
 export interface PlayerRuntimeModelNodeState {
@@ -613,6 +638,38 @@ export class PlayerRuntimeController {
                   const meta = self.#runtime?.getModelMetadata(entityId);
                   return meta?.animation?.playing ?? false;
                 },
+                graph: {
+                  init: (graphDef: any) => {
+                    return this.initAnimationGraph(entityId, graphDef);
+                  },
+                  setParameter: (name: string, value: boolean | number): boolean => {
+                    const res = this.setAnimationGraphParameter(entityId, name, value);
+                    return res.success;
+                  },
+                  set: (name: string, value: boolean | number): boolean => {
+                    const res = this.setAnimationGraphParameter(entityId, name, value);
+                    return res.success;
+                  },
+                  trigger: (name: string): boolean => {
+                    const res = this.triggerAnimationGraph(entityId, name);
+                    return res.success;
+                  },
+                  evaluate: () => {
+                    return this.evaluateAnimationGraph(entityId).transition;
+                  },
+                  get state(): string | undefined {
+                    const meta = self.#runtime?.getModelMetadata(entityId);
+                    return meta?.animation?.graph?.state;
+                  },
+                  get transitioning(): boolean {
+                    const meta = self.#runtime?.getModelMetadata(entityId);
+                    return meta?.animation?.graph?.transitioning ?? false;
+                  },
+                  get blendProgress(): number | undefined {
+                    const meta = self.#runtime?.getModelMetadata(entityId);
+                    return meta?.animation?.graph?.blendProgress;
+                  },
+                },
               },
               emit: (event, payload) => {
                 this.#scripts.emit(event, payload);
@@ -908,6 +965,170 @@ export class PlayerRuntimeController {
       ...(options.retargetCacheKey !== undefined ? { retargetCacheKey: options.retargetCacheKey } : {}),
     });
     return { success: true };
+  }
+
+  crossfadeAnimation(
+    entityId: string,
+    clipName: string,
+    blendSeconds: number = 0.15,
+    options: {
+      loop?: boolean | undefined;
+      speed?: number | undefined;
+      fromState?: string | undefined;
+      toState?: string | undefined;
+      transitionId?: string | undefined;
+      retargetSource?: string | undefined;
+      retargetCacheKey?: string | undefined;
+    } = {},
+  ): { success: boolean; error?: string } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.crossfadeFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const object = this.#runtime.getObject(entityId);
+    if (!object) {
+      const error = `Entity "${entityId}" does not exist in runtime`;
+      this.#log("error", "animation.crossfadeFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const modelMeta = this.#runtime.getModelMetadata(entityId);
+    if (!modelMeta || !modelMeta.loaded) {
+      const error = `Entity "${entityId}" has no loaded model`;
+      this.#log("error", "animation.crossfadeFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    const success = this.#runtime.crossfadeAnimation(entityId, clipName, blendSeconds, options);
+    if (!success) {
+      const error = `Clip "${clipName}" not found on entity "${entityId}"`;
+      this.#log("error", "animation.crossfadeFailed", { entityId, clip: clipName, error });
+      return { success: false, error };
+    }
+
+    this.#log("info", "animation.crossfaded", {
+      entityId,
+      clip: clipName,
+      blendSeconds,
+      ...(options.fromState ? { fromState: options.fromState } : {}),
+      ...(options.toState ? { toState: options.toState } : {}),
+      ...(options.transitionId ? { transitionId: options.transitionId } : {}),
+    });
+    return { success: true };
+  }
+
+  initAnimationGraph(
+    entityId: string,
+    graph: AnimationGraphDefinition,
+  ): { success: boolean; error?: string; diagnostics?: AnimationGraphDiagnostic[] } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.graph.initFailed", { entityId, error });
+      return { success: false, error };
+    }
+
+    const object = this.#runtime.getObject(entityId);
+    if (!object) {
+      const error = `Entity "${entityId}" does not exist in runtime`;
+      this.#log("error", "animation.graph.initFailed", { entityId, error });
+      return { success: false, error };
+    }
+
+    const modelMeta = this.#runtime.getModelMetadata(entityId);
+    if (!modelMeta || !modelMeta.loaded) {
+      const error = `Entity "${entityId}" has no loaded model`;
+      this.#log("error", "animation.graph.initFailed", { entityId, error });
+      return { success: false, error };
+    }
+
+    const result = this.#runtime.initAnimationGraph(entityId, graph);
+    if (!result.success) {
+      this.#log("error", "animation.graph.initFailed", {
+        entityId,
+        error: result.error,
+        diagnostics: result.diagnostics,
+      });
+      return result;
+    }
+
+    this.#log("info", "animation.graph.initialized", {
+      entityId,
+      entryState: graph.entryState,
+    });
+    return { success: true };
+  }
+
+  setAnimationGraphParameter(
+    entityId: string,
+    name: string,
+    value: boolean | number,
+  ): { success: boolean; error?: string; transition?: AnimationTransitionResult } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.graph.parameterFailed", { entityId, parameter: name, error });
+      return { success: false, error };
+    }
+
+    const result = this.#runtime.setAnimationGraphParameter(entityId, name, value);
+    if (!result.success) {
+      this.#log("error", "animation.graph.parameterFailed", {
+        entityId,
+        parameter: name,
+        value,
+        error: result.error,
+      });
+      return result;
+    }
+
+    this.#log("info", "animation.graph.parameterSet", {
+      entityId,
+      parameter: name,
+      value,
+      ...(result.transition ? { transition: result.transition } : {}),
+    });
+    return result;
+  }
+
+  triggerAnimationGraph(
+    entityId: string,
+    name: string,
+  ): { success: boolean; error?: string; transition?: AnimationTransitionResult } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.graph.triggerFailed", { entityId, trigger: name, error });
+      return { success: false, error };
+    }
+
+    const result = this.#runtime.triggerAnimationGraph(entityId, name);
+    if (!result.success) {
+      this.#log("error", "animation.graph.triggerFailed", {
+        entityId,
+        trigger: name,
+        error: result.error,
+      });
+      return result;
+    }
+
+    this.#log("info", "animation.graph.triggered", {
+      entityId,
+      trigger: name,
+      ...(result.transition ? { transition: result.transition } : {}),
+    });
+    return result;
+  }
+
+  evaluateAnimationGraph(entityId: string): { transition?: AnimationTransitionResult } {
+    if (!this.#runtime) return {};
+    const result = this.#runtime.evaluateAnimationGraph(entityId);
+    if (result.transition) {
+      this.#log("info", "animation.graph.transitioned", {
+        entityId,
+        transition: result.transition,
+      });
+    }
+    return result;
   }
 
   stopAnimation(entityId: string): void {

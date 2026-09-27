@@ -322,3 +322,73 @@ test("ArenaEnemyController drives semantic animation service across all combat s
   assert.equal(mockAnimation.activeClip, "defeat");
   assert.equal(enemy.getState().animationClip, "defeat");
 });
+
+test("ArenaEnemyController initializes and drives ARENA_ENEMY_ANIMATION_GRAPH when graph service is present", () => {
+  const enemy = new ArenaEnemyController();
+  let initializedGraph: unknown = undefined;
+  const parameters = new Map<string, boolean | number>();
+  const triggered: string[] = [];
+  let evaluateCount = 0;
+
+  const mockGraph = {
+    init(graph: unknown) {
+      initializedGraph = graph;
+      return { success: true };
+    },
+    setParameter(name: string, value: boolean | number) {
+      parameters.set(name, value);
+      return true;
+    },
+    trigger(name: string) {
+      triggered.push(name);
+      return true;
+    },
+    evaluate() {
+      evaluateCount++;
+      return {};
+    },
+  };
+
+  const context: any = {
+    entityId: "enemy-1",
+    animation: {
+      play: () => true,
+      stop: () => {},
+      graph: mockGraph,
+    },
+    transform: {
+      getPosition: () => [5, 0.5, 5],
+      translate: () => {},
+    },
+    scene: {
+      findEntityByName: () => ({ entityId: "player-1", name: "Player" }),
+      getEntityTransform: () => [5, 0.5, 5],
+    },
+    emit: () => {},
+    log: () => {},
+  };
+
+  enemy.onStart(context);
+  assert.ok(initializedGraph);
+  assert.equal(parameters.get("moving"), true);
+  assert.equal(parameters.get("defeated"), false);
+  assert.ok(evaluateCount > 0);
+
+  // Step into telegraph
+  enemy.onUpdate(context, 1 / 60);
+  assert.ok(triggered.includes("telegraph"));
+
+  // Step into attack
+  enemy.onUpdate(context, 1 / 60);
+  assert.ok(triggered.includes("attack"));
+
+  // Hurt event
+  enemy.onEvent("gameplay.enemyDamage", { amount: 1 }, context);
+  assert.ok(triggered.includes("hurt"));
+
+  // Defeat event
+  enemy.onEvent("gameplay.enemyDamage", { amount: 2 }, context);
+  assert.equal(parameters.get("defeated"), true);
+  assert.equal(enemy.state, "defeated");
+});
+

@@ -130,6 +130,47 @@ async function handleRuntimeCommand(request: {
       return { ...result, ...runtime.query() };
     }
 
+    case "animation.crossfade": {
+      const entityId = requireString(params.entityId, "entityId");
+      const clip = requireString(params.clip, "clip");
+      const blendSeconds = typeof params.blendSeconds === "number" ? params.blendSeconds : 0.15;
+      const loop = typeof params.loop === "boolean" ? params.loop : undefined;
+      const speed = typeof params.speed === "number" ? params.speed : undefined;
+      const result = runtime.crossfadeAnimation(entityId, clip, blendSeconds, {
+        ...(loop !== undefined ? { loop } : {}),
+        ...(speed !== undefined ? { speed } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.graph.init": {
+      const entityId = requireString(params.entityId, "entityId");
+      const graph = params.graph as any;
+      const result = runtime.initAnimationGraph(entityId, graph);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.graph.setParameter": {
+      const entityId = requireString(params.entityId, "entityId");
+      const name = requireString(params.name, "name");
+      const value = params.value as boolean | number;
+      const result = runtime.setAnimationGraphParameter(entityId, name, value);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.graph.trigger": {
+      const entityId = requireString(params.entityId, "entityId");
+      const name = requireString(params.name, "name");
+      const result = runtime.triggerAnimationGraph(entityId, name);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.graph.evaluate": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.evaluateAnimationGraph(entityId);
+      return { ...result, ...runtime.query() };
+    }
+
     case "animation.registerClip": {
       const entityId = requireString(params.entityId, "entityId");
       const clip = params.clip;

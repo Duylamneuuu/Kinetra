@@ -20,14 +20,32 @@ export interface ClipMetadata {
   duration: number;
 }
 
+export interface ModelAnimationActionState {
+  clip: string;
+  weight: number;
+  role: "incoming" | "outgoing" | "active";
+}
+
+export interface ModelAnimationGraphState {
+  state: string;
+  previousState?: string | undefined;
+  transitionId?: string | undefined;
+  transitioning: boolean;
+  blendSeconds?: number | undefined;
+  blendElapsed?: number | undefined;
+  blendProgress?: number | undefined;
+}
+
 export interface ModelAnimationState {
   clips: ClipMetadata[];
-  activeClip?: string;
+  activeClip?: string | undefined;
   playing: boolean;
   time: number;
-  duration?: number;
-  retargetSource?: string;
-  retargetCacheKey?: string;
+  duration?: number | undefined;
+  retargetSource?: string | undefined;
+  retargetCacheKey?: string | undefined;
+  graph?: ModelAnimationGraphState | undefined;
+  actions?: ModelAnimationActionState[] | undefined;
 }
 
 export interface ModelNodeState {

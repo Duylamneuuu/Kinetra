@@ -261,3 +261,256 @@ test("loads animated GLTF, discovers clips, plays, deterministically advances, s
   assert.equal(runtime.disposed, true);
 });
 
+test("crossfadeAnimation shifts weights deterministically and cleans outgoing action on completion", async () => {
+  const { createSyntheticAnimatedGlb } = await import("@kinetra/asset-pipeline");
+  const glbBytes = await createSyntheticAnimatedGlb({
+    meshName: "HeroMesh",
+    nodeName: "AnimatedBoxNode",
+    clipName: "ClipA",
+    duration: 1.0,
+    from: [0, 0, 0],
+    to: [1, 0, 0],
+  });
+
+  const resolver = {
+    resolve(assetId: string) {
+      if (assetId === "asset_hero") return glbBytes;
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  // Register a second clip
+  const track = new THREE.VectorKeyframeTrack("AnimatedBoxNode.position", [0, 1], [0, 0, 0, 0, 1, 0]);
+  const clipB = new THREE.AnimationClip("ClipB", 1.0, [track]);
+  runtime.registerAnimationClip(rootId, clipB);
+
+  // Start with ClipA
+  const ok1 = runtime.playAnimation(rootId, "ClipA");
+  assert.equal(ok1, true);
+
+  const meta = runtime.getModelMetadata(rootId)!;
+  assert.equal(meta.animation?.activeClip, "ClipA");
+  assert.deepEqual(meta.animation?.actions, [
+    { clip: "ClipA", weight: 1.0, role: "active" },
+  ]);
+
+  // Start crossfade to ClipB with blendSeconds = 0.20s
+  const ok2 = runtime.crossfadeAnimation(rootId, "ClipB", 0.20);
+  assert.equal(ok2, true);
+
+  // Immediately at start of blend (time 0)
+  assert.equal(meta.animation?.graph?.transitioning, true);
+  assert.equal(meta.animation?.graph?.blendProgress, 0);
+  assert.equal(meta.animation?.actions?.length, 2);
+  const outAction0 = meta.animation?.actions?.find((a) => a.role === "outgoing");
+  const inAction0 = meta.animation?.actions?.find((a) => a.role === "incoming");
+  assert.equal(outAction0?.clip, "ClipA");
+  assert.equal(outAction0?.weight, 1.0);
+  assert.equal(inAction0?.clip, "ClipB");
+  assert.equal(inAction0?.weight, 0.0);
+
+  // Step 0.10s (halfway through 0.20s blend)
+  runtime.updateAnimation(0.10);
+  assert.equal(meta.animation?.graph?.transitioning, true);
+  assert.ok(Math.abs((meta.animation?.graph?.blendProgress ?? 0) - 0.5) < 0.001);
+  const outActionMid = meta.animation?.actions?.find((a) => a.role === "outgoing");
+  const inActionMid = meta.animation?.actions?.find((a) => a.role === "incoming");
+  assert.ok(Math.abs((outActionMid?.weight ?? 0) - 0.5) < 0.001);
+  assert.ok(Math.abs((inActionMid?.weight ?? 0) - 0.5) < 0.001);
+
+  // Step another 0.10s (blend completes at 0.20s)
+  runtime.updateAnimation(0.10);
+  assert.equal(meta.animation?.graph?.transitioning, false);
+  assert.equal(meta.animation?.graph?.blendProgress, 1.0);
+  assert.equal(meta.animation?.activeClip, "ClipB");
+  assert.deepEqual(meta.animation?.actions, [
+    { clip: "ClipB", weight: 1.0, role: "active" },
+  ]);
+
+  runtime.dispose();
+});
+
+test("crossfadeAnimation handles mid-blend interruption cleanly without action leakage", async () => {
+  const { createSyntheticAnimatedGlb } = await import("@kinetra/asset-pipeline");
+  const glbBytes = await createSyntheticAnimatedGlb({
+    meshName: "HeroMesh",
+    nodeName: "AnimatedBoxNode",
+    clipName: "Walk",
+    duration: 1.0,
+    from: [0, 0, 0],
+    to: [1, 0, 0],
+  });
+
+  const resolver = {
+    resolve(assetId: string) {
+      if (assetId === "asset_hero") return glbBytes;
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  // Register Telegraph and Hurt clips
+  const track1 = new THREE.VectorKeyframeTrack("AnimatedBoxNode.position", [0, 1], [0, 0, 0, 0, 1, 0]);
+  const clipTelegraph = new THREE.AnimationClip("Telegraph", 1.0, [track1]);
+  runtime.registerAnimationClip(rootId, clipTelegraph);
+
+  const track2 = new THREE.VectorKeyframeTrack("AnimatedBoxNode.position", [0, 1], [0, 0, 0, 0, 0, 1]);
+  const clipHurt = new THREE.AnimationClip("Hurt", 0.5, [track2]);
+  runtime.registerAnimationClip(rootId, clipHurt);
+
+  // Start in Walk
+  runtime.playAnimation(rootId, "Walk");
+
+  // Begin blend Walk -> Telegraph over 0.20s
+  runtime.crossfadeAnimation(rootId, "Telegraph", 0.20);
+  runtime.updateAnimation(0.10); // 50% through blend
+
+  const meta = runtime.getModelMetadata(rootId)!;
+  assert.equal(meta.animation?.actions?.length, 2);
+
+  // Interrupt with Hurt over 0.10s!
+  runtime.crossfadeAnimation(rootId, "Hurt", 0.10);
+
+  // Walk must be stopped; only Telegraph (outgoing) and Hurt (incoming) remain
+  assert.equal(meta.animation?.actions?.length, 2);
+  const outAction = meta.animation?.actions?.find((a) => a.role === "outgoing");
+  const inAction = meta.animation?.actions?.find((a) => a.role === "incoming");
+  assert.equal(outAction?.clip, "Telegraph");
+  assert.equal(inAction?.clip, "Hurt");
+
+  // Step 0.10s to complete the Hurt blend
+  runtime.updateAnimation(0.10);
+  assert.equal(meta.animation?.graph?.transitioning, false);
+  assert.equal(meta.animation?.activeClip, "Hurt");
+  assert.deepEqual(meta.animation?.actions, [
+    { clip: "Hurt", weight: 1.0, role: "active" },
+  ]);
+
+  runtime.dispose();
+});
+
+test("AnimationGraph drives runtime playback, parameters, and triggers with structured errors for invalid inputs", async () => {
+  const { createSyntheticAnimatedGlb } = await import("@kinetra/asset-pipeline");
+  const glbBytes = await createSyntheticAnimatedGlb({
+    meshName: "HeroMesh",
+    nodeName: "AnimatedBoxNode",
+    clipName: "idle",
+    duration: 1.0,
+    from: [0, 0, 0],
+    to: [0, 0, 0],
+  });
+
+  const resolver = {
+    resolve(assetId: string) {
+      if (assetId === "asset_hero") return glbBytes;
+      return undefined;
+    },
+  };
+
+  const runtime = await ThreeSceneRuntime.instantiateAsync(project(), sceneId, {
+    assetResolver: resolver,
+  });
+
+  // Register walk and attack clips
+  const track = new THREE.VectorKeyframeTrack("AnimatedBoxNode.position", [0, 1], [0, 0, 0, 1, 0, 0]);
+  runtime.registerAnimationClip(rootId, new THREE.AnimationClip("walk", 1.0, [track]));
+  runtime.registerAnimationClip(rootId, new THREE.AnimationClip("attack", 0.5, [track]));
+
+  const graphDef = {
+    schemaVersion: 1 as const,
+    entryState: "idle",
+    parameters: {
+      moving: { type: "bool" as const, default: false },
+      attackTrigger: { type: "trigger" as const },
+    },
+    states: [
+      { id: "idle", clipId: "idle", loop: true },
+      { id: "walk", clipId: "walk", loop: true },
+      { id: "attack", clipId: "attack", loop: false },
+    ],
+    transitions: [
+      {
+        id: "t_walk",
+        from: "idle",
+        to: "walk",
+        blendSeconds: 0.20,
+        conditions: [{ parameter: "moving", op: "==" as const, value: true }],
+      },
+      {
+        id: "t_attack",
+        from: "walk",
+        to: "attack",
+        blendSeconds: 0.10,
+        priority: 10,
+        conditions: [{ parameter: "attackTrigger", op: "triggered" as const }],
+      },
+      {
+        id: "t_stop",
+        from: "walk",
+        to: "idle",
+        blendSeconds: 0.15,
+        conditions: [{ parameter: "moving", op: "==" as const, value: false }],
+      },
+    ],
+  };
+
+  // Rejection when graph references unknown clip
+  const badGraph = structuredClone(graphDef);
+  badGraph.states[0]!.clipId = "unknown_clip_123";
+  const badInit = runtime.initAnimationGraph(rootId, badGraph);
+  assert.equal(badInit.success, false);
+  assert.ok(badInit.diagnostics?.some((d) => d.code === "anim.state.clip.unknown"));
+
+  // Valid init starts in entry state
+  const initRes = runtime.initAnimationGraph(rootId, graphDef);
+  assert.equal(initRes.success, true);
+
+  const meta = runtime.getModelMetadata(rootId)!;
+  assert.equal(meta.animation?.activeClip, "idle");
+  assert.equal(meta.animation?.graph?.state, "idle");
+  assert.equal(meta.animation?.graph?.transitioning, false);
+
+  // Setting unknown parameter returns structured error
+  const badParamRes = runtime.setAnimationGraphParameter(rootId, "non_existent", true);
+  assert.equal(badParamRes.success, false);
+  assert.ok(badParamRes.error?.includes("Unknown animation parameter"));
+
+  // Setting wrong parameter type returns structured error
+  const wrongTypeRes = runtime.setAnimationGraphParameter(rootId, "moving", 123);
+  assert.equal(wrongTypeRes.success, false);
+  assert.ok(wrongTypeRes.error?.includes("expects boolean"));
+
+  // Valid parameter update causes transition
+  const setRes = runtime.setAnimationGraphParameter(rootId, "moving", true);
+  assert.equal(setRes.success, true);
+  assert.equal(setRes.transition?.to, "walk");
+  assert.equal(meta.animation?.graph?.state, "walk");
+  assert.equal(meta.animation?.graph?.transitioning, true);
+
+  // Complete walk blend
+  runtime.updateAnimation(0.20);
+  assert.equal(meta.animation?.graph?.transitioning, false);
+  assert.equal(meta.animation?.activeClip, "walk");
+
+  // Trigger attack
+  const trigRes = runtime.triggerAnimationGraph(rootId, "attackTrigger");
+  assert.equal(trigRes.success, true);
+  assert.equal(trigRes.transition?.to, "attack");
+  assert.equal(meta.animation?.graph?.state, "attack");
+  assert.equal(meta.animation?.graph?.transitioning, true);
+
+  // Complete attack blend
+  runtime.updateAnimation(0.10);
+  assert.equal(meta.animation?.graph?.transitioning, false);
+  assert.equal(meta.animation?.activeClip, "attack");
+
+  runtime.dispose();
+});
+

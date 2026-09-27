@@ -41,11 +41,23 @@ export interface GameScriptAudioService {
   }): Promise<{ success: boolean; playbackId?: string; error?: string }>;
 }
 
+export interface GameScriptAnimationGraphService {
+  init?(graph: unknown): { success: boolean; error?: string };
+  set?(name: string, value: boolean | number): boolean;
+  setParameter?(name: string, value: boolean | number): boolean;
+  trigger?(name: string): boolean;
+  evaluate?(): unknown;
+  readonly state?: string | undefined;
+  readonly transitioning?: boolean | undefined;
+  readonly blendProgress?: number | undefined;
+}
+
 export interface GameScriptAnimationService {
   play(clipName: string, options?: { loop?: boolean }): boolean;
   stop(): void;
   readonly activeClip?: string | undefined;
   readonly playing?: boolean | undefined;
+  readonly graph?: GameScriptAnimationGraphService | undefined;
 }
 
 export interface GameScriptContext {

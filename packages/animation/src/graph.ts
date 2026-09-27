@@ -59,11 +59,14 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
   }
 
   for(const transition of graph.transitions){
-    if(!states.has(transition.from)){
+    if(transition.from !== "*" && !states.has(transition.from)){
       diagnostics.push({code:"anim.transition.from.missing",message:`Transition "${transition.id}" source is missing`});
     }
     if(!states.has(transition.to)){
       diagnostics.push({code:"anim.transition.to.missing",message:`Transition "${transition.id}" target is missing`});
+    }
+    if(transition.blendSeconds!==undefined && (typeof transition.blendSeconds!=="number" || !Number.isFinite(transition.blendSeconds) || transition.blendSeconds<0)){
+      diagnostics.push({code:"anim.transition.blendSeconds.invalid",message:`Transition "${transition.id}" has invalid blendSeconds`});
     }
     for(const condition of transition.conditions){
       const parameter=graph.parameters[condition.parameter];
@@ -111,6 +114,54 @@ export class AnimationGraphMachine {
 
   get state():string{return this.#state;}
 
+  getStateDefinition(stateId: string = this.#state): AnimationStateDefinition | undefined {
+    return this.graph.states.find((s) => s.id === stateId);
+  }
+
+  get currentStateDefinition(): AnimationStateDefinition | undefined {
+    return this.getStateDefinition(this.#state);
+  }
+
+  getParameter(name: string): boolean | number | undefined {
+    return this.#values.get(name);
+  }
+
+  getParameters(): Record<string, boolean | number> {
+    const result: Record<string, boolean | number> = {};
+    for (const [key, value] of this.#values) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  get triggers(): string[] {
+    return Array.from(this.#triggers);
+  }
+
+  hasTrigger(name: string): boolean {
+    return this.#triggers.has(name);
+  }
+
+  reset(entryState?: string): void {
+    if (entryState) {
+      if (!this.graph.states.some((s) => s.id === entryState)) {
+        throw new Error(`Unknown entry state "${entryState}"`);
+      }
+      this.#state = entryState;
+    } else {
+      this.#state = this.graph.entryState;
+    }
+    this.#triggers.clear();
+    for (const [name, definition] of Object.entries(this.graph.parameters)) {
+      if (definition.type === "trigger") continue;
+      if (definition.default !== undefined) {
+        this.#values.set(name, definition.default);
+      } else {
+        this.#values.set(name, definition.type === "bool" ? false : 0);
+      }
+    }
+  }
+
   set(name:string,value:boolean|number):void{
     const definition=this.graph.parameters[name];
     if(!definition) throw new Error(`Unknown animation parameter "${name}"`);
@@ -128,7 +179,7 @@ export class AnimationGraphMachine {
 
   evaluate():AnimationTransitionResult|undefined{
     const candidates=this.graph.transitions
-      .filter(t=>t.from===this.#state)
+      .filter(t=> (t.from===this.#state || t.from==="*") && t.to !== this.#state)
       .sort((a,b)=>(b.priority??0)-(a.priority??0) || a.id.localeCompare(b.id));
 
     for(const transition of candidates){
