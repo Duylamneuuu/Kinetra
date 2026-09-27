@@ -17,6 +17,11 @@ export interface KinetraRuntimeProbeOptions {
   assets?:
     | Record<string, string>
     | (() => Record<string, string> | Promise<Record<string, string>>);
+  assetMetadata?:
+    | Record<string, { fingerprint?: string; sourceHash?: string }>
+    | (() =>
+        | Record<string, { fingerprint?: string; sourceHash?: string }>
+        | Promise<Record<string, { fingerprint?: string; sourceHash?: string }>>);
   testScriptPreset?: string;
 }
 
@@ -31,6 +36,12 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     | Record<string, string>
     | (() => Record<string, string> | Promise<Record<string, string>>)
     | undefined;
+  readonly #assetMetadata:
+    | Record<string, { fingerprint?: string; sourceHash?: string }>
+    | (() =>
+        | Record<string, { fingerprint?: string; sourceHash?: string }>
+        | Promise<Record<string, { fingerprint?: string; sourceHash?: string }>>)
+    | undefined;
   readonly #testScriptPreset: string | undefined;
   #currentSceneId: string | undefined;
 
@@ -40,6 +51,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     this.#initialRevision = options.initialRevision ?? 0;
     this.#closeOnStop = options.closeOnStop ?? false;
     this.#assets = options.assets;
+    this.#assetMetadata = options.assetMetadata;
     this.#testScriptPreset = options.testScriptPreset;
   }
 
@@ -53,6 +65,11 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
       typeof this.#assets === "function"
         ? await this.#assets()
         : this.#assets;
+
+    const assetMetadata =
+      typeof this.#assetMetadata === "function"
+        ? await this.#assetMetadata()
+        : this.#assetMetadata;
 
     this.#currentSceneId = sceneId;
     if (
@@ -68,13 +85,39 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
       assets !== undefined && Object.keys(assets).length > 0
         ? assets
         : undefined,
+      {
+        ...(assetMetadata !== undefined ? { assetMetadata } : {}),
+      },
     );
   }
 
-  async registerAsset(assetId: string, dataBase64: string): Promise<void> {
+  async registerAsset(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void> {
     if (typeof this.#host.registerAsset === "function") {
-      await this.#host.registerAsset(assetId, dataBase64);
+      await this.#host.registerAsset(assetId, dataBase64, options);
     }
+  }
+
+  async updateAsset(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void> {
+    if (typeof this.#host.updateAsset === "function") {
+      await this.#host.updateAsset(assetId, dataBase64, options);
+    }
+  }
+
+  async reloadAsset(
+    assetId: string,
+  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+    if (typeof this.#host.reloadAsset === "function") {
+      return this.#host.reloadAsset(assetId);
+    }
+    return { success: false, affectedEntities: [], error: "Host does not support reloadAsset" };
   }
 
   async stop(): Promise<void> {

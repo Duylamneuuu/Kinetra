@@ -66,6 +66,7 @@ export interface EntityAnimatorSession {
   outgoingClipName?: string | undefined;
   blend?: AnimatorBlendSession | undefined;
   graphMachine?: AnimationGraphMachine | undefined;
+  graphDefinition?: AnimationGraphDefinition | undefined;
   previousGraphState?: string | undefined;
   lastTransitionId?: string | undefined;
   retargetSource?: string | undefined;
@@ -438,10 +439,94 @@ export class ThreeSceneRuntime {
       delete metadata.bounds;
       delete metadata.instance;
       delete metadata.resourceSharing;
+      delete metadata.assetFingerprint;
+      delete metadata.templateRevision;
     }
 
     this.#updateResourceSharingMetadata();
     return { success: true };
+  }
+
+  async reloadAsset(
+    assetId: string,
+    resolver: AssetResolver,
+  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string | undefined }> {
+    if (this.#disposed) {
+      return { success: false, affectedEntities: [], error: "Runtime is disposed" };
+    }
+
+    const affectedEntities: string[] = [];
+    for (const [entityId, meta] of this.#models) {
+      if (meta.assetId === assetId) {
+        affectedEntities.push(entityId);
+      }
+    }
+
+    let newTemplate: ModelAssetTemplate;
+    try {
+      newTemplate = await this.#templateCache.resolveNewTemplate(assetId, resolver);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      return { success: false, affectedEntities, error: errorMsg };
+    }
+
+    for (const entityId of affectedEntities) {
+      const object = this.#objects.get(entityId);
+      if (!object) continue;
+      const metadata = this.#models.get(entityId);
+      if (!metadata) continue;
+
+      const oldInstance = this.#instances.get(entityId);
+      const oldModelScene = this.#modelScenes.get(entityId);
+      const oldSession = this.#animatorSessions.get(entityId);
+      const oldGraphDef = oldSession?.graphDefinition;
+
+      // 1. Create new instance from newTemplate
+      const newInstance = newTemplate.createInstance(entityId);
+
+      // 2. Stop and detach old animator / mixer cleanly
+      if (oldSession) {
+        if (oldSession.outgoingAction) oldSession.outgoingAction.stop();
+        if (oldSession.activeAction) oldSession.activeAction.stop();
+        oldSession.mixer.stopAllAction();
+        if (oldModelScene) {
+          oldSession.mixer.uncacheRoot(oldModelScene);
+        }
+        const oldClips = this.#clips.get(entityId);
+        if (oldClips) {
+          for (const clip of oldClips) {
+            oldSession.mixer.uncacheClip(clip);
+          }
+        }
+      }
+      this.#animatorSessions.delete(entityId);
+      this.#mixers.delete(entityId);
+      this.#clips.delete(entityId);
+      this.#activeActions.delete(entityId);
+
+      // 3. Remove old modelScene from entity Object3D
+      if (oldModelScene) {
+        object.remove(oldModelScene);
+        this.#modelScenes.delete(entityId);
+      }
+
+      // 4. Release old instance (refcount decrements, disposes old template if refCount reaches 0)
+      if (oldInstance) {
+        oldInstance.dispose();
+      }
+
+      // 5. Attach new instance
+      this.#instances.set(entityId, newInstance);
+      this.#attachInstance(entityId, object, newInstance, metadata);
+
+      // 6. If entity had an animation graph before, re-initialize it cleanly with the new clips/mixer
+      if (oldGraphDef) {
+        this.initAnimationGraph(entityId, oldGraphDef);
+      }
+    }
+
+    this.#updateResourceSharingMetadata();
+    return { success: true, affectedEntities };
   }
 
   #updateResourceSharingMetadata(): void {
@@ -567,6 +652,7 @@ export class ThreeSceneRuntime {
 
     const machine = new AnimationGraphMachine(graph);
     session.graphMachine = machine;
+    session.graphDefinition = graph;
     session.previousGraphState = undefined;
     session.lastTransitionId = undefined;
 
@@ -1388,10 +1474,14 @@ export class ThreeSceneRuntime {
       sharedTemplateId: instance.templateId,
       skinnedMeshCount: instance.skinnedMeshCount,
       skeletonCount: instance.skeletonCount,
+      fingerprint: instance.fingerprint,
+      templateRevision: instance.revision,
     };
     metadata.resourceSharing = {
       templateRefCount: instance.template.refCount,
     };
+    metadata.assetFingerprint = instance.fingerprint;
+    metadata.templateRevision = instance.revision;
 
     if (animations.length > 0) {
       const mixer = new THREE.AnimationMixer(modelScene);

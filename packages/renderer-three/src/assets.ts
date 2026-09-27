@@ -7,6 +7,7 @@ export interface AssetResolver {
     | ArrayBuffer
     | string
     | undefined;
+  getFingerprint?(assetId: string): string | undefined;
 }
 
 export interface ModelBounds {
@@ -78,6 +79,8 @@ export interface ModelInstanceMetadata {
   sharedTemplateId: string;
   skinnedMeshCount: number;
   skeletonCount: number;
+  fingerprint?: string | undefined;
+  templateRevision?: number | undefined;
 }
 
 export interface ModelResourceSharingMetadata {
@@ -89,13 +92,16 @@ export interface ModelMetadata {
   loaded: boolean;
   meshCount: number;
   nodeCount: number;
-  skinnedMeshCount?: number;
-  hasSkin?: boolean;
-  bounds?: ModelBounds;
-  animation?: ModelAnimationState;
-  nodes?: ModelNodeState[];
-  instance?: ModelInstanceMetadata;
-  resourceSharing?: ModelResourceSharingMetadata;
-  error?: string;
+  skinnedMeshCount?: number | undefined;
+  hasSkin?: boolean | undefined;
+  bounds?: ModelBounds | undefined;
+  animation?: ModelAnimationState | undefined;
+  nodes?: ModelNodeState[] | undefined;
+  instance?: ModelInstanceMetadata | undefined;
+  resourceSharing?: ModelResourceSharingMetadata | undefined;
+  assetFingerprint?: string | undefined;
+  templateRevision?: number | undefined;
+  error?: string | undefined;
 }
+
 

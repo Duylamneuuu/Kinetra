@@ -31,10 +31,18 @@ export interface RuntimeProbeHost {
     sceneId: string,
     projectRevision: number,
     assets?: Record<string, string>,
+    options?: {
+      assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
+      stepped?: boolean;
+    },
   ): Promise<void>;
   stop(): Promise<void>;
   close?(): Promise<void>;
-  registerAsset?(assetId: string, dataBase64: string): Promise<void>;
+  registerAsset?(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void>;
   query(query?: { entityIds?: string[] }): Promise<{
     running: boolean;
     sceneId?: string;
@@ -78,10 +86,14 @@ export interface RuntimeProbeHost {
           sharedTemplateId: string;
           skinnedMeshCount: number;
           skeletonCount: number;
+          fingerprint?: string;
+          templateRevision?: number;
         };
         resourceSharing?: {
           templateRefCount: number;
         };
+        assetFingerprint?: string;
+        templateRevision?: number;
         error?: string;
       };
       gameplay?: {
@@ -98,6 +110,20 @@ export interface RuntimeProbeHost {
     game?: Record<string, unknown>;
     shell?: { mode: string; isPaused: boolean };
     metrics?: Record<string, number>;
+    assets?: {
+      byId: Record<
+        string,
+        {
+          assetId: string;
+          sourceHash?: string;
+          fingerprint?: string;
+          importStatus: string;
+          revision?: number;
+          dependentIds?: string[];
+          error?: string;
+        }
+      >;
+    };
   }>;
 
   injectInput(event: {
@@ -163,6 +189,12 @@ export interface RuntimeProbeHost {
   enableTestScriptFixtures?(preset: string): Promise<void>;
   detachModel?(entityId: string): Promise<unknown>;
   attachModel?(entityId: string, assetId: string): Promise<unknown>;
+  reloadAsset?(assetId: string): Promise<{ success: boolean; affectedEntities: string[]; error?: string }>;
+  updateAsset?(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<unknown>;
 }
 
 
@@ -189,7 +221,17 @@ export interface RuntimeProbe {
     position: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void>;
-  registerAsset?(assetId: string, dataBase64: string): Promise<void>;
+  registerAsset?(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void>;
+  updateAsset?(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void>;
+  reloadAsset?(assetId: string): Promise<{ success: boolean; affectedEntities: string[]; error?: string }>;
   computePathNavigation?(params: {
     start: [number, number, number];
     end: [number, number, number];

@@ -74,8 +74,12 @@ async function handleRuntimeCommand(request: {
         typeof params.testScriptPreset === "string"
           ? params.testScriptPreset
           : undefined;
+      const assetMetadata = isRecord(params.assetMetadata)
+        ? (params.assetMetadata as Record<string, { fingerprint?: string; sourceHash?: string }>)
+        : undefined;
       const result = await runtime.start(project, sceneId, projectRevision, {
         ...(assets !== undefined ? { assets } : {}),
+        ...(assetMetadata !== undefined ? { assetMetadata } : {}),
         stepped,
         ...(testScriptPreset !== undefined ? { testScriptPreset } : {}),
       });
@@ -89,8 +93,19 @@ async function handleRuntimeCommand(request: {
     case "asset.register": {
       const assetId = requireString(params.assetId, "assetId");
       const dataBase64 = requireString(params.dataBase64, "dataBase64");
-      runtime.registerAsset(assetId, dataBase64);
+      const fingerprint = typeof params.fingerprint === "string" ? params.fingerprint : undefined;
+      const sourceHash = typeof params.sourceHash === "string" ? params.sourceHash : undefined;
+      runtime.registerAsset(assetId, dataBase64, { fingerprint, sourceHash });
       return { registered: true, assetId };
+    }
+
+    case "asset.update": {
+      const assetId = requireString(params.assetId, "assetId");
+      const dataBase64 = requireString(params.dataBase64, "dataBase64");
+      const fingerprint = typeof params.fingerprint === "string" ? params.fingerprint : undefined;
+      const sourceHash = typeof params.sourceHash === "string" ? params.sourceHash : undefined;
+      runtime.updateAsset(assetId, dataBase64, { fingerprint, sourceHash });
+      return { updated: true, assetId, ...runtime.query() };
     }
 
     case "runtime.pause": {
@@ -207,6 +222,12 @@ async function handleRuntimeCommand(request: {
       const entityId = requireString(params.entityId, "entityId");
       const assetId = requireString(params.assetId, "assetId");
       const result = await runtime.attachModel(entityId, assetId);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "model.reloadAsset": {
+      const assetId = requireString(params.assetId, "assetId");
+      const result = await runtime.reloadAsset(assetId);
       return { ...result, ...runtime.query() };
     }
 
