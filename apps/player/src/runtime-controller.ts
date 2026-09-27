@@ -12,7 +12,11 @@ import type {
   AnimationGraphDefinition,
   AnimationGraphDiagnostic,
   AnimationTransitionResult,
-} from "@kinetra/animation";
+} from "@kinetra/animation/graph.js";
+import type {
+  RootMotionMode,
+  RootMotionDiagnostics,
+} from "@kinetra/animation/root-motion.js";
 import {
   ScriptHost,
   ScriptRegistry,
@@ -96,6 +100,21 @@ export interface PlayerRuntimeModelAnimationState {
   retargetCacheKey?: string | undefined;
   graph?: PlayerRuntimeModelAnimationGraphState | undefined;
   actions?: PlayerRuntimeModelAnimationActionState[] | undefined;
+  rootMotion?: PlayerRuntimeRootMotionState | undefined;
+}
+
+export interface PlayerRuntimeRootMotionState {
+  enabled: boolean;
+  mode: RootMotionMode;
+  sourceClip?: string | undefined;
+  requestedDelta: [number, number, number];
+  appliedDelta: [number, number, number];
+  blockedDelta: [number, number, number];
+  requestedYaw: number;
+  appliedYaw: number;
+  collisionClipped: boolean;
+  accumulatedDistance: number;
+  error?: string | undefined;
 }
 
 export interface PlayerRuntimeModelNodeState {
@@ -127,6 +146,7 @@ export interface PlayerRuntimeGameplayState {
   lifecycleState: ScriptLifecycleState;
   updateCount: number;
   state?: Record<string, unknown>;
+  rootMotion?: PlayerRuntimeRootMotionState | undefined;
   error?: string;
 }
 
@@ -1137,6 +1157,39 @@ export class PlayerRuntimeController {
     this.#log("info", "animation.stopped", { entityId });
   }
 
+  configureRootMotion(
+    entityId: string,
+    options: {
+      enabled: boolean;
+      mode?: RootMotionMode | undefined;
+      rootBoneName?: string | undefined;
+    },
+  ): { success: boolean; diagnostics?: RootMotionDiagnostics; error?: string } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.rootMotion.failed", { entityId, error });
+      return { success: false, error };
+    }
+
+    const result = this.#runtime.configureRootMotion(entityId, options);
+    if (!result.success) {
+      this.#log("error", result.diagnostics?.code ?? "animation.rootMotion.failed", {
+        entityId,
+        error: result.error,
+        ...(result.diagnostics?.hint ? { hint: result.diagnostics.hint } : {}),
+      });
+      return result;
+    }
+
+    this.#log("info", "animation.rootMotion.configured", {
+      entityId,
+      enabled: options.enabled,
+      mode: options.mode ?? "extract-xz",
+      rootBoneName: options.rootBoneName ?? "Hips",
+    });
+    return result;
+  }
+
   async playAudio(options: PlayAudioOptions): Promise<PlayAudioResult> {
     const result = await this.#audio.play(options);
     if (result.success) {
@@ -1675,6 +1728,20 @@ export class PlayerRuntimeController {
         };
       }
 
+      const rootMotionMeta = modelMeta?.animation?.rootMotion;
+      if (rootMotionMeta) {
+        if (!gameplay) {
+          gameplay = {
+            scriptId: "rootMotion",
+            lifecycleState: "started",
+            updateCount: 0,
+            rootMotion: rootMotionMeta,
+          };
+        } else {
+          gameplay.rootMotion = rootMotionMeta;
+        }
+      }
+
       entities.push({
         entityId,
         name: object.name,
@@ -1833,11 +1900,77 @@ export class PlayerRuntimeController {
     });
   }
 
+  #updateRootMotion(fixedDeltaSeconds: number): void {
+    if (!this.#runtime) return;
+
+    for (const [entityId, object] of this.#runtime.objects()) {
+      const session = this.#runtime.getAnimatorSession(entityId);
+      if (!session?.rootMotion?.enabled) continue;
+
+      // Negative proof: check if entity has a character controller in physics
+      if (!this.#physics || !this.#physics.characterIds().includes(entityId)) {
+        const code = "animation.rootMotion.physicsUnsupported";
+        const message = `Entity "${entityId}" does not have a character controller in physics world`;
+        const hint = "Add a CharacterBody and Collider component to the entity before enabling root motion";
+        this.#log("error", code, { entityId, error: message, hint });
+        continue;
+      }
+
+      // Propose displacement from animation
+      const requested = this.#runtime.sampleRootMotion(entityId, fixedDeltaSeconds);
+      const reqTrans = requested.translation;
+      const reqYaw = requested.yaw;
+
+      // Rotate requested delta by current character Y rotation into world coordinates
+      const curRotY = object.rotation.y;
+      const cosY = Math.cos(curRotY);
+      const sinY = Math.sin(curRotY);
+      const worldDx = reqTrans[0] * cosY + reqTrans[2] * sinY;
+      const worldDz = -reqTrans[0] * sinY + reqTrans[2] * cosY;
+      const worldDy = reqTrans[1];
+
+      const worldDesired = { x: worldDx, y: worldDy, z: worldDz };
+
+      // Character motor / collision resolution in Rapier
+      let actual = { x: 0, y: 0, z: 0 };
+      let collided = false;
+
+      if (worldDesired.x !== 0 || worldDesired.y !== 0 || worldDesired.z !== 0) {
+        const moveRes = this.#physics.moveCharacter(entityId, worldDesired);
+        actual = moveRes.actual;
+        collided = moveRes.collided;
+        this.#syncTransformsFromPhysics();
+      }
+
+      let appliedYaw = 0;
+      if (reqYaw !== 0) {
+        appliedYaw = reqYaw;
+        object.rotation.y += appliedYaw;
+      }
+
+      const blockedDelta: [number, number, number] = [
+        worldDesired.x - actual.x,
+        worldDesired.y - actual.y,
+        worldDesired.z - actual.z,
+      ];
+
+      this.#runtime.recordRootMotionResult(entityId, {
+        requestedDelta: [worldDesired.x, worldDesired.y, worldDesired.z],
+        appliedDelta: [actual.x, actual.y, actual.z],
+        blockedDelta,
+        requestedYaw: reqYaw,
+        appliedYaw,
+        collisionClipped: collided,
+      });
+    }
+  }
+
   step(steps = 1, fixedDeltaSeconds = 1 / 60): void {
     this.#stepped = true;
     for (let s = 0; s < steps; s++) {
       if (!this.#paused) {
         this.#scripts.update(fixedDeltaSeconds);
+        this.#updateRootMotion(fixedDeltaSeconds);
         if (this.#physics) {
           this.#physics.step(fixedDeltaSeconds);
           this.#syncTransformsFromPhysics();

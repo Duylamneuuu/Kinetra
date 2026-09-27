@@ -62,6 +62,16 @@ export interface RuntimeEntityState {
         weight: number;
         role: "active" | "outgoing" | "incoming";
       }>;
+      rootMotion?: {
+        enabled: boolean;
+        mode: string;
+        activeClip?: string;
+        accumulatedDistance: number;
+        requestedDelta: [number, number, number];
+        appliedDelta: [number, number, number];
+        blockedDelta: [number, number, number];
+        collisionClipped: boolean;
+      };
     };
     nodes?: Array<{
       name: string;
@@ -76,6 +86,16 @@ export interface RuntimeEntityState {
     lifecycleState: string;
     updateCount: number;
     state?: Record<string, unknown>;
+    rootMotion?: {
+      enabled: boolean;
+      mode: string;
+      activeClip?: string;
+      accumulatedDistance: number;
+      requestedDelta: [number, number, number];
+      appliedDelta: [number, number, number];
+      blockedDelta: [number, number, number];
+      collisionClipped: boolean;
+    };
     error?: string;
   };
 }
@@ -431,6 +451,19 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async stopAnimation(entityId: string): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("animation.stop", { entityId });
+  }
+
+  async configureRootMotion(params: {
+    entityId: string;
+    enabled: boolean;
+    mode?: import("@kinetra/animation").RootMotionMode;
+    rootBoneName?: string;
+  }): Promise<RuntimeQueryResult & { success: boolean; diagnostics?: unknown; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; diagnostics?: unknown; error?: string }>(
+      "animation.rootMotion.configure",
+      params,
+    );
   }
 
   async playAudio(params: {

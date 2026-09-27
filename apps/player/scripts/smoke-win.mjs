@@ -258,3 +258,29 @@ if (humanoidRetargetRun.status !== 0) {
 
 console.log("Packaged Windows humanoid retarget tests passed successfully.");
 
+const rootMotionTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-root-motion.test.js",
+);
+
+console.log("Running real packaged root motion test suite...");
+const rootMotionRun = spawnSync(process.execPath, ["--test", rootMotionTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (rootMotionRun.status !== 0) {
+  throw new Error(`Packaged root motion test failed with exit code ${String(rootMotionRun.status)}`);
+}
+
+console.log("Packaged Windows root motion tests passed successfully.");

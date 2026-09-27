@@ -200,6 +200,20 @@ The text-backed animation graph runtime and deterministic crossfading slice is p
 - Comprehensive real Electron verification suite (`packages/verification/test/real-animation-graph.test.ts`) passing all 8 scenarios with valid PNG capture during active blend;
 - 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
 
+### 10. Deterministic Root Motion → Rapier Character Motion (P5 Proven)
+
+The root motion extraction and Rapier character motor integration slice is proven in dev Electron and packaged `KinetraGame.exe`:
+- **Truthful Source Inspection**: `inspectClipRootMotion` inspects animation clips and truthfully identifies that CesiumMan's animation is an in-place walk (4mm net displacement over 2.0s, max XZ excursion < 0.07m), while the synthetic RootMotionBot is a genuine locomotion clip (~1.6m forward travel per 1.0s loop);
+- **Deterministic Delta Extraction**: `extractRootMotionFromClip` and `computeRootMotionStepDelta` sample continuous root displacement per simulation step, achieving partition invariance and smooth loop wrapping across boundary discontinuities without position spikes;
+- **No Double Motion**: `stripVisualRootDisplacement` zeroes local X and Z positions on the visual skeleton Hips node while preserving vertical (Y) pelvic bobbing, ensuring the visual skeleton stays in place while world translation is 100% driven by Rapier;
+- **Authoritative Rapier Physics**: `AnimationMixer` never touches the world transform. The runtime controller applies extracted horizontal motion through `physics.moveCharacter`, where Rapier's kinematic character controller resolves all collisions;
+- **Real Obstacle Collision & Tunneling Prevention**: Solid obstacles clip actual displacement (`appliedDelta < requestedDelta`, `collisionClipped == true`, positive `blockedDelta`), preventing character tunneling even during repeated continuous stepping;
+- **Animation Graph Crossfade Ownership**: When crossfading between animation states (e.g. walk -> idle), the incoming target state owns root motion displacement, ensuring that idle stops forward locomotion smoothly without doubling displacement; interrupting walk with hurt immediately halts root motion;
+- **Structured Observation**: Live queries expose `entity.model.animation.rootMotion` and `entity.gameplay.rootMotion` with `enabled`, `mode`, `activeClip`, `accumulatedDistance`, `requestedDelta`, `appliedDelta`, `blockedDelta`, and `collisionClipped`;
+- **Scene Teardown & Reset**: Scene restarts reset accumulators and character positions back to origin;
+- **Complete Verification Suite**: 7-scenario real Electron verification suite (`packages/verification/test/real-root-motion.test.ts`) passing in dev Electron and against packaged Windows executable `KinetraGame.exe`;
+- **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
+
 ## Completion definition
 
 Kinetra is not "done" when:

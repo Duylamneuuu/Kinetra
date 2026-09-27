@@ -10,6 +10,14 @@ import {
   type AnimationGraphDiagnostic,
   type AnimationTransitionResult,
 } from "@kinetra/animation/graph.js";
+import {
+  extractRootMotionFromClip,
+  computeRootMotionStepDelta,
+  type RootMotionMode,
+  type RootMotionFrameDelta,
+  type ExtractedClipRootMotion,
+  type RootMotionDiagnostics,
+} from "@kinetra/animation/root-motion.js";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -27,6 +35,23 @@ export interface AnimatorBlendSession {
   fromInitialWeight: number;
 }
 
+export interface EntityRootMotionSession {
+  enabled: boolean;
+  mode: RootMotionMode;
+  rootBoneName: string;
+  sourceClipName?: string | undefined;
+  extracted?: ExtractedClipRootMotion | undefined;
+  playbackTime: number;
+  accumulatedDistance: number;
+  lastRequestedDelta: [number, number, number];
+  lastAppliedDelta: [number, number, number];
+  lastBlockedDelta: [number, number, number];
+  lastRequestedYaw: number;
+  lastAppliedYaw: number;
+  lastCollisionClipped: boolean;
+  error?: RootMotionDiagnostics | undefined;
+}
+
 export interface EntityAnimatorSession {
   entityId: string;
   mixer: THREE.AnimationMixer;
@@ -40,6 +65,7 @@ export interface EntityAnimatorSession {
   lastTransitionId?: string | undefined;
   retargetSource?: string | undefined;
   retargetCacheKey?: string | undefined;
+  rootMotion?: EntityRootMotionSession | undefined;
 }
 
 function makeObject(entity: EntityDefinition): THREE.Object3D {
@@ -617,6 +643,38 @@ export class ThreeSceneRuntime {
       session.retargetCacheKey = options.retargetCacheKey;
     }
 
+    if (session.rootMotion?.enabled) {
+      const mode = session.rootMotion.mode;
+      const rootBone = session.rootMotion.rootBoneName;
+      const extractRes = extractRootMotionFromClip(clip, { mode, rootBoneName: rootBone });
+      if (extractRes.success && extractRes.extracted) {
+        clip = extractRes.extracted.inPlaceClip;
+        session.rootMotion.sourceClipName = resolvedClipName;
+        session.rootMotion.extracted = extractRes.extracted;
+        session.rootMotion.playbackTime = 0;
+      } else {
+        session.rootMotion.sourceClipName = resolvedClipName;
+        session.rootMotion.extracted = undefined;
+        session.rootMotion.playbackTime = 0;
+        session.rootMotion.lastRequestedDelta = [0, 0, 0];
+        session.rootMotion.lastRequestedYaw = 0;
+      }
+      if (metadata.animation) {
+        metadata.animation.rootMotion = {
+          enabled: true,
+          mode: session.rootMotion.mode,
+          sourceClip: resolvedClipName,
+          requestedDelta: [0, 0, 0],
+          appliedDelta: [0, 0, 0],
+          blockedDelta: [0, 0, 0],
+          requestedYaw: 0,
+          appliedYaw: 0,
+          collisionClipped: false,
+          accumulatedDistance: session.rootMotion.accumulatedDistance,
+        };
+      }
+    }
+
     const shouldLoop = options.loop !== false;
 
     // Case 1: Immediate switch (blendSeconds <= 0)
@@ -832,6 +890,13 @@ export class ThreeSceneRuntime {
       }
       session.previousGraphState = undefined;
       session.lastTransitionId = undefined;
+      if (session.rootMotion) {
+        session.rootMotion.accumulatedDistance = 0;
+        session.rootMotion.playbackTime = 0;
+        session.rootMotion.lastRequestedDelta = [0, 0, 0];
+        session.rootMotion.lastAppliedDelta = [0, 0, 0];
+        session.rootMotion.lastBlockedDelta = [0, 0, 0];
+      }
     }
 
     const action = this.#activeActions.get(entityId);
@@ -853,10 +918,225 @@ export class ThreeSceneRuntime {
       delete metadata.animation.retargetCacheKey;
       delete metadata.animation.graph;
       delete metadata.animation.actions;
+      delete metadata.animation.rootMotion;
     }
     const modelScene = this.#modelScenes.get(entityId);
     if (metadata && modelScene) {
       metadata.nodes = this.#extractNodeStates(modelScene);
+    }
+  }
+
+  configureRootMotion(
+    entityId: string,
+    options: {
+      enabled: boolean;
+      mode?: RootMotionMode | undefined;
+      rootBoneName?: string | undefined;
+    },
+  ): { success: boolean; diagnostics?: RootMotionDiagnostics; error?: string } {
+    if (this.#disposed) {
+      return { success: false, error: "Runtime is disposed" };
+    }
+    const metadata = this.#models.get(entityId);
+    if (!metadata || !metadata.loaded) {
+      return { success: false, error: `Entity "${entityId}" has no loaded model` };
+    }
+
+    let session = this.#animatorSessions.get(entityId);
+    if (!session) {
+      const mixer = this.#mixers.get(entityId);
+      if (!mixer) {
+        return { success: false, error: `Entity "${entityId}" has no animation mixer` };
+      }
+      session = { entityId, mixer };
+      this.#animatorSessions.set(entityId, session);
+    }
+
+    if (!options.enabled) {
+      if (session.rootMotion) {
+        session.rootMotion.enabled = false;
+      }
+      if (metadata.animation?.rootMotion) {
+        metadata.animation.rootMotion.enabled = false;
+      }
+      return { success: true };
+    }
+
+    const rootBoneName = options.rootBoneName ?? "Hips";
+    const modelScene = this.#modelScenes.get(entityId);
+    let boneFound = false;
+    if (modelScene) {
+      modelScene.traverse((obj) => {
+        if (obj.name === rootBoneName) {
+          boneFound = true;
+        }
+      });
+    }
+
+    if (!boneFound) {
+      const diag: RootMotionDiagnostics = {
+        code: "animation.rootMotion.invalidRoot",
+        message: `Root bone "${rootBoneName}" not found in model for entity "${entityId}"`,
+        hint: `Ensure rootBoneName matches an existing skeleton node (e.g. 'Hips' or 'root')`,
+      };
+      return { success: false, diagnostics: diag, error: diag.message };
+    }
+
+    const mode = options.mode ?? "extract-xz";
+
+    // If there is an active clip, extract and swap in the inPlaceClip
+    let extracted: ExtractedClipRootMotion | undefined;
+    if (session.activeClipName && mode !== "none") {
+      const clips = this.#clips.get(entityId) ?? [];
+      const originalClip = clips.find(
+        (c) => c.name === session!.activeClipName || `${c.name}_retargeted` === session!.activeClipName,
+      );
+      if (originalClip) {
+        const extractRes = extractRootMotionFromClip(originalClip, {
+          mode,
+          rootBoneName,
+        });
+        if (!extractRes.success) {
+          return {
+            success: false,
+            ...(extractRes.diagnostics ? { diagnostics: extractRes.diagnostics } : {}),
+            ...(extractRes.error ? { error: extractRes.error } : {}),
+          };
+        }
+        extracted = extractRes.extracted;
+        if (extracted && session.activeAction) {
+          const curTime = session.activeAction.time;
+          const curWeight = session.activeAction.getEffectiveWeight();
+          const curScale = session.activeAction.getEffectiveTimeScale();
+          session.activeAction.stop();
+
+          const inPlaceAction = session.mixer.clipAction(extracted.inPlaceClip);
+          inPlaceAction.time = curTime;
+          inPlaceAction.setEffectiveWeight(curWeight);
+          inPlaceAction.setEffectiveTimeScale(curScale);
+          inPlaceAction.play();
+          session.activeAction = inPlaceAction;
+          this.#activeActions.set(entityId, inPlaceAction);
+        }
+      }
+    }
+
+    session.rootMotion = {
+      enabled: true,
+      mode,
+      rootBoneName,
+      sourceClipName: session.activeClipName,
+      extracted,
+      playbackTime: session.activeAction?.time ?? 0,
+      accumulatedDistance: 0,
+      lastRequestedDelta: [0, 0, 0],
+      lastAppliedDelta: [0, 0, 0],
+      lastBlockedDelta: [0, 0, 0],
+      lastRequestedYaw: 0,
+      lastAppliedYaw: 0,
+      lastCollisionClipped: false,
+    };
+
+    if (metadata.animation) {
+      metadata.animation.rootMotion = {
+        enabled: true,
+        mode,
+        sourceClip: session.activeClipName,
+        requestedDelta: [0, 0, 0],
+        appliedDelta: [0, 0, 0],
+        blockedDelta: [0, 0, 0],
+        requestedYaw: 0,
+        appliedYaw: 0,
+        collisionClipped: false,
+        accumulatedDistance: 0,
+      };
+    }
+
+    return { success: true };
+  }
+
+  sampleRootMotion(entityId: string, deltaSeconds: number): RootMotionFrameDelta {
+    if (this.#disposed || deltaSeconds <= 0) {
+      return { translation: [0, 0, 0], yaw: 0 };
+    }
+    const session = this.#animatorSessions.get(entityId);
+    if (!session || !session.rootMotion || !session.rootMotion.enabled) {
+      return { translation: [0, 0, 0], yaw: 0 };
+    }
+
+    const rm = session.rootMotion;
+    if (!rm.extracted) {
+      rm.lastRequestedDelta = [0, 0, 0];
+      rm.lastRequestedYaw = 0;
+      return { translation: [0, 0, 0], yaw: 0 };
+    }
+
+    const action = session.activeAction;
+    const speed = action ? action.getEffectiveTimeScale() : 1.0;
+    const isLooping = action ? action.loop === THREE.LoopRepeat : true;
+
+    const frameDelta = computeRootMotionStepDelta(
+      rm.extracted.samples,
+      rm.extracted.duration,
+      rm.playbackTime,
+      deltaSeconds,
+      rm.mode,
+      { isLooping, speed },
+    );
+
+    rm.playbackTime += deltaSeconds * speed;
+    if (isLooping) {
+      rm.playbackTime =
+        ((rm.playbackTime % rm.extracted.duration) + rm.extracted.duration) %
+        rm.extracted.duration;
+    } else {
+      rm.playbackTime = Math.min(rm.extracted.duration, rm.playbackTime);
+    }
+
+    rm.lastRequestedDelta = frameDelta.translation;
+    rm.lastRequestedYaw = frameDelta.yaw;
+
+    return frameDelta;
+  }
+
+  recordRootMotionResult(
+    entityId: string,
+    result: {
+      requestedDelta: [number, number, number];
+      appliedDelta: [number, number, number];
+      blockedDelta: [number, number, number];
+      requestedYaw: number;
+      appliedYaw: number;
+      collisionClipped: boolean;
+    },
+  ): void {
+    const session = this.#animatorSessions.get(entityId);
+    const metadata = this.#models.get(entityId);
+    if (session?.rootMotion) {
+      session.rootMotion.lastRequestedDelta = result.requestedDelta;
+      session.rootMotion.lastAppliedDelta = result.appliedDelta;
+      session.rootMotion.lastBlockedDelta = result.blockedDelta;
+      session.rootMotion.lastRequestedYaw = result.requestedYaw;
+      session.rootMotion.lastAppliedYaw = result.appliedYaw;
+      session.rootMotion.lastCollisionClipped = result.collisionClipped;
+      session.rootMotion.accumulatedDistance += Math.hypot(
+        result.appliedDelta[0],
+        result.appliedDelta[2],
+      );
+    }
+    if (metadata?.animation) {
+      metadata.animation.rootMotion = {
+        enabled: session?.rootMotion?.enabled ?? false,
+        mode: session?.rootMotion?.mode ?? "extract-xz",
+        sourceClip: session?.rootMotion?.sourceClipName,
+        requestedDelta: result.requestedDelta,
+        appliedDelta: result.appliedDelta,
+        blockedDelta: result.blockedDelta,
+        requestedYaw: result.requestedYaw,
+        appliedYaw: result.appliedYaw,
+        collisionClipped: result.collisionClipped,
+        accumulatedDistance: session?.rootMotion?.accumulatedDistance ?? 0,
+      };
     }
   }
 

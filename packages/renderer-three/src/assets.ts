@@ -36,6 +36,22 @@ export interface ModelAnimationGraphState {
   blendProgress?: number | undefined;
 }
 
+import type { RootMotionMode } from "@kinetra/animation/root-motion.js";
+
+export interface ModelRootMotionState {
+  enabled: boolean;
+  mode: RootMotionMode;
+  sourceClip?: string | undefined;
+  requestedDelta: [number, number, number];
+  appliedDelta: [number, number, number];
+  blockedDelta: [number, number, number];
+  requestedYaw: number;
+  appliedYaw: number;
+  collisionClipped: boolean;
+  accumulatedDistance: number;
+  error?: string | undefined;
+}
+
 export interface ModelAnimationState {
   clips: ClipMetadata[];
   activeClip?: string | undefined;
@@ -46,6 +62,7 @@ export interface ModelAnimationState {
   retargetCacheKey?: string | undefined;
   graph?: ModelAnimationGraphState | undefined;
   actions?: ModelAnimationActionState[] | undefined;
+  rootMotion?: ModelRootMotionState | undefined;
 }
 
 export interface ModelNodeState {

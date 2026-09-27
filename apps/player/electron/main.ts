@@ -253,6 +253,7 @@ async function handleBridgeRequest(
     case "animation.graph.evaluate":
     case "animation.stop":
     case "animation.registerClip":
+    case "animation.rootMotion.configure":
     case "audio.play":
     case "audio.stop":
     case "audio.setBusGain":

@@ -564,4 +564,374 @@ export async function createSyntheticCharacterGlb(
   return io.writeBinary(doc);
 }
 
+export interface SyntheticRootMotionGlbOptions {
+  name?: string;
+  color?: [number, number, number, number];
+  forwardDisplacement?: number;
+  duration?: number;
+}
+
+/**
+ * Creates a deterministic, valid glTF 2.0 binary (GLB) of a rigged character with root motion.
+ * Root joint ("Hips") carries forward translation (+Z) and optional yaw turning.
+ *
+ * Provably external / synthetic provenance:
+ *   provider: "kinetra"
+ *   generator: "createSyntheticRootMotionGlb"
+ *   license: "MIT"
+ *
+ * Includes clips:
+ *   - "idle": in-place breathing oscillation (1.0s, loop)
+ *   - "walk_root": root-motion forward locomotion with hip bobbing (1.0s, loop, +1.6m Z)
+ *   - "walk_root_yaw": root-motion forward locomotion + 45 deg yaw turn (1.0s, loop)
+ *   - "hurt": in-place recoil flinch (0.3s, one-shot)
+ *   - "defeat": in-place collapse (1.0s, one-shot)
+ */
+export async function createSyntheticRootMotionGlb(
+  options: SyntheticRootMotionGlbOptions = {},
+): Promise<Uint8Array> {
+  const name = options.name ?? "RootMotionBot";
+  const color = options.color ?? [0.2, 0.6, 0.85, 1.0];
+  const forwardDisp = options.forwardDisplacement ?? 1.6;
+  const duration = options.duration ?? 1.0;
+
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene("Scene");
+
+  const root = doc.createNode(`${name}_Root`);
+  scene.addChild(root);
+
+  // Skeleton joint nodes (local transforms in rest pose)
+  const hips = doc.createNode("Hips").setTranslation([0, 0.9, 0]);
+  const spine = doc.createNode("Spine").setTranslation([0, 0.35, 0]);
+  const head = doc.createNode("Head").setTranslation([0, 0.35, 0]);
+  const leftArm = doc.createNode("LeftArm").setTranslation([-0.35, 0.25, 0]);
+  const rightArm = doc.createNode("RightArm").setTranslation([0.35, 0.25, 0]);
+  const leftLeg = doc.createNode("LeftLeg").setTranslation([-0.2, -0.4, 0]);
+  const rightLeg = doc.createNode("RightLeg").setTranslation([0.2, -0.4, 0]);
+
+  root.addChild(hips);
+  hips.addChild(spine);
+  hips.addChild(leftLeg);
+  hips.addChild(rightLeg);
+  spine.addChild(head);
+  spine.addChild(leftArm);
+  spine.addChild(rightArm);
+
+  const joints = [hips, spine, head, leftArm, rightArm, leftLeg, rightLeg];
+  const jointWorldPositions: [number, number, number][] = [
+    [0, 0.9, 0],
+    [0, 1.25, 0],
+    [0, 1.6, 0],
+    [-0.35, 1.5, 0],
+    [0.35, 1.5, 0],
+    [-0.2, 0.5, 0],
+    [0.2, 0.5, 0],
+  ];
+
+  const ibmArray = new Float32Array(joints.length * 16);
+  for (let i = 0; i < joints.length; i++) {
+    const [x, y, z] = jointWorldPositions[i]!;
+    const offset = i * 16;
+    ibmArray.set(
+      [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        -x, -y, -z, 1,
+      ],
+      offset,
+    );
+  }
+
+  const ibmAccessor = doc
+    .createAccessor(`${name}_ibm`)
+    .setType("MAT4")
+    .setArray(ibmArray)
+    .setBuffer(buffer);
+
+  const skin = doc.createSkin(`${name}_Skin`);
+  for (const j of joints) {
+    skin.addJoint(j);
+  }
+  skin.setSkeleton(hips);
+  skin.setInverseBindMatrices(ibmAccessor);
+
+  const segments: Array<{
+    jointIdx: number;
+    center: [number, number, number];
+    halfSize: [number, number, number];
+  }> = [
+    { jointIdx: 0, center: [0, 0.9, 0], halfSize: [0.18, 0.12, 0.12] },
+    { jointIdx: 1, center: [0, 1.25, 0], halfSize: [0.15, 0.18, 0.12] },
+    { jointIdx: 2, center: [0, 1.6, 0], halfSize: [0.12, 0.14, 0.12] },
+    { jointIdx: 3, center: [-0.35, 1.35, 0], halfSize: [0.08, 0.22, 0.08] },
+    { jointIdx: 4, center: [0.35, 1.35, 0], halfSize: [0.08, 0.22, 0.08] },
+    { jointIdx: 5, center: [-0.2, 0.45, 0], halfSize: [0.09, 0.35, 0.09] },
+    { jointIdx: 6, center: [0.2, 0.45, 0], halfSize: [0.09, 0.35, 0.09] },
+  ];
+
+  const allPositions: number[] = [];
+  const allNormals: number[] = [];
+  const allJoints: number[] = [];
+  const allWeights: number[] = [];
+  const allIndices: number[] = [];
+
+  for (let s = 0; s < segments.length; s++) {
+    const { jointIdx, center, halfSize } = segments[s]!;
+    const [cx, cy, cz] = center;
+    const [hx, hy, hz] = halfSize;
+    const baseV = s * 8;
+
+    const v = [
+      cx - hx, cy - hy, cz + hz,
+      cx + hx, cy - hy, cz + hz,
+      cx + hx, cy + hy, cz + hz,
+      cx - hx, cy + hy, cz + hz,
+      cx - hx, cy - hy, cz - hz,
+      cx + hx, cy - hy, cz - hz,
+      cx + hx, cy + hy, cz - hz,
+      cx - hx, cy + hy, cz - hz,
+    ];
+    allPositions.push(...v);
+
+    for (let k = 0; k < 8; k++) {
+      allNormals.push(0, 1, 0);
+      allJoints.push(jointIdx, 0, 0, 0);
+      allWeights.push(1.0, 0.0, 0.0, 0.0);
+    }
+
+    const ind = [
+      0, 1, 2,  0, 2, 3,
+      1, 5, 6,  1, 6, 2,
+      5, 4, 7,  5, 7, 6,
+      4, 0, 3,  4, 3, 7,
+      3, 2, 6,  3, 6, 7,
+      4, 5, 1,  4, 1, 0,
+    ];
+    for (const idx of ind) {
+      allIndices.push(baseV + idx);
+    }
+  }
+
+  const posAcc = doc
+    .createAccessor(`${name}_positions`)
+    .setType("VEC3")
+    .setArray(new Float32Array(allPositions))
+    .setBuffer(buffer);
+
+  const normAcc = doc
+    .createAccessor(`${name}_normals`)
+    .setType("VEC3")
+    .setArray(new Float32Array(allNormals))
+    .setBuffer(buffer);
+
+  const jointsAcc = doc
+    .createAccessor(`${name}_joints`)
+    .setType("VEC4")
+    .setArray(new Uint8Array(allJoints))
+    .setBuffer(buffer);
+
+  const weightsAcc = doc
+    .createAccessor(`${name}_weights`)
+    .setType("VEC4")
+    .setArray(new Float32Array(allWeights))
+    .setBuffer(buffer);
+
+  const indAcc = doc
+    .createAccessor(`${name}_indices`)
+    .setType("SCALAR")
+    .setArray(new Uint16Array(allIndices))
+    .setBuffer(buffer);
+
+  const material = doc
+    .createMaterial(`${name}_Material`)
+    .setBaseColorFactor(color)
+    .setRoughnessFactor(0.35)
+    .setMetallicFactor(0.8);
+
+  const prim = doc
+    .createPrimitive()
+    .setAttribute("POSITION", posAcc)
+    .setAttribute("NORMAL", normAcc)
+    .setAttribute("JOINTS_0", jointsAcc)
+    .setAttribute("WEIGHTS_0", weightsAcc)
+    .setIndices(indAcc)
+    .setMaterial(material);
+
+  const mesh = doc.createMesh(`${name}_Mesh`).addPrimitive(prim);
+  const meshNode = doc.createNode(`${name}_SkinnedNode`).setMesh(mesh).setSkin(skin);
+  root.addChild(meshNode);
+
+  function addChannel(
+    anim: import("@gltf-transform/core").Animation,
+    targetNode: import("@gltf-transform/core").Node,
+    path: "translation" | "rotation" | "scale",
+    times: number[],
+    values: number[],
+    type: "VEC3" | "VEC4" = "VEC4",
+  ): void {
+    const timeAcc = doc
+      .createAccessor()
+      .setType("SCALAR")
+      .setArray(new Float32Array(times))
+      .setBuffer(buffer);
+    const valAcc = doc
+      .createAccessor()
+      .setType(type)
+      .setArray(new Float32Array(values))
+      .setBuffer(buffer);
+    const sampler = doc
+      .createAnimationSampler()
+      .setInput(timeAcc)
+      .setOutput(valAcc)
+      .setInterpolation("LINEAR");
+    const channel = doc
+      .createAnimationChannel()
+      .setTargetPath(path)
+      .setTargetNode(targetNode)
+      .setSampler(sampler);
+    anim.addSampler(sampler).addChannel(channel);
+  }
+
+  // 1. Idle (1.0s): subtle spine breathing oscillation (in-place)
+  const idleAnim = doc.createAnimation("idle");
+  addChannel(
+    idleAnim,
+    spine,
+    "rotation",
+    [0, 0.5, 1.0],
+    [0, 0, 0, 1,  0.03, 0, 0, 0.999,  0, 0, 0, 1],
+  );
+
+  // 2. Walk Root (duration): linear forward root displacement + leg swing
+  const walkRootAnim = doc.createAnimation("walk_root");
+  // Hips translation forward along +Z with vertical hip bobbing
+  const t0 = 0;
+  const t1 = duration * 0.25;
+  const t2 = duration * 0.5;
+  const t3 = duration * 0.75;
+  const t4 = duration;
+  const d0 = 0;
+  const d1 = forwardDisp * 0.25;
+  const d2 = forwardDisp * 0.5;
+  const d3 = forwardDisp * 0.75;
+  const d4 = forwardDisp;
+
+  addChannel(
+    walkRootAnim,
+    hips,
+    "translation",
+    [t0, t1, t2, t3, t4],
+    [
+      0, 0.9, d0,
+      0, 0.92, d1,
+      0, 0.88, d2,
+      0, 0.92, d3,
+      0, 0.9, d4,
+    ],
+    "VEC3",
+  );
+  addChannel(
+    walkRootAnim,
+    leftLeg,
+    "rotation",
+    [t0, t2, t4],
+    [-0.26, 0, 0, 0.965,  0.26, 0, 0, 0.965,  -0.26, 0, 0, 0.965],
+  );
+  addChannel(
+    walkRootAnim,
+    rightLeg,
+    "rotation",
+    [t0, t2, t4],
+    [0.26, 0, 0, 0.965,  -0.26, 0, 0, 0.965,  0.26, 0, 0, 0.965],
+  );
+  addChannel(
+    walkRootAnim,
+    leftArm,
+    "rotation",
+    [t0, t2, t4],
+    [0.2, 0, 0, 0.98,  -0.2, 0, 0, 0.98,  0.2, 0, 0, 0.98],
+  );
+  addChannel(
+    walkRootAnim,
+    rightArm,
+    "rotation",
+    [t0, t2, t4],
+    [-0.2, 0, 0, 0.98,  0.2, 0, 0, 0.98,  -0.2, 0, 0, 0.98],
+  );
+
+  // 3. Walk Root Yaw (duration): forward locomotion + 45 degree yaw turn
+  const walkRootYawAnim = doc.createAnimation("walk_root_yaw");
+  addChannel(
+    walkRootYawAnim,
+    hips,
+    "translation",
+    [t0, t1, t2, t3, t4],
+    [
+      0, 0.9, d0,
+      0, 0.92, d1,
+      0, 0.88, d2,
+      0, 0.92, d3,
+      0, 0.9, d4,
+    ],
+    "VEC3",
+  );
+  // Yaw rotation: turns 45 degrees around Y (sin(pi/8) = 0.3826834, cos(pi/8) = 0.9238795)
+  addChannel(
+    walkRootYawAnim,
+    hips,
+    "rotation",
+    [t0, t4],
+    [0, 0, 0, 1,  0, 0.3826834, 0, 0.9238795],
+  );
+  addChannel(
+    walkRootYawAnim,
+    leftLeg,
+    "rotation",
+    [t0, t2, t4],
+    [-0.26, 0, 0, 0.965,  0.26, 0, 0, 0.965,  -0.26, 0, 0, 0.965],
+  );
+  addChannel(
+    walkRootYawAnim,
+    rightLeg,
+    "rotation",
+    [t0, t2, t4],
+    [0.26, 0, 0, 0.965,  -0.26, 0, 0, 0.965,  0.26, 0, 0, 0.965],
+  );
+
+  // 4. Hurt (0.3s): in-place recoil flinch
+  const hurtAnim = doc.createAnimation("hurt");
+  addChannel(
+    hurtAnim,
+    spine,
+    "rotation",
+    [0, 0.15, 0.3],
+    [0, 0, 0, 1,  -0.3, 0, 0, 0.954,  0, 0, 0, 1],
+  );
+
+  // 5. Defeat (1.0s): in-place collapse
+  const defAnim = doc.createAnimation("defeat");
+  addChannel(
+    defAnim,
+    hips,
+    "translation",
+    [0, 0.5, 1.0],
+    [0, 0.9, 0,  0, 0.4, 0,  0, 0.15, 0],
+    "VEC3",
+  );
+  addChannel(
+    defAnim,
+    spine,
+    "rotation",
+    [0, 0.5, 1.0],
+    [0, 0, 0, 1,  0.4, 0, 0, 0.916,  0.6, 0, 0, 0.8],
+  );
+
+  const io = new NodeIO();
+  return io.writeBinary(doc);
+}
+
+
 

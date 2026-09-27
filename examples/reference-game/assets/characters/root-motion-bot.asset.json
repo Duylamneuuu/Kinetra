@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "asset_character_root_motion_bot",
+  "name": "Root Motion Droid Character",
+  "kind": "model",
+  "source": {
+    "path": "assets/characters/root-motion-bot.glb",
+    "kind": "generated",
+    "contentHash": "ddbb7ced049e62cd2bdd9d47ebb3b23979f5e9d151b0ab008695b8f2847471b1"
+  },
+  "importedPath": "assets/characters/root-motion-bot.glb",
+  "recipe": {
+    "importer": "kinetra-gltf",
+    "importerVersion": "1.0.0",
+    "settings": {
+      "dedup": true,
+      "prune": true
+    }
+  },
+  "fingerprint": "6449534bd99984704474ffac2d38e252f63f369984ce44155f2574bf7478df60",
+  "dependencies": [],
+  "diagnostics": [],
+  "metadata": {
+    "polycount": 84,
+    "dimensions": [
+      0.85,
+      1.8,
+      0.4
+    ],
+    "boundsRadius": 1.1,
+    "provenance": {
+      "provider": "kinetra",
+      "generator": "createSyntheticRootMotionGlb",
+      "license": "MIT"
+    }
+  }
+}
