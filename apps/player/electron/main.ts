@@ -246,6 +246,11 @@ async function handleBridgeRequest(
     case "runtime.step":
     case "asset.register":
     case "animation.play":
+    case "animation.crossfade":
+    case "animation.graph.init":
+    case "animation.graph.setParameter":
+    case "animation.graph.trigger":
+    case "animation.graph.evaluate":
     case "animation.stop":
     case "animation.registerClip":
     case "audio.play":

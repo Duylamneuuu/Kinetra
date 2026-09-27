@@ -48,6 +48,20 @@ export interface RuntimeEntityState {
       duration?: number;
       retargetSource?: string;
       retargetCacheKey?: string;
+      graph?: {
+        state: string;
+        previousState?: string;
+        transitionId?: string;
+        transitioning: boolean;
+        blendSeconds?: number;
+        blendElapsed?: number;
+        blendProgress?: number;
+      };
+      actions?: Array<{
+        clip: string;
+        weight: number;
+        role: "active" | "outgoing" | "incoming";
+      }>;
     };
     nodes?: Array<{
       name: string;
@@ -323,6 +337,84 @@ export class ElectronRuntimeHost implements RuntimeHost {
       ...(options?.retargetSource !== undefined ? { retargetSource: options.retargetSource } : {}),
       ...(options?.retargetCacheKey !== undefined ? { retargetCacheKey: options.retargetCacheKey } : {}),
     });
+  }
+
+  async crossfadeAnimation(
+    entityId: string,
+    clip: string,
+    blendSeconds = 0.15,
+    options?: {
+      loop?: boolean;
+      speed?: number;
+    },
+  ): Promise<RuntimeQueryResult & { success: boolean; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; error?: string }>(
+      "animation.crossfade",
+      {
+        entityId,
+        clip,
+        blendSeconds,
+        ...(options?.loop !== undefined ? { loop: options.loop } : {}),
+        ...(options?.speed !== undefined ? { speed: options.speed } : {}),
+      },
+    );
+  }
+
+  async initAnimationGraph(
+    entityId: string,
+    graph: unknown,
+  ): Promise<RuntimeQueryResult & { success: boolean; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; error?: string }>(
+      "animation.graph.init",
+      {
+        entityId,
+        graph,
+      },
+    );
+  }
+
+  async setAnimationGraphParameter(
+    entityId: string,
+    name: string,
+    value: boolean | number,
+  ): Promise<RuntimeQueryResult & { success: boolean; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; error?: string }>(
+      "animation.graph.setParameter",
+      {
+        entityId,
+        name,
+        value,
+      },
+    );
+  }
+
+  async triggerAnimationGraph(
+    entityId: string,
+    name: string,
+  ): Promise<RuntimeQueryResult & { success: boolean; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; error?: string }>(
+      "animation.graph.trigger",
+      {
+        entityId,
+        name,
+      },
+    );
+  }
+
+  async evaluateAnimationGraph(
+    entityId: string,
+  ): Promise<RuntimeQueryResult & { transition?: unknown }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { transition?: unknown }>(
+      "animation.graph.evaluate",
+      {
+        entityId,
+      },
+    );
   }
 
   async registerAnimationClip(

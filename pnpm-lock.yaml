@@ -69,6 +69,9 @@ importers:
 
   examples/reference-game:
     dependencies:
+      '@kinetra/animation':
+        specifier: workspace:*
+        version: link:../../packages/animation
       '@kinetra/asset-pipeline':
         specifier: workspace:*
         version: link:../../packages/asset-pipeline
@@ -175,6 +178,9 @@ importers:
 
   packages/renderer-three:
     dependencies:
+      '@kinetra/animation':
+        specifier: workspace:*
+        version: link:../animation
       '@kinetra/project-model':
         specifier: workspace:*
         version: link:../project-model

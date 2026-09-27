@@ -14,6 +14,7 @@
     "test": "node --test dist/test/runtime-three.test.js"
   },
   "dependencies": {
+    "@kinetra/animation": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "three": "^0.180.0"
   },

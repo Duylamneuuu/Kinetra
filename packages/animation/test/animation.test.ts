@@ -135,19 +135,59 @@ test("animation graph uses priorities and consumes triggers", () => {
   assert.equal(machine.state, "jump");
 });
 
-test("invalid animation graph reports missing state and parameter", () => {
+test("animation graph supports wildcard '*' transitions", () => {
+  const g = graph();
+  g.transitions.push({
+    id: "any-to-run",
+    from: "*",
+    to: "run",
+    priority: 5,
+    conditions: [{ parameter: "speed", op: ">", value: 0.5 }],
+  });
+  const machine = new AnimationGraphMachine(g);
+  // starts at idle
+  machine.set("speed", 0.8);
+  const t = machine.evaluate();
+  assert.equal(t?.to, "run");
+  assert.equal(machine.state, "run");
+});
+
+test("invalid animation graph reports missing state and parameter and invalid blendSeconds", () => {
   const bad = graph();
   bad.entryState = "missing";
   bad.transitions.push({
     id: "bad",
     from: "idle",
     to: "missing",
+    blendSeconds: -1,
     conditions: [{ parameter: "wat", op: "==", value: true }],
   });
   const codes = validateAnimationGraph(bad).map((d) => d.code);
   assert.ok(codes.includes("anim.entry.missing"));
   assert.ok(codes.includes("anim.transition.to.missing"));
   assert.ok(codes.includes("anim.condition.parameter.missing"));
+  assert.ok(codes.includes("anim.transition.blendSeconds.invalid"));
+});
+
+test("AnimationGraphMachine provides state inspection, parameter inspection, and reset", () => {
+  const machine = new AnimationGraphMachine(graph());
+  assert.equal(machine.state, "idle");
+  assert.equal(machine.currentStateDefinition?.clipId, "idle");
+  assert.equal(machine.getStateDefinition("run")?.clipId, "run");
+  assert.equal(machine.getParameter("speed"), 0);
+  assert.equal(machine.getParameter("grounded"), true);
+  assert.deepEqual(machine.getParameters(), { speed: 0, grounded: true });
+
+  machine.set("speed", 2.5);
+  assert.equal(machine.getParameter("speed"), 2.5);
+  machine.trigger("jump");
+  assert.equal(machine.hasTrigger("jump"), true);
+  assert.ok(machine.triggers.includes("jump"));
+
+  machine.reset();
+  assert.equal(machine.state, "idle");
+  assert.equal(machine.getParameter("speed"), 0);
+  assert.equal(machine.hasTrigger("jump"), false);
 });
 
 test("inspectSkeletonFromGlb discovers external CesiumMan skeleton joints and clips", async () => {

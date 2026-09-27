@@ -3,6 +3,7 @@ import type {
   GameScriptContext,
   PreparedScriptRestore,
 } from "@kinetra/core";
+import type { AnimationGraphDefinition } from "@kinetra/animation/graph.js";
 import {
   ARENA_SFX_HIT_ASSET_ID,
   ARENA_SFX_WIN_ASSET_ID,
@@ -262,6 +263,116 @@ export class ArenaPlayerController implements GameScript {
   }
 }
 
+export const ARENA_ENEMY_ANIMATION_GRAPH: AnimationGraphDefinition = {
+  schemaVersion: 1,
+  entryState: "idle",
+  parameters: {
+    moving: { type: "bool", default: false },
+    telegraph: { type: "trigger" },
+    attack: { type: "trigger" },
+    hurt: { type: "trigger" },
+    defeated: { type: "bool", default: false },
+  },
+  states: [
+    { id: "idle", clipId: "idle", loop: true },
+    { id: "walk", clipId: "walk", loop: true },
+    { id: "telegraph", clipId: "telegraph", loop: true },
+    { id: "attack", clipId: "attack", loop: false },
+    { id: "hurt", clipId: "hurt", loop: false },
+    { id: "defeat", clipId: "defeat", loop: false },
+  ],
+  transitions: [
+    {
+      id: "to-defeat",
+      from: "*",
+      to: "defeat",
+      priority: 100,
+      blendSeconds: 0.15,
+      conditions: [{ parameter: "defeated", op: "==", value: true }],
+    },
+    {
+      id: "to-hurt",
+      from: "*",
+      to: "hurt",
+      priority: 50,
+      blendSeconds: 0.1,
+      conditions: [{ parameter: "hurt", op: "triggered" }],
+    },
+    {
+      id: "to-attack",
+      from: "*",
+      to: "attack",
+      priority: 40,
+      blendSeconds: 0.15,
+      conditions: [{ parameter: "attack", op: "triggered" }],
+    },
+    {
+      id: "to-telegraph",
+      from: "*",
+      to: "telegraph",
+      priority: 30,
+      blendSeconds: 0.15,
+      conditions: [{ parameter: "telegraph", op: "triggered" }],
+    },
+    {
+      id: "idle-to-walk",
+      from: "idle",
+      to: "walk",
+      priority: 10,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: true }],
+    },
+    {
+      id: "walk-to-idle",
+      from: "walk",
+      to: "idle",
+      priority: 10,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: false }],
+    },
+    {
+      id: "attack-to-walk",
+      from: "attack",
+      to: "walk",
+      priority: 10,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: true }],
+    },
+    {
+      id: "attack-to-idle",
+      from: "attack",
+      to: "idle",
+      priority: 5,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: false }],
+    },
+    {
+      id: "hurt-to-walk",
+      from: "hurt",
+      to: "walk",
+      priority: 10,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: true }],
+    },
+    {
+      id: "hurt-to-idle",
+      from: "hurt",
+      to: "idle",
+      priority: 5,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: false }],
+    },
+    {
+      id: "telegraph-to-walk",
+      from: "telegraph",
+      to: "walk",
+      priority: 10,
+      blendSeconds: 0.2,
+      conditions: [{ parameter: "moving", op: "==", value: true }],
+    },
+  ],
+};
+
 export class ArenaEnemyController implements GameScript {
   health = 3;
   readonly maxHealth = 3;
@@ -300,15 +411,29 @@ export class ArenaEnemyController implements GameScript {
   #syncAnimation(context?: GameScriptContext): void {
     const ctx = context ?? this.#lastContext;
     if (!ctx?.animation) return;
-    const clip = this.#desiredClip();
+
+    const desired = this.#desiredClip();
+
+    if (ctx.animation.graph) {
+      if (ctx.animation.graph.state === desired) {
+        return;
+      }
+      const isDefeated = this.state === "defeated" || this.health <= 0;
+      const isMoving = desired === "walk";
+      ctx.animation.graph.setParameter?.("moving", isMoving);
+      ctx.animation.graph.setParameter?.("defeated", isDefeated);
+      ctx.animation.graph.evaluate?.();
+      return;
+    }
+
     if (
-      ctx.animation.activeClip === clip ||
-      ctx.animation.activeClip === `${clip}_retargeted`
+      ctx.animation.activeClip === desired ||
+      ctx.animation.activeClip === `${desired}_retargeted`
     ) {
       return;
     }
-    const loop = clip === "walk" || clip === "telegraph" || clip === "idle";
-    ctx.animation.play(clip, { loop });
+    const loop = desired === "walk" || desired === "telegraph" || desired === "idle";
+    ctx.animation.play(desired, { loop });
   }
 
   onCreate(context: GameScriptContext): void {
@@ -325,7 +450,12 @@ export class ArenaEnemyController implements GameScript {
       phase: "onStart",
       entityId: context.entityId,
     });
-    this.#syncAnimation(context);
+    if (context.animation?.graph) {
+      context.animation.graph.init?.(ARENA_ENEMY_ANIMATION_GRAPH);
+      this.#syncAnimation(context);
+    } else {
+      this.#syncAnimation(context);
+    }
   }
 
   onUpdate(context: GameScriptContext, _deltaSeconds: number): void {
@@ -362,6 +492,7 @@ export class ArenaEnemyController implements GameScript {
         this.state = "attacking";
         context.emit?.("enemy.stateChanged", { state: this.state });
         this.#syncAnimation(context);
+        context.animation?.graph?.trigger?.("attack");
         context.emit?.("gameplay.damage", { amount: 1 });
         void context.audio?.play({ assetId: ARENA_SFX_HIT_ASSET_ID, bus: "sfx" });
         this.damageCooldown = 2; // deterministic simulation-step cooldown
@@ -409,6 +540,7 @@ export class ArenaEnemyController implements GameScript {
             dist,
           });
           this.#syncAnimation(context);
+          context.animation?.graph?.trigger?.("telegraph");
         } else {
           this.state = "chasing";
           context.emit?.("enemy.stateChanged", { state: this.state });
@@ -442,6 +574,7 @@ export class ArenaEnemyController implements GameScript {
         dist,
       });
       this.#syncAnimation(context);
+      context.animation?.graph?.trigger?.("telegraph");
     } else {
       this.state = "chasing";
       context.emit?.("enemy.stateChanged", { state: this.state });
@@ -502,6 +635,12 @@ export class ArenaEnemyController implements GameScript {
       this.hurtCooldown = 1;
       const previous = this.health;
       this.health = Math.max(0, Math.min(this.maxHealth, this.health - amount));
+      this.#syncAnimation(context);
+      if (this.health <= 0) {
+        context?.animation?.graph?.setParameter?.("defeated", true);
+      } else {
+        context?.animation?.graph?.trigger?.("hurt");
+      }
       context?.log?.("info", "enemy.hurt", {
         entityId: context?.entityId,
         damage: amount,
