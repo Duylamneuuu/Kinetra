@@ -79,6 +79,16 @@ export interface RuntimeEntityState {
       rotation?: [number, number, number, number];
       scale?: [number, number, number];
     }>;
+    instance?: {
+      assetId: string;
+      instanceId: string;
+      sharedTemplateId: string;
+      skinnedMeshCount: number;
+      skeletonCount: number;
+    };
+    resourceSharing?: {
+      templateRefCount: number;
+    };
     error?: string;
   };
   gameplay?: {
@@ -111,7 +121,9 @@ export interface RuntimeQueryResult {
   entities: RuntimeEntityState[];
   state?: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
+  metrics?: Record<string, number>;
 }
+
 
 export interface RuntimeInputEvent {
   action: string;
@@ -606,6 +618,17 @@ export class ElectronRuntimeHost implements RuntimeHost {
     await this.#ensureProcess();
     await this.#request("testHarness.enableTestFixtures", { preset });
   }
+
+  async detachModel(entityId: string): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("model.detach", { entityId });
+  }
+
+  async attachModel(entityId: string, assetId: string): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("model.attach", { entityId, assetId });
+  }
+
 
   getResolvedExecutable(): string {
     return this.runtimeExecutable ?? this.electronExecutable;

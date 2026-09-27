@@ -124,6 +124,18 @@ export interface PlayerRuntimeModelNodeState {
   scale?: [number, number, number];
 }
 
+export interface PlayerRuntimeModelInstanceMetadata {
+  assetId: string;
+  instanceId: string;
+  sharedTemplateId: string;
+  skinnedMeshCount: number;
+  skeletonCount: number;
+}
+
+export interface PlayerRuntimeModelResourceSharingMetadata {
+  templateRefCount: number;
+}
+
 export interface PlayerRuntimeModelState {
   assetId: string;
   loaded: boolean;
@@ -138,8 +150,11 @@ export interface PlayerRuntimeModelState {
   };
   animation?: PlayerRuntimeModelAnimationState;
   nodes?: PlayerRuntimeModelNodeState[];
+  instance?: PlayerRuntimeModelInstanceMetadata;
+  resourceSharing?: PlayerRuntimeModelResourceSharingMetadata;
   error?: string;
 }
+
 
 export interface PlayerRuntimeGameplayState {
   scriptId: string;
@@ -194,7 +209,9 @@ export interface PlayerRuntimeQueryResult {
   gameplay?: Record<string, unknown>;
   game?: Record<string, unknown>;
   shell?: { mode: GameShellMode; isPaused: boolean };
+  metrics?: Record<string, number>;
 }
+
 
 export interface PlayerRuntimeInput {
   action: string;
@@ -1240,7 +1257,42 @@ export class PlayerRuntimeController {
     }
   }
 
+  detachModel(entityId: string): { success: boolean; error?: string } {
+
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "model.detachFailed", { entityId, error });
+      return { success: false, error };
+    }
+    const result = this.#runtime.detachModel(entityId);
+    if (result.success) {
+      this.#log("info", "model.detached", { entityId });
+    } else {
+      this.#log("error", "model.detachFailed", { entityId, error: result.error });
+    }
+    return result;
+  }
+
+  async attachModel(
+    entityId: string,
+    assetId: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "model.attachFailed", { entityId, assetId, error });
+      return { success: false, error };
+    }
+    const result = await this.#runtime.attachModel(entityId, assetId, this.#assetResolver);
+    if (result.success) {
+      this.#log("info", "model.attached", { entityId, assetId });
+    } else {
+      this.#log("error", "model.attachFailed", { entityId, assetId, error: result.error });
+    }
+    return { success: result.success, ...(result.error ? { error: result.error } : {}) };
+  }
+
   async captureSave(slotId = "default"): Promise<{
+
     success: boolean;
     envelope?: SaveEnvelope<GameplaySaveData>;
     error?: string;
@@ -1766,6 +1818,8 @@ export class PlayerRuntimeController {
                 ...(modelMeta.bounds ? { bounds: modelMeta.bounds } : {}),
                 ...(modelMeta.animation ? { animation: modelMeta.animation } : {}),
                 ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),
+                ...(modelMeta.instance ? { instance: modelMeta.instance } : {}),
+                ...(modelMeta.resourceSharing ? { resourceSharing: modelMeta.resourceSharing } : {}),
                 ...(modelMeta.error ? { error: modelMeta.error } : {}),
               },
             }
@@ -1809,8 +1863,13 @@ export class PlayerRuntimeController {
         ? { gameplay: { session: activeSession }, game: activeSession }
         : {}),
       shell: { mode: this.#shellMode, isPaused: this.#paused },
+      metrics: {
+        assetTemplateParseCount: this.#runtime?.assetTemplateParseCount ?? 0,
+        instanceCount: this.#runtime?.instanceCount ?? 0,
+      },
     };
   }
+
 
   injectInput(event: PlayerRuntimeInput): void {
     if (!this.#runtime) {

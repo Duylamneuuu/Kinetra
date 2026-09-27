@@ -19,10 +19,15 @@ import {
   type RootMotionDiagnostics,
 } from "@kinetra/animation/root-motion.js";
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
+import {
+  ModelAssetTemplate,
+  ModelInstance,
+  ModelTemplateCache,
+} from "./template.js";
+
 
 export interface AnimatorBlendSession {
   fromClip: string;
@@ -218,7 +223,10 @@ export class ThreeSceneRuntime {
   #clips = new Map<string, THREE.AnimationClip[]>();
   #activeActions = new Map<string, THREE.AnimationAction>();
   #animatorSessions = new Map<string, EntityAnimatorSession>();
+  #templateCache = new ModelTemplateCache();
+  #instances = new Map<string, ModelInstance>();
   #disposed = false;
+
 
   private constructor(sceneDefinition: SceneDefinition) {
     this.sceneId = sceneDefinition.id;
@@ -299,70 +307,154 @@ export class ThreeSceneRuntime {
     return this.#models;
   }
 
+  get assetTemplateParseCount(): number {
+    return this.#templateCache.parseCount;
+  }
+
+  get instanceCount(): number {
+    return this.#instances.size;
+  }
+
+  getInstance(entityId: string): ModelInstance | undefined {
+    return this.#instances.get(entityId);
+  }
+
+  getTemplateCache(): ModelTemplateCache {
+    return this.#templateCache;
+  }
+
   async loadModels(resolver: AssetResolver): Promise<Map<string, ModelMetadata>> {
     if (this.#disposed) {
       throw new Error("Cannot load models into a disposed ThreeSceneRuntime");
     }
 
-    const loader = new GLTFLoader();
-
-    for (const [entityId, metadata] of this.#models) {
-      const object = this.#objects.get(entityId);
-      if (!object) {
-        continue;
-      }
-
-      try {
-        const resolved = await resolver.resolve(metadata.assetId);
-        if (!resolved) {
-          metadata.loaded = false;
-          metadata.error = `Asset "${metadata.assetId}" could not be resolved`;
-          continue;
+    const entries = Array.from(this.#models.entries());
+    await Promise.all(
+      entries.map(async ([entityId, metadata]) => {
+        const object = this.#objects.get(entityId);
+        if (!object) {
+          return;
         }
 
-        let arrayBuffer: ArrayBuffer;
-        if (resolved instanceof Uint8Array) {
-          const copy = new Uint8Array(resolved.byteLength);
-          copy.set(resolved);
-          arrayBuffer = copy.buffer;
-        } else if (resolved instanceof ArrayBuffer) {
-          arrayBuffer = resolved;
-        } else if (typeof resolved === "string") {
-          if (resolved.startsWith("data:")) {
-            const base64Index = resolved.indexOf("base64,");
-            if (base64Index !== -1) {
-              const raw = atob(resolved.slice(base64Index + 7));
-              const bytes = new Uint8Array(raw.length);
-              for (let i = 0; i < raw.length; i++) {
-                bytes[i] = raw.charCodeAt(i);
-              }
-              arrayBuffer = bytes.buffer;
-            } else {
-              const gltf = await loader.loadAsync(resolved);
-              this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
-              continue;
-            }
-          } else {
-            const gltf = await loader.loadAsync(resolved);
-            this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
-            continue;
-          }
-        } else {
+        try {
+          const template = await this.#templateCache.resolveTemplate(metadata.assetId, resolver);
+          const instance = template.createInstance(entityId);
+          this.#instances.set(entityId, instance);
+          this.#attachInstance(entityId, object, instance, metadata);
+        } catch (error) {
           metadata.loaded = false;
-          metadata.error = `Unsupported asset resolution type for "${metadata.assetId}"`;
-          continue;
+          metadata.error = error instanceof Error ? error.message : String(error);
         }
+      }),
+    );
 
-        const gltf = await loader.parseAsync(arrayBuffer, "");
-        this.#attachModel(entityId, object, gltf.scene, gltf.animations ?? [], metadata);
-      } catch (error) {
-        metadata.loaded = false;
-        metadata.error = error instanceof Error ? error.message : String(error);
-      }
-    }
-
+    this.#updateResourceSharingMetadata();
     return this.#models;
   }
+
+  async attachModel(
+    entityId: string,
+    assetId: string,
+    resolver: AssetResolver,
+  ): Promise<{ success: boolean; error?: string; metadata?: ModelMetadata }> {
+    if (this.#disposed) {
+      return { success: false, error: "Cannot attach model to a disposed ThreeSceneRuntime" };
+    }
+
+    const object = this.#objects.get(entityId);
+    if (!object) {
+      return { success: false, error: `Entity "${entityId}" not found in runtime` };
+    }
+
+    if (this.#instances.has(entityId)) {
+      this.detachModel(entityId);
+    }
+
+    let metadata = this.#models.get(entityId);
+    if (!metadata) {
+      metadata = {
+        assetId,
+        loaded: false,
+        meshCount: 0,
+        nodeCount: 0,
+      };
+      this.#models.set(entityId, metadata);
+    } else {
+      metadata.assetId = assetId;
+    }
+
+    try {
+      const template = await this.#templateCache.resolveTemplate(assetId, resolver);
+      const instance = template.createInstance(entityId);
+      this.#instances.set(entityId, instance);
+      this.#attachInstance(entityId, object, instance, metadata);
+      this.#updateResourceSharingMetadata();
+      return { success: true, metadata };
+    } catch (error) {
+      metadata.loaded = false;
+      metadata.error = error instanceof Error ? error.message : String(error);
+      return { success: false, error: metadata.error };
+    }
+  }
+
+  detachModel(entityId: string): { success: boolean; error?: string } {
+    if (this.#disposed) {
+      return { success: false, error: "Runtime is disposed" };
+    }
+
+    const session = this.#animatorSessions.get(entityId);
+    if (session) {
+      if (session.outgoingAction) session.outgoingAction.stop();
+      if (session.activeAction) session.activeAction.stop();
+      session.mixer.stopAllAction();
+      const modelScene = this.#modelScenes.get(entityId);
+      if (modelScene) {
+        session.mixer.uncacheRoot(modelScene);
+      }
+      const clips = this.#clips.get(entityId);
+      if (clips) {
+        for (const clip of clips) {
+          session.mixer.uncacheClip(clip);
+        }
+      }
+    }
+    this.#animatorSessions.delete(entityId);
+    this.#mixers.delete(entityId);
+    this.#clips.delete(entityId);
+    this.#activeActions.delete(entityId);
+    this.#modelScenes.delete(entityId);
+
+    const instance = this.#instances.get(entityId);
+    if (instance) {
+      instance.dispose();
+      this.#instances.delete(entityId);
+    }
+
+    const metadata = this.#models.get(entityId);
+    if (metadata) {
+      metadata.loaded = false;
+      delete metadata.animation;
+      delete metadata.nodes;
+      delete metadata.bounds;
+      delete metadata.instance;
+      delete metadata.resourceSharing;
+    }
+
+    this.#updateResourceSharingMetadata();
+    return { success: true };
+  }
+
+  #updateResourceSharingMetadata(): void {
+    for (const [entityId, instance] of this.#instances) {
+      const metadata = this.#models.get(entityId);
+      if (metadata && metadata.instance) {
+        metadata.resourceSharing = {
+          templateRefCount: instance.template.refCount,
+        };
+      }
+    }
+  }
+
 
   registerAnimationClip(entityId: string, clip: THREE.AnimationClip): boolean {
     if (this.#disposed) return false;
@@ -1266,47 +1358,45 @@ export class ThreeSceneRuntime {
     return nodes;
   }
 
-  #attachModel(
+  #attachInstance(
     entityId: string,
     object: THREE.Object3D,
-    modelScene: THREE.Group,
-    animations: THREE.AnimationClip[],
+    instance: ModelInstance,
     metadata: ModelMetadata,
   ): void {
-    let meshCount = 0;
-    let nodeCount = 0;
-    let skinnedMeshCount = 0;
-
-    modelScene.traverse((node) => {
-      nodeCount++;
-      if (node instanceof THREE.Mesh) {
-        meshCount++;
-        if (node instanceof THREE.SkinnedMesh) {
-          skinnedMeshCount++;
-        }
-      }
-    });
+    const modelScene = instance.scene;
+    const animations = instance.animations;
 
     const box = new THREE.Box3().setFromObject(modelScene);
     const size = new THREE.Vector3();
     box.getSize(size);
 
     metadata.loaded = true;
-    metadata.meshCount = meshCount;
-    metadata.nodeCount = nodeCount;
-    metadata.skinnedMeshCount = skinnedMeshCount;
-    metadata.hasSkin = skinnedMeshCount > 0;
+    metadata.meshCount = instance.meshCount;
+    metadata.nodeCount = instance.nodeCount;
+    metadata.skinnedMeshCount = instance.skinnedMeshCount;
+    metadata.hasSkin = instance.skinnedMeshCount > 0;
     metadata.bounds = {
       min: [box.min.x, box.min.y, box.min.z],
       max: [box.max.x, box.max.y, box.max.z],
       size: [size.x, size.y, size.z],
     };
     metadata.nodes = this.#extractNodeStates(modelScene);
+    metadata.instance = {
+      assetId: instance.assetId,
+      instanceId: instance.instanceId,
+      sharedTemplateId: instance.templateId,
+      skinnedMeshCount: instance.skinnedMeshCount,
+      skeletonCount: instance.skeletonCount,
+    };
+    metadata.resourceSharing = {
+      templateRefCount: instance.template.refCount,
+    };
 
     if (animations.length > 0) {
       const mixer = new THREE.AnimationMixer(modelScene);
       this.#mixers.set(entityId, mixer);
-      this.#clips.set(entityId, animations);
+      this.#clips.set(entityId, [...animations]);
       this.#animatorSessions.set(entityId, {
         entityId,
         mixer,
@@ -1361,6 +1451,15 @@ export class ThreeSceneRuntime {
     this.#clips.clear();
     this.#modelScenes.clear();
 
+    // Dispose all active instances (disposes cloned materials and skeletons, removes from parent, releases template refs)
+    for (const instance of this.#instances.values()) {
+      instance.dispose();
+    }
+    this.#instances.clear();
+
+    // Dispose shared template cache (disposes shared geometries, shared textures, shared template materials)
+    this.#templateCache.dispose();
+
     for (const object of this.#objects.values()) {
       disposeObjectResources(object);
       object.removeFromParent();
@@ -1372,3 +1471,4 @@ export class ThreeSceneRuntime {
     this.#disposed = true;
   }
 }
+

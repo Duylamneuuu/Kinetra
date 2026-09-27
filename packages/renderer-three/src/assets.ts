@@ -72,6 +72,18 @@ export interface ModelNodeState {
   scale?: [number, number, number];
 }
 
+export interface ModelInstanceMetadata {
+  assetId: string;
+  instanceId: string;
+  sharedTemplateId: string;
+  skinnedMeshCount: number;
+  skeletonCount: number;
+}
+
+export interface ModelResourceSharingMetadata {
+  templateRefCount: number;
+}
+
 export interface ModelMetadata {
   assetId: string;
   loaded: boolean;
@@ -82,5 +94,8 @@ export interface ModelMetadata {
   bounds?: ModelBounds;
   animation?: ModelAnimationState;
   nodes?: ModelNodeState[];
+  instance?: ModelInstanceMetadata;
+  resourceSharing?: ModelResourceSharingMetadata;
   error?: string;
 }
+

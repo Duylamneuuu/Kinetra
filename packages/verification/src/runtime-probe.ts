@@ -269,6 +269,21 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     }
   }
 
+  async detachModel(entityId: string): Promise<unknown> {
+    if (typeof this.#host.detachModel === "function") {
+      return this.#host.detachModel(entityId);
+    }
+    return undefined;
+  }
+
+  async attachModel(entityId: string, assetId: string): Promise<unknown> {
+    if (typeof this.#host.attachModel === "function") {
+      return this.#host.attachModel(entityId, assetId);
+    }
+    return undefined;
+  }
+
+
   async snapshot(): Promise<RuntimeSnapshot> {
     const query = await this.#host.query();
     const byEntityId: Record<string, unknown> = {};

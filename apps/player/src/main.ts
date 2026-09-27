@@ -197,7 +197,21 @@ async function handleRuntimeCommand(request: {
       return { ...result, ...runtime.query() };
     }
 
+    case "model.detach": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.detachModel(entityId);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "model.attach": {
+      const entityId = requireString(params.entityId, "entityId");
+      const assetId = requireString(params.assetId, "assetId");
+      const result = await runtime.attachModel(entityId, assetId);
+      return { ...result, ...runtime.query() };
+    }
+
     case "audio.play": {
+
       const assetId = requireString(params.assetId, "assetId");
       const bus = typeof params.bus === "string" ? params.bus : undefined;
       const loop = typeof params.loop === "boolean" ? params.loop : undefined;
