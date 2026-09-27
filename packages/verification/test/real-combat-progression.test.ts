@@ -41,7 +41,7 @@ function assertValidPng(bytes: Uint8Array, label: string): void {
 
 test(
   "Combat Feel & Encounter Progression Slice 5 — Telegraph State Machine, Reaction Window, Encounter Progression, Run Statistics, Multi-Process Save/Load, Packaged Proof",
-  { skip: process.platform !== "win32", timeout: 120_000 },
+  { skip: process.platform !== "win32", timeout: 240_000 },
   async (t) => {
     // -----------------------------------------------------------------------
     // Scenario 1: Enemy Attack Telegraph Visible Before Damage

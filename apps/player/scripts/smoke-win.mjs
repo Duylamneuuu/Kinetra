@@ -284,3 +284,30 @@ if (rootMotionRun.status !== 0) {
 }
 
 console.log("Packaged Windows root motion tests passed successfully.");
+
+const multiInstanceTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-skinned-multi-instance.test.js",
+);
+
+console.log("Running real packaged skinned multi-instance test suite...");
+const multiInstanceRun = spawnSync(process.execPath, ["--test", multiInstanceTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (multiInstanceRun.status !== 0) {
+  throw new Error(`Packaged skinned multi-instance test failed with exit code ${String(multiInstanceRun.status)}`);
+}
+
+console.log("Packaged Windows skinned multi-instance tests passed successfully.");

@@ -211,7 +211,21 @@ The root motion extraction and Rapier character motor integration slice is prove
 - **Animation Graph Crossfade Ownership**: When crossfading between animation states (e.g. walk -> idle), the incoming target state owns root motion displacement, ensuring that idle stops forward locomotion smoothly without doubling displacement; interrupting walk with hurt immediately halts root motion;
 - **Structured Observation**: Live queries expose `entity.model.animation.rootMotion` and `entity.gameplay.rootMotion` with `enabled`, `mode`, `activeClip`, `accumulatedDistance`, `requestedDelta`, `appliedDelta`, `blockedDelta`, and `collisionClipped`;
 - **Scene Teardown & Reset**: Scene restarts reset accumulators and character positions back to origin;
-- **Complete Verification Suite**: 7-scenario real Electron verification suite (`packages/verification/test/real-root-motion.test.ts`) passing in dev Electron and against packaged Windows executable `KinetraGame.exe`;
+- **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
+
+### 11. Safe Multi-Instance SkinnedMesh Clone & Shared Asset Lifecycle (P5 Proven)
+
+The multi-instance skinned mesh cloning and shared asset resource lifecycle slice is proven in dev Electron and packaged `KinetraGame.exe`:
+- **Template Deduplication**: `ModelTemplateCache` deduplicates concurrent loads and caches parsed GLB scenes so that multiple entities referencing the same `Model.assetId` parse the asset exactly once (`assetTemplateParseCount == 1`);
+- **Skeleton Isolation via SkeletonUtils.clone**: Every cloned entity instance receives its own unique `Skeleton` instance with independent `Bone` object references and transform hierarchies, completely avoiding bone transforms or mixer bindings leaking across entities;
+- **Independent Mixers & Animation Graphs**: Each entity instance manages its own `AnimationMixer` and animation graph session. One instance can play walk/crossfade while another instance plays idle on the exact same asset without cross-talk;
+- **Baked Retarget Clip Sharing**: The exact same baked retarget clip definition (`THREE.AnimationClip`) can be played simultaneously across multiple target instances with independent playback times and phase offsets;
+- **Independent Root Motion Sessions**: Multiple instances using root-motion clips drive their own Rapier character bodies independently. One mover can step forward and accumulate distance while the other remains stationary;
+- **Material Isolation & Texture/Geometry Sharing**: Clones materials per instance (`material.clone()`) to allow independent color/opacity mutations without leaking, while safely sharing underlying `BufferGeometry` and GPU textures;
+- **Reference-Counted GPU Resource Disposal**: GPU resources (geometries and textures) are reference-counted (`refCount`). Geometries and textures are preserved as long as at least one instance exists (`refCount > 0`), and cleanly disposed only when `refCount === 0`. Detaching Entity A leaves Entity B running cleanly without disposed buffer errors;
+- **Live Detach & Reattach**: Dynamic IPC commands (`model.detach` and `model.attach`) allow instances to be detached and re-attached on demand, reusing the cached asset template without re-parsing;
+- **Structured Observation**: Query API truthfully exposes `model.instance = { instanceId, templateAssetId }`, `model.resourceSharing = { sharedGeometry, sharedTextures, uniqueSkeleton, uniqueMixer }`, and `metrics = { assetTemplateParseCount, instanceCount }`;
+- **Complete Verification Suite**: 6-scenario real Electron verification suite (`packages/verification/test/real-skinned-multi-instance.test.ts`) passing against dev Electron and packaged Windows executable `KinetraGame.exe`;
 - **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
 
 ## Completion definition

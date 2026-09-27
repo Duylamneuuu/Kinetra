@@ -72,6 +72,16 @@ export interface RuntimeProbeHost {
           rotation?: [number, number, number, number];
           scale?: [number, number, number];
         }>;
+        instance?: {
+          assetId: string;
+          instanceId: string;
+          sharedTemplateId: string;
+          skinnedMeshCount: number;
+          skeletonCount: number;
+        };
+        resourceSharing?: {
+          templateRefCount: number;
+        };
         error?: string;
       };
       gameplay?: {
@@ -87,7 +97,9 @@ export interface RuntimeProbeHost {
     gameplay?: Record<string, unknown>;
     game?: Record<string, unknown>;
     shell?: { mode: string; isPaused: boolean };
+    metrics?: Record<string, number>;
   }>;
+
   injectInput(event: {
     action: string;
     phase: "press" | "release" | "hold";
@@ -149,7 +161,10 @@ export interface RuntimeProbeHost {
   pause?(): Promise<unknown>;
   resume?(): Promise<unknown>;
   enableTestScriptFixtures?(preset: string): Promise<void>;
+  detachModel?(entityId: string): Promise<unknown>;
+  attachModel?(entityId: string, assetId: string): Promise<unknown>;
 }
+
 
 export interface RuntimeProbe {
   start(sceneId:string,seed:number):Promise<void>;

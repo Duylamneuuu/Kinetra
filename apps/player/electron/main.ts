@@ -254,7 +254,10 @@ async function handleBridgeRequest(
     case "animation.stop":
     case "animation.registerClip":
     case "animation.rootMotion.configure":
+    case "model.detach":
+    case "model.attach":
     case "audio.play":
+
     case "audio.stop":
     case "audio.setBusGain":
     case "audio.setBusMuted":
