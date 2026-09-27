@@ -438,4 +438,44 @@ test("creates deterministic synthetic rigged character GLB with skin, joints, an
   assert.deepEqual(clipNames, ["attack", "defeat", "hurt", "idle", "telegraph", "walk"]);
 });
 
+test("creates deterministic synthetic rigged character GLB with root-motion clips (walk_root, walk_root_yaw)", async () => {
+  const { createSyntheticRootMotionGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticRootMotionGlb({
+    name: "RootMotionBot",
+    forwardDisplacement: 1.6,
+  });
+
+  assert.ok(bytes.byteLength > 1000);
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.version, 2);
+  assert.equal(header.length, bytes.byteLength);
+
+  const io = new NodeIO();
+  const doc = await io.readBinary(bytes);
+
+  const skins = doc.getRoot().listSkins();
+  assert.equal(skins.length, 1);
+  assert.equal(skins[0]!.listJoints().length, 7);
+
+  const animations = doc.getRoot().listAnimations();
+  assert.equal(animations.length, 5); // idle, walk_root, walk_root_yaw, hurt, defeat
+  const clipNames = animations.map((a) => a.getName()).sort();
+  assert.deepEqual(clipNames, ["defeat", "hurt", "idle", "walk_root", "walk_root_yaw"]);
+
+  // Verify walk_root has forward translation on Hips
+  const walkRoot = animations.find((a) => a.getName() === "walk_root")!;
+  const channels = walkRoot.listChannels();
+  const hipsTransChannel = channels.find(
+    (c) => c.getTargetNode()?.getName() === "Hips" && c.getTargetPath() === "translation",
+  );
+  assert.ok(hipsTransChannel, "walk_root must have Hips translation channel");
+  const sampler = hipsTransChannel.getSampler()!;
+  const output = sampler.getOutput()!.getArray()!;
+  // Initial Z: 0, final Z: 1.6
+  assert.ok(Math.abs(output[2]! - 0) < 1e-5);
+  assert.ok(Math.abs(output[output.length - 1]! - 1.6) < 1e-5);
+});
+
+
 

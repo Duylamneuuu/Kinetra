@@ -184,6 +184,19 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
     }
 
+    case "animation.rootMotion.configure": {
+      const entityId = requireString(params.entityId, "entityId");
+      const enabled = typeof params.enabled === "boolean" ? params.enabled : true;
+      const mode = typeof params.mode === "string" ? (params.mode as any) : undefined;
+      const rootBoneName = typeof params.rootBoneName === "string" ? params.rootBoneName : undefined;
+      const result = runtime.configureRootMotion(entityId, {
+        enabled,
+        ...(mode !== undefined ? { mode } : {}),
+        ...(rootBoneName !== undefined ? { rootBoneName } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
     case "audio.play": {
       const assetId = requireString(params.assetId, "assetId");
       const bus = typeof params.bus === "string" ? params.bus : undefined;

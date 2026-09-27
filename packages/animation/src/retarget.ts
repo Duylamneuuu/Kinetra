@@ -25,6 +25,7 @@ export interface RetargetSettings {
   scaleFactor?: number | undefined;
   ignoreUnmappedBones?: boolean | undefined;
   version?: number | undefined;
+  rootMotionMode?: import("./root-motion.js").RootMotionMode | undefined;
   [key: string]: unknown;
 }
 

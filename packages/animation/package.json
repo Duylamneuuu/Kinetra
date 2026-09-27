@@ -16,6 +16,14 @@
     "./graph": {
       "types": "./dist/src/graph.d.ts",
       "default": "./dist/src/graph.js"
+    },
+    "./root-motion.js": {
+      "types": "./dist/src/root-motion.d.ts",
+      "default": "./dist/src/root-motion.js"
+    },
+    "./root-motion": {
+      "types": "./dist/src/root-motion.d.ts",
+      "default": "./dist/src/root-motion.js"
     }
   },
   "types": "./dist/src/index.d.ts",
