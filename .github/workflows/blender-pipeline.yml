@@ -27,22 +27,49 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y blender python3-numpy
           blender --version
-      - name: Create deterministic .blend fixture
-        run: blender --background --python packages/blender-bridge/python/create_fixture.py -- --output "$RUNNER_TEMP/kinetra-fixture.blend"
-      - name: Export fixture through Kinetra Blender bridge script
+      - name: Build required packages
         run: |
-          blender --background "$RUNNER_TEMP/kinetra-fixture.blend" --python packages/blender-bridge/python/export_glb.py -- --output "$RUNNER_TEMP/kinetra-fixture.glb" --manifest "$RUNNER_TEMP/kinetra-fixture.manifest.json"
-          test -s "$RUNNER_TEMP/kinetra-fixture.glb"
-          test -s "$RUNNER_TEMP/kinetra-fixture.manifest.json"
-      - run: pnpm --filter @kinetra/asset-pipeline build
-      - name: Validate exported GLB through Kinetra asset pipeline
+          pnpm --filter @kinetra/project-model build
+          pnpm --filter @kinetra/asset-pipeline build
+          pnpm --filter @kinetra/blender-bridge build
+      - name: Run Blender bridge tests
+        run: pnpm --filter @kinetra/blender-bridge test
+      - name: Create deterministic .blend fixture v1
+        run: blender --background --python packages/blender-bridge/python/create_fixture.py -- --output "$RUNNER_TEMP/fixture-v1.blend"
+      - name: Export fixture v1 through Kinetra Blender bridge script
         run: |
-          node packages/asset-pipeline/scripts/validate-glb.mjs "$RUNNER_TEMP/kinetra-fixture.glb"
-          cat "$RUNNER_TEMP/kinetra-fixture.manifest.json"
+          blender --background "$RUNNER_TEMP/fixture-v1.blend" --python packages/blender-bridge/python/export_glb.py -- --output "$RUNNER_TEMP/fixture-v1.glb" --manifest "$RUNNER_TEMP/fixture-v1.manifest.json"
+          test -s "$RUNNER_TEMP/fixture-v1.glb"
+          test -s "$RUNNER_TEMP/fixture-v1.manifest.json"
+      - name: Validate exported GLB v1 through Kinetra asset pipeline
+        run: |
+          node packages/asset-pipeline/scripts/validate-glb.mjs "$RUNNER_TEMP/fixture-v1.glb"
+          cat "$RUNNER_TEMP/fixture-v1.manifest.json"
+      - name: Headlessly modify .blend source to v2
+        run: |
+          blender --background "$RUNNER_TEMP/fixture-v1.blend" --python packages/blender-bridge/python/modify_fixture.py -- --output "$RUNNER_TEMP/fixture-v2.blend" --scale-x 4.0
+          test -s "$RUNNER_TEMP/fixture-v2.blend"
+      - name: Verify .blend binary content hash genuinely changed
+        run: |
+          HASH1=$(sha256sum "$RUNNER_TEMP/fixture-v1.blend" | cut -d' ' -f1)
+          HASH2=$(sha256sum "$RUNNER_TEMP/fixture-v2.blend" | cut -d' ' -f1)
+          echo "Fixture v1 .blend hash: $HASH1"
+          echo "Fixture v2 .blend hash: $HASH2"
+          if [ "$HASH1" = "$HASH2" ]; then
+            echo "Error: source .blend content hash did not change!"
+            exit 1
+          fi
+      - name: Run AssetReimportService with BlenderGlbImporter on modified source
+        run: |
+          node packages/blender-bridge/scripts/verify-hot-reimport.mjs "$RUNNER_TEMP/fixture-v2.blend" "$RUNNER_TEMP/fixture-v2.glb"
+          test -s "$RUNNER_TEMP/fixture-v2.glb"
+      - name: Validate exported GLB v2 through Kinetra asset pipeline
+        run: node packages/asset-pipeline/scripts/validate-glb.mjs "$RUNNER_TEMP/fixture-v2.glb"
       - uses: actions/upload-artifact@v4
         with:
           name: kinetra-blender-fixture
           path: |
-            ${{ runner.temp }}/kinetra-fixture.glb
-            ${{ runner.temp }}/kinetra-fixture.manifest.json
+            ${{ runner.temp }}/fixture-v1.glb
+            ${{ runner.temp }}/fixture-v1.manifest.json
+            ${{ runner.temp }}/fixture-v2.glb
           if-no-files-found: error

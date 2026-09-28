@@ -242,6 +242,20 @@ The deterministic hot reimport and live runtime reload vertical slice is proven 
 - **Comprehensive Real Electron Verification Suite**: 5-scenario real Electron acceptance suite (`packages/verification/test/real-hot-reimport.test.ts`) proving all 22 verification points with valid PNG frame capture;
 - **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
 
+### 13. Real Blender Source Hot Reimport Gate (P4 Production Asset Pipeline Gate Proven)
+
+The full authoring-to-runtime production asset loop is closed and proven across real Blender CLI execution, headless `.blend` modification, topological dependency rebuild, and live Electron runtime reload:
+- **Headless Blender Source Modification**: Python script `packages/blender-bridge/python/modify_fixture.py` opens, scales, modifies, and saves `.blend` authoring files headlessly without GUI automation, genuinely altering the binary SHA-256 content hash;
+- **Engine-Owned BlenderGlbImporter**: `@kinetra/blender-bridge` exports `BlenderGlbImporter` implementing `@kinetra/asset-pipeline`'s `AssetImporter` interface. It executes Blender headless export with staging files, validates output GLB magic and headers, parses export manifests, and outputs immutable artifact bytes;
+- **Topological Dependency Rebuild**: `AssetDatabase.dependentsInRebuildOrder` and `rebuildOrder` compute exact topological dependency traversals (dependencies before dependents, e.g. `asset_z <- asset_a <- asset_m` rebuilds `z`, then `a`, then `m`) with deterministic alphabetical tie-breaking rather than naïve lexical sorting;
+- **Cascading Fingerprint Propagation**: `AssetReimportService.reimportWithDependents` cascades newly computed fingerprints through downstream dependents via `importFingerprint({ dependencyFingerprints })`, rebuilding only stale dependents and leaving unrelated assets untouched;
+- **Partial Failure & Block Semantics**: Structured `DependencyRebuildResult` tracks `rebuilt`, `failed`, `blocked`, and `unaffected`. If an intermediate dependent fails, downstream dependents are cleanly blocked from rebuilding, while the root and unaffected assets remain authoritative;
+- **Integrated AssetHotReloadCoordinator**: High-level coordinator service wires `SourceAssetWatcher` -> `AssetReimportService` -> dependency rebuild -> runtime publication (`probe.updateAsset`) -> live entity reload (`probe.reloadAsset`) without manual test glue;
+- **Normalized Transactions & NOOP Protection**: Normalizes filesystem events into a single atomic reload transaction (`AssetHotReloadTransaction`), and absorbs touch-only/identical content updates without invoking Blender or reloading runtime entities;
+- **Live Electron Verification**: Real Electron acceptance suite (`packages/verification/test/real-blender-hot-reimport.test.ts`) verifies live multi-instance entity swapping across a single continuous Electron process without restart, preserving entity IDs, world positions, and WebGL rendering with valid PNG capture;
+- **Failure Rollback & Repair**: Importer failures rollback cleanly leaving live entities running on last-known-good, and subsequent repaired source saves reimport and recover automatically;
+- **Blender DCC Boundary**: Blender remains strictly an authoring tool. Packaged shipping binaries (`KinetraGame.exe` and Linux `KinetraGame`) have zero Blender dependencies.
+
 ## Completion definition
 
 Kinetra is not "done" when:

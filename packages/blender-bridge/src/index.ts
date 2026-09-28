@@ -45,3 +45,6 @@ export async function runBlenderExport(
     throw new Error(`Blender export failed with code ${result.code}: ${result.stderr.trim()}`);
   }
 }
+
+export * from "./importer.js";
+

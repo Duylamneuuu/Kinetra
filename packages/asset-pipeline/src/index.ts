@@ -7,3 +7,4 @@ export * from "./optimizer.js";
 export * from "./synthetic.js";
 export * from "./watcher.js";
 export * from "./reimport.js";
+export * from "./coordinator.js";
