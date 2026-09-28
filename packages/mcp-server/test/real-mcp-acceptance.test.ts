@@ -673,3 +673,57 @@ test(
     }
   },
 );
+
+test(
+  "Scenario L: DEV RUNTIME PERFORMANCE — MCP tool test.runAcceptance executes performance sample and verifies budget",
+  { skip: process.platform !== "win32", timeout: 60_000 },
+  async () => {
+    const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
+
+    const perfManifest: AcceptanceManifest = {
+      schemaVersion: 1,
+      suite: "p8-mcp-performance-budget",
+      seed: 42,
+      target: "runtime",
+      steps: [
+        { type: "runtime.start", sceneId },
+        { type: "runtime.step", steps: 5 },
+        {
+          type: "performance.sample",
+          warmupFrames: 5,
+          sampleFrames: 15,
+        },
+        {
+          type: "assert.performanceBudget",
+          budget: {
+            "renderer.drawCalls": { max: 100 },
+            "frame.p95Ms": { max: 120 },
+          },
+        },
+        { type: "runtime.stop" },
+      ],
+    };
+
+    try {
+      const result = await client.callTool("test.runAcceptance", {
+        manifest: perfManifest,
+        target: "runtime",
+      });
+
+      assert.notEqual(result.isError, true, "Tool call must not return isError");
+      assert.ok(result.content.length > 0);
+
+      const report = JSON.parse(result.content[0]?.text ?? "{}") as AcceptanceReport;
+      assert.equal(report.passed, true, `Report must pass: ${report.failureReason}`);
+      assert.ok(report.observations?.performance, "Must expose performance evidence");
+      const perf = report.observations.performance as Record<string, any>;
+      assert.equal(perf.sampleCount, 15);
+      assert.equal(perf.executionMode, "stepped");
+      assert.ok(perf.renderer?.drawCalls >= 0);
+      assert.equal(report.observations?.performanceViolations, undefined);
+    } finally {
+      await client.close();
+    }
+  },
+);
+

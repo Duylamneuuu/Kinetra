@@ -6,4 +6,5 @@ export * from "./electron-runtime.js";
 export * from "./packaged-resolver.js";
 export * from "./visual.js";
 export * from "./critique.js";
+export * from "./performance.js";
 

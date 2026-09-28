@@ -30,6 +30,16 @@ if (userDataDirArg) {
   app.setPath("userData", userDataDirArg);
 }
 
+const captureModeArg =
+  process.env.KINETRA_CAPTURE_MODE ||
+  process.argv
+    .find((arg) => arg.startsWith("--capture-mode="))
+    ?.slice("--capture-mode=".length);
+const captureMode =
+  captureModeArg === "visual" || process.argv.includes("--capture-mode=visual")
+    ? "visual"
+    : "performance";
+
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 interface BridgeRequest {
@@ -154,7 +164,11 @@ function createWindow(): BrowserWindow {
   });
 
   const indexPath = join(__dirname, "..", "web", "index.html");
-  void window.loadFile(indexPath);
+  void window.loadFile(indexPath, {
+    query: {
+      captureMode,
+    },
+  });
 
   return window;
 }
@@ -234,6 +248,8 @@ async function handleBridgeRequest(
         execPath: process.execPath,
         platform: process.platform,
         arch: process.arch,
+        captureMode,
+        preserveDrawingBuffer: captureMode === "visual",
       };
 
     case "runtime.start":
@@ -244,6 +260,7 @@ async function handleBridgeRequest(
     case "runtime.injectInput":
     case "runtime.readLogs":
     case "runtime.step":
+    case "performance.sample":
     case "asset.register":
     case "animation.play":
     case "animation.crossfade":

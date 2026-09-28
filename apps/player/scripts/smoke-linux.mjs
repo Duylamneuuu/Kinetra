@@ -202,10 +202,15 @@ async function runIteration({
       return "ready=true";
     });
 
-    await check("runtime.hostInfo identifies Linux", async () => {
+    await check("runtime.hostInfo identifies Linux and performant renderer mode", async () => {
       const hostInfo = await host.getHostInfo();
       if (hostInfo.platform !== "linux") {
         throw new Error(`expected platform linux, got ${hostInfo.platform}`);
+      }
+      if (hostInfo.captureMode !== "performance" || hostInfo.preserveDrawingBuffer !== false) {
+        throw new Error(
+          `expected performant shipping renderer config, got captureMode=${hostInfo.captureMode}, preserveDrawingBuffer=${hostInfo.preserveDrawingBuffer}`,
+        );
       }
       hostInfoSummary = summarizeHostInfo(hostInfo);
       return hostInfoSummary;
@@ -285,6 +290,22 @@ async function runIteration({
         );
       }
       return `entries=${logs.length} errors=0`;
+    });
+
+    await check("performance.sample collects structured telemetry", async () => {
+      const perf = await host.samplePerformance({ warmupFrames: 5, sampleFrames: 15 });
+      if (perf.sampleCount !== 15 || perf.warmupSamples !== 5) {
+        throw new Error(
+          `unexpected sample counts: sample=${perf.sampleCount}, warmup=${perf.warmupSamples}`,
+        );
+      }
+      if (perf.renderer.drawCalls <= 0) {
+        throw new Error(`expected positive draw calls, got ${perf.renderer.drawCalls}`);
+      }
+      if (perf.frame.p50Ms > perf.frame.p95Ms || perf.frame.p95Ms > perf.frame.maxMs) {
+        throw new Error(`non-monotonic percentiles: ${JSON.stringify(perf.frame)}`);
+      }
+      return `drawCalls=${perf.renderer.drawCalls} tris=${perf.renderer.triangles} p95=${perf.frame.p95Ms.toFixed(1)}ms`;
     });
 
     await check("runtime.stop", async () => {

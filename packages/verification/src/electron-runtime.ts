@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import type { ProjectDocument } from "@kinetra/project-model";
+import type { RuntimePerformanceEvidence } from "./performance.js";
 
 export type RuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
@@ -126,6 +127,10 @@ export interface RuntimeQueryResult {
   state?: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
   metrics?: Record<string, number>;
+  renderer?: {
+    captureMode: "performance" | "visual";
+    preserveDrawingBuffer: boolean;
+  };
   assets?: {
     byId: Record<
       string,
@@ -211,6 +216,12 @@ export interface ElectronRuntimeHostOptions {
    * default host pass nothing and are unaffected.
    */
   electronArgs?: string[];
+  /**
+   * Renderer capture mode.
+   * - `"performance"` (default): normal shipping renderer configuration (`preserveDrawingBuffer: false`).
+   * - `"visual"`: verification capture configuration (`preserveDrawingBuffer: true`).
+   */
+  captureMode?: "performance" | "visual";
 }
 
 export type ElectronRuntimeTransport = "pipe" | "stdio";
@@ -274,6 +285,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
   readonly userDataDir: string | undefined;
   readonly transport: ElectronRuntimeTransport;
   readonly electronArgs: readonly string[];
+  readonly captureMode: "performance" | "visual";
 
   #child: ChildProcessWithoutNullStreams | undefined;
   #server: Server | undefined;
@@ -304,6 +316,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.userDataDir = options.userDataDir;
     this.transport = options.transport ?? "pipe";
     this.electronArgs = Object.freeze([...(options.electronArgs ?? [])]);
+    this.captureMode = options.captureMode === "visual" ? "visual" : "performance";
   }
 
   async start(
@@ -700,9 +713,21 @@ export class ElectronRuntimeHost implements RuntimeHost {
     execPath: string;
     platform: string;
     arch: string;
+    captureMode?: "performance" | "visual";
+    preserveDrawingBuffer?: boolean;
   }> {
     await this.#ensureProcess();
     return this.#request("runtime.hostInfo", {});
+  }
+
+  async samplePerformance(options?: {
+    warmupFrames?: number;
+    sampleFrames?: number;
+    fixedDeltaSeconds?: number;
+    mode?: "stepped" | "continuous";
+  }): Promise<RuntimePerformanceEvidence> {
+    await this.#ensureProcess();
+    return this.#request<RuntimePerformanceEvidence>("performance.sample", options ?? {});
   }
 
   async close(): Promise<void> {
@@ -866,6 +891,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       KINETRA_RUNTIME_BRIDGE_PIPE: pipePath,
       KINETRA_USER_DATA_DIR: effectiveUserDataDir,
       ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
+      KINETRA_CAPTURE_MODE: this.captureMode,
     };
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
@@ -919,6 +945,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       KINETRA_RUNTIME_BRIDGE_STDIO: "1",
       KINETRA_USER_DATA_DIR: effectiveUserDataDir,
       ...(this.saveDir ? { KINETRA_SAVE_DIR: this.saveDir } : {}),
+      KINETRA_CAPTURE_MODE: this.captureMode,
     };
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
@@ -978,6 +1005,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return [
       ...(this.saveDir ? [`--save-dir=${this.saveDir}`] : []),
       `--user-data-dir=${effectiveUserDataDir}`,
+      `--capture-mode=${this.captureMode}`,
     ];
   }
 

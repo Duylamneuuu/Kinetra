@@ -339,3 +339,31 @@ if (visualRun.status !== 0) {
 
 console.log("Packaged Windows perceptual visual verification tests passed successfully.");
 
+const performanceTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-performance.test.js",
+);
+
+console.log("Running real packaged runtime performance test suite...");
+const performanceRun = spawnSync(process.execPath, ["--test", performanceTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (performanceRun.status !== 0) {
+  throw new Error(`Packaged performance test failed with exit code ${String(performanceRun.status)}`);
+}
+
+console.log("Packaged Windows runtime performance tests passed successfully.");
+
+
