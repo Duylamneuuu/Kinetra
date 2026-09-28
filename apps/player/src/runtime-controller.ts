@@ -217,6 +217,56 @@ export interface PlayerRuntimeAssetsQueryState {
   byId: Record<string, PlayerRuntimeAssetQueryInfo>;
 }
 
+export interface PlayerRuntimePerformanceTiming {
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  maxMs: number;
+}
+
+export interface PlayerRuntimePerformanceRendererMetrics {
+  drawCalls: number;
+  triangles: number;
+  points: number;
+  lines: number;
+  geometries: number;
+  textures: number;
+}
+
+export interface PlayerRuntimePerformanceSceneMetrics {
+  objectCount: number;
+  visibleObjectCount: number;
+  modelInstanceCount: number;
+  skinnedMeshCount: number;
+  activeAnimationMixerCount: number;
+}
+
+export interface PlayerRuntimePerformancePhysicsMetrics {
+  bodyCount: number;
+  colliderCount: number;
+}
+
+export interface PlayerRuntimePerformanceEvidence {
+  sampleCount: number;
+  warmupSamples: number;
+  executionMode: "stepped" | "continuous";
+  frame: PlayerRuntimePerformanceTiming;
+  simulation: PlayerRuntimePerformanceTiming;
+  render: PlayerRuntimePerformanceTiming;
+  renderer: PlayerRuntimePerformanceRendererMetrics;
+  scene: PlayerRuntimePerformanceSceneMetrics;
+  physics?: PlayerRuntimePerformancePhysicsMetrics;
+}
+
+export interface PlayerRuntimeRendererState {
+  captureMode: "performance" | "visual";
+  preserveDrawingBuffer: boolean;
+}
+
+export interface PlayerRuntimeControllerOptions {
+  captureMode?: "performance" | "visual";
+}
+
 export interface PlayerRuntimeQueryResult {
   running: boolean;
   sceneId?: string;
@@ -228,6 +278,7 @@ export interface PlayerRuntimeQueryResult {
   game?: Record<string, unknown>;
   shell?: { mode: GameShellMode; isPaused: boolean };
   metrics?: Record<string, number>;
+  renderer?: PlayerRuntimeRendererState;
   assets?: PlayerRuntimeAssetsQueryState | undefined;
 }
 
@@ -308,13 +359,20 @@ export class PlayerRuntimeController {
   #gamepadProvider: GamepadSnapshotProvider = new BrowserGamepadSnapshotProvider();
   #activeKeys = new Set<string>();
   #lastPausePressed = false;
+  readonly captureMode: "performance" | "visual";
+  readonly preserveDrawingBuffer: boolean;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    options?: PlayerRuntimeControllerOptions,
+  ) {
+    this.captureMode = options?.captureMode === "visual" ? "visual" : "performance";
+    this.preserveDrawingBuffer = this.captureMode === "visual";
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       powerPreference: "high-performance",
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: this.preserveDrawingBuffer,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -1847,6 +1905,10 @@ export class PlayerRuntimeController {
         entities: [],
         audio: this.#audio.getState(),
         shell: { mode: this.#shellMode, isPaused: this.#paused },
+        renderer: {
+          captureMode: this.captureMode,
+          preserveDrawingBuffer: this.preserveDrawingBuffer,
+        },
       };
     }
 
@@ -1973,6 +2035,10 @@ export class PlayerRuntimeController {
       metrics: {
         assetTemplateParseCount: this.#runtime?.assetTemplateParseCount ?? 0,
         instanceCount: this.#runtime?.instanceCount ?? 0,
+      },
+      renderer: {
+        captureMode: this.captureMode,
+        preserveDrawingBuffer: this.preserveDrawingBuffer,
       },
       assets: this.#getAssetsQueryState(),
     };
@@ -2198,6 +2264,116 @@ export class PlayerRuntimeController {
     return dataUrl.replace(/^data:image\/png;base64,/, "");
   }
 
+  async samplePerformance(options: {
+    warmupFrames?: number;
+    sampleFrames?: number;
+    fixedDeltaSeconds?: number;
+    mode?: "stepped" | "continuous";
+  } = {}): Promise<PlayerRuntimePerformanceEvidence> {
+    const warmupFrames = options.warmupFrames ?? 10;
+    const sampleFrames = options.sampleFrames ?? 60;
+    const fixedDeltaSeconds = options.fixedDeltaSeconds ?? 1 / 60;
+    const mode = options.mode === "continuous" ? "continuous" : "stepped";
+
+    // 1. Warm-up frames (unmeasured)
+    for (let i = 0; i < warmupFrames; i++) {
+      if (!this.#paused) {
+        this.#scripts.update(fixedDeltaSeconds);
+        this.#updateRootMotion(fixedDeltaSeconds);
+        if (this.#physics) {
+          this.#physics.step(fixedDeltaSeconds);
+          this.#syncTransformsFromPhysics();
+        }
+        if (this.#runtime) {
+          this.#runtime.updateAnimation(fixedDeltaSeconds);
+        }
+      }
+      this.#inputRouter.endStep();
+      this.renderOnce();
+    }
+
+    // 2. Measured sample frames
+    const frameSamples: number[] = [];
+    const simSamples: number[] = [];
+    const renderSamples: number[] = [];
+
+    let peakCalls = 0;
+    let peakTriangles = 0;
+    let peakPoints = 0;
+    let peakLines = 0;
+
+    for (let i = 0; i < sampleFrames; i++) {
+      const simStart = performance.now();
+      if (!this.#paused) {
+        this.#scripts.update(fixedDeltaSeconds);
+        this.#updateRootMotion(fixedDeltaSeconds);
+        if (this.#physics) {
+          this.#physics.step(fixedDeltaSeconds);
+          this.#syncTransformsFromPhysics();
+        }
+        if (this.#runtime) {
+          this.#runtime.updateAnimation(fixedDeltaSeconds);
+        }
+      }
+      this.#inputRouter.endStep();
+      const simMs = Math.max(0, performance.now() - simStart);
+
+      const renderStart = performance.now();
+      this.renderOnce();
+      const renderMs = Math.max(0, performance.now() - renderStart);
+
+      const frameMs = simMs + renderMs;
+
+      simSamples.push(simMs);
+      renderSamples.push(renderMs);
+      frameSamples.push(frameMs);
+
+      const calls = this.renderer.info.render.calls;
+      const triangles = this.renderer.info.render.triangles;
+      const points = this.renderer.info.render.points;
+      const lines = this.renderer.info.render.lines;
+
+      if (calls > peakCalls) peakCalls = calls;
+      if (triangles > peakTriangles) peakTriangles = triangles;
+      if (points > peakPoints) peakPoints = points;
+      if (lines > peakLines) peakLines = lines;
+    }
+
+    const sceneMetrics = this.#runtime?.getSceneMetrics() ?? {
+      objectCount: 0,
+      visibleObjectCount: 0,
+      modelInstanceCount: 0,
+      skinnedMeshCount: 0,
+      activeAnimationMixerCount: 0,
+    };
+
+    const physicsMetrics = this.#physics
+      ? {
+          bodyCount: this.#physics.stats().bodies,
+          colliderCount: this.#physics.stats().colliders,
+        }
+      : undefined;
+
+    return {
+      sampleCount: sampleFrames,
+      warmupSamples: warmupFrames,
+      executionMode: mode,
+      frame: calculatePercentiles(frameSamples),
+      simulation: calculatePercentiles(simSamples),
+      render: calculatePercentiles(renderSamples),
+      renderer: {
+        drawCalls: peakCalls,
+        triangles: peakTriangles,
+        points: peakPoints,
+        lines: peakLines,
+        geometries: this.renderer.info.memory.geometries,
+        textures: this.renderer.info.memory.textures,
+      },
+      scene: sceneMetrics,
+      ...(physicsMetrics ? { physics: physicsMetrics } : {}),
+    };
+  }
+
   frame(deltaSeconds = 1 / 60): void {
     if (!this.#stepped) {
       const pad = this.#gamepadProvider.getSnapshot();
@@ -2277,4 +2453,30 @@ export class PlayerRuntimeController {
       ...(data ? { data: structuredClone(data) } : {}),
     });
   }
+}
+
+function calculatePercentiles(samples: number[]): PlayerRuntimePerformanceTiming {
+  if (samples.length === 0) {
+    return { p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 };
+  }
+
+  const sorted = [...samples].sort((a, b) => a - b);
+
+  const getPercentile = (p: number): number => {
+    if (sorted.length === 1) {
+      return sorted[0]!;
+    }
+    const index = (p / 100) * (sorted.length - 1);
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    const weight = index - lower;
+    return sorted[lower]! * (1 - weight) + sorted[upper]! * weight;
+  };
+
+  return {
+    p50Ms: Number(getPercentile(50).toFixed(3)),
+    p95Ms: Number(getPercentile(95).toFixed(3)),
+    p99Ms: Number(getPercentile(99).toFixed(3)),
+    maxMs: Number(sorted[sorted.length - 1]!.toFixed(3)),
+  };
 }

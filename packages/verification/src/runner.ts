@@ -23,6 +23,11 @@ import type {
   VisualCritiqueProvider,
   VisualCritiqueReport,
 } from "./critique.js";
+import {
+  evaluatePerformanceBudget,
+  type RuntimePerformanceEvidence,
+  type PerformanceBudgetViolation,
+} from "./performance.js";
 
 const MAX_DIAGNOSTIC_KEYS = 12;
 
@@ -127,12 +132,15 @@ export interface StepExecutionContext {
     { bytes: Uint8Array; evidence: VisualFrameEvidence; decoded: DecodedImage }
   >;
   options: AcceptanceRunnerOptions;
+  lastPerformanceEvidence?: RuntimePerformanceEvidence | undefined;
 }
 
 export interface StepExecutionOutput {
   visualEvidence?: VisualFrameEvidence | undefined;
   visualComparison?: VisualComparison | undefined;
   critiqueReport?: VisualCritiqueReport | undefined;
+  performanceEvidence?: RuntimePerformanceEvidence | undefined;
+  performanceViolations?: PerformanceBudgetViolation[] | undefined;
   message?: string | undefined;
 }
 
@@ -620,6 +628,68 @@ async function executeStep(
 
       return { critiqueReport: report };
     }
+
+    case "performance.sample": {
+      if (typeof probe.samplePerformance !== "function") {
+        throw new StepAssertionError(
+          "performance.sample: Runtime probe does not support samplePerformance",
+          "function",
+          undefined,
+        );
+      }
+      const evidence = await probe.samplePerformance({
+        ...(step.warmupFrames !== undefined ? { warmupFrames: step.warmupFrames } : {}),
+        ...(step.sampleFrames !== undefined ? { sampleFrames: step.sampleFrames } : {}),
+        ...(step.fixedDeltaSeconds !== undefined ? { fixedDeltaSeconds: step.fixedDeltaSeconds } : {}),
+        ...(step.mode !== undefined ? { mode: step.mode } : {}),
+      });
+      context.lastPerformanceEvidence = evidence;
+      return {
+        message: `Sampled ${evidence.sampleCount} frames (${evidence.executionMode}) - frame p95: ${evidence.frame.p95Ms}ms, drawCalls: ${evidence.renderer.drawCalls}, tris: ${evidence.renderer.triangles}`,
+        performanceEvidence: evidence,
+      };
+    }
+
+    case "assert.performanceBudget": {
+      let evidence = context.lastPerformanceEvidence;
+      if (!evidence) {
+        if (typeof probe.samplePerformance === "function") {
+          evidence = await probe.samplePerformance();
+          context.lastPerformanceEvidence = evidence;
+        } else {
+          throw new StepAssertionError(
+            "assert.performanceBudget: No performance evidence has been sampled and probe cannot sample",
+            "RuntimePerformanceEvidence",
+            undefined,
+          );
+        }
+      }
+
+      const evaluation = evaluatePerformanceBudget(evidence, step, {
+        platform: process.platform,
+      });
+
+      if (!evaluation.passed) {
+        const violationSummary = evaluation.violations
+          .map((v) => `${v.metric} actual ${v.actual} exceeds ${v.comparison} ${v.limit}`)
+          .join("; ");
+        throw new StepAssertionError(
+          `performance.budgetExceeded: ${violationSummary}`,
+          step.budget,
+          {
+            violations: evaluation.violations,
+            evidence,
+            platform: evaluation.platform,
+            sampleCount: evidence.sampleCount,
+          },
+        );
+      }
+
+      return {
+        message: `Performance budget passed (${evaluation.profile ?? "default"})`,
+        performanceEvidence: evidence,
+      };
+    }
   }
 }
 
@@ -650,6 +720,8 @@ export class AcceptanceRunner {
 
     const visualCaptures: Record<string, VisualFrameEvidence> = {};
     const critiqueReports: VisualCritiqueReport[] = [];
+    let lastPerformanceEvidence: RuntimePerformanceEvidence | undefined;
+    const allPerformanceViolations: PerformanceBudgetViolation[] = [];
 
     try {
       for (let index = 0; index < manifest.steps.length; index++) {
@@ -670,6 +742,9 @@ export class AcceptanceRunner {
           if (output?.critiqueReport) {
             critiqueReports.push(output.critiqueReport);
           }
+          if (output?.performanceEvidence) {
+            lastPerformanceEvidence = output.performanceEvidence;
+          }
           steps.push({
             index,
             type: step.type,
@@ -685,6 +760,9 @@ export class AcceptanceRunner {
             ...(output?.critiqueReport !== undefined
               ? { critiqueReport: output.critiqueReport }
               : {}),
+            ...(output?.performanceEvidence !== undefined
+              ? { performanceEvidence: output.performanceEvidence }
+              : {}),
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -696,6 +774,13 @@ export class AcceptanceRunner {
                 : undefined);
           const actual = isAssertion ? error.actual : undefined;
           const diagnostics = isAssertion ? error.diagnostics : undefined;
+          const violations =
+            isAssertion && actual && typeof actual === "object" && Array.isArray((actual as any).violations)
+              ? ((actual as any).violations as PerformanceBudgetViolation[])
+              : undefined;
+          if (violations) {
+            allPerformanceViolations.push(...violations);
+          }
           steps.push({
             index,
             type: step.type,
@@ -706,6 +791,7 @@ export class AcceptanceRunner {
             ...(expected !== undefined ? { expected } : {}),
             ...(actual !== undefined ? { actual } : {}),
             ...(diagnostics !== undefined ? { diagnostics } : {}),
+            ...(violations !== undefined ? { performanceViolations: violations } : {}),
           });
           break;
         }
@@ -743,6 +829,10 @@ export class AcceptanceRunner {
         platform: process.platform,
         ...(Object.keys(visualCaptures).length > 0 ? { visualCaptures } : {}),
         ...(critiqueReports.length > 0 ? { critiqueReports } : {}),
+        ...(lastPerformanceEvidence ? { performance: lastPerformanceEvidence } : {}),
+        ...(allPerformanceViolations.length > 0
+          ? { performanceViolations: allPerformanceViolations }
+          : {}),
       },
     };
   }

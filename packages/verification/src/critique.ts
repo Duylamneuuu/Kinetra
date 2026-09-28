@@ -35,6 +35,8 @@ export interface VisualCritiqueProvider {
 
 /**
  * Deterministic test/fake critique provider for unit and integration contract testing.
+ *
+ * @internal Testing-only fixture. Do not use as a production vision critique provider.
  */
 export class FakeVisualCritiqueProvider implements VisualCritiqueProvider {
   readonly name: string = "fake-critique-provider";

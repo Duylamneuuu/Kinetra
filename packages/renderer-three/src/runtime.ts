@@ -74,6 +74,14 @@ export interface EntityAnimatorSession {
   rootMotion?: EntityRootMotionSession | undefined;
 }
 
+export interface ThreeSceneMetrics {
+  objectCount: number;
+  visibleObjectCount: number;
+  modelInstanceCount: number;
+  skinnedMeshCount: number;
+  activeAnimationMixerCount: number;
+}
+
 function makeObject(entity: EntityDefinition): THREE.Object3D {
   const camera = asObject(entity.components.Camera);
   if (camera) {
@@ -318,6 +326,32 @@ export class ThreeSceneRuntime {
 
   getInstance(entityId: string): ModelInstance | undefined {
     return this.#instances.get(entityId);
+  }
+
+  getSceneMetrics(): ThreeSceneMetrics {
+    let objectCount = 0;
+    let visibleObjectCount = 0;
+    let skinnedMeshCount = 0;
+
+    this.scene.traverse((obj) => {
+      if (obj !== this.scene) {
+        objectCount++;
+        if (obj.visible) {
+          visibleObjectCount++;
+        }
+        if ((obj as THREE.SkinnedMesh).isSkinnedMesh) {
+          skinnedMeshCount++;
+        }
+      }
+    });
+
+    return {
+      objectCount,
+      visibleObjectCount,
+      modelInstanceCount: this.#instances.size,
+      skinnedMeshCount,
+      activeAnimationMixerCount: this.#mixers.size,
+    };
   }
 
   getTemplateCache(): ModelTemplateCache {

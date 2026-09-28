@@ -8,6 +8,7 @@ import type {
   RuntimeProbeHost,
   RuntimeSnapshot,
 } from "./types.js";
+import type { RuntimePerformanceEvidence } from "./performance.js";
 
 export interface KinetraRuntimeProbeOptions {
   host: RuntimeProbeHost;
@@ -351,6 +352,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
       running: query.running,
       ...(sceneId !== undefined ? { sceneId } : {}),
       ...(query.shell !== undefined ? { shell: query.shell } : {}),
+      ...(query.renderer !== undefined ? { renderer: query.renderer } : {}),
       state: {
         ...(query.projectRevision !== undefined
           ? { projectRevision: query.projectRevision }
@@ -363,6 +365,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         ...(query.gameplay ? { gameplay: query.gameplay } : {}),
         ...(query.game ? { game: query.game } : {}),
         ...(query.shell ? { shell: query.shell } : {}),
+        ...(query.renderer ? { renderer: query.renderer } : {}),
       },
     };
   }
@@ -390,5 +393,17 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     // Real runtime metrics are not yet tracked by the player.
     // Return empty metrics truthfully per architectural rule.
     return {};
+  }
+
+  async samplePerformance(options?: {
+    warmupFrames?: number;
+    sampleFrames?: number;
+    fixedDeltaSeconds?: number;
+    mode?: "stepped" | "continuous";
+  }): Promise<RuntimePerformanceEvidence> {
+    if (typeof this.#host.samplePerformance === "function") {
+      return this.#host.samplePerformance(options);
+    }
+    throw new Error("Runtime probe host does not support performance sampling");
   }
 }

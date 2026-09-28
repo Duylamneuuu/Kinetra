@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ProjectDocument } from "@kinetra/project-model";
 import type { VisualFrameEvidence, VisualComparison } from "./visual.js";
 import type { VisualCritiqueReport } from "./critique.js";
+import type { RuntimePerformanceEvidence, PerformanceBudgetViolation } from "./performance.js";
 
 export interface RuntimeInput {
   action:string;
@@ -15,6 +16,10 @@ export interface RuntimeSnapshot {
   sceneId?: string | undefined;
   state: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
+  renderer?: {
+    captureMode: "performance" | "visual";
+    preserveDrawingBuffer: boolean;
+  };
 }
 
 export interface RuntimeLog {
@@ -112,6 +117,10 @@ export interface RuntimeProbeHost {
     game?: Record<string, unknown>;
     shell?: { mode: string; isPaused: boolean };
     metrics?: Record<string, number>;
+    renderer?: {
+      captureMode: "performance" | "visual";
+      preserveDrawingBuffer: boolean;
+    };
     assets?: {
       byId: Record<
         string,
@@ -197,6 +206,12 @@ export interface RuntimeProbeHost {
     dataBase64: string,
     options?: { fingerprint?: string; sourceHash?: string },
   ): Promise<unknown>;
+  samplePerformance?(options?: {
+    warmupFrames?: number;
+    sampleFrames?: number;
+    fixedDeltaSeconds?: number;
+    mode?: "stepped" | "continuous";
+  }): Promise<RuntimePerformanceEvidence>;
 }
 
 
@@ -263,6 +278,12 @@ export interface RuntimeProbe {
   captureSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   getSave?(slotId?: string): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }>;
   loadSave?(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{ success: boolean; slotId?: string; schemaVersion?: number; error?: string }>;
+  samplePerformance?(options?: {
+    warmupFrames?: number;
+    sampleFrames?: number;
+    fixedDeltaSeconds?: number;
+    mode?: "stepped" | "continuous";
+  }): Promise<RuntimePerformanceEvidence>;
 }
 
 export const runtimeStartStepSchema = z.object({
@@ -464,6 +485,39 @@ export const critiqueVisualStepSchema = z.object({
   requireProvider: z.boolean().optional(),
 }).strict();
 
+export const performanceSampleStepSchema = z.object({
+  type: z.literal("performance.sample"),
+  warmupFrames: z.number().int().min(0).optional(),
+  sampleFrames: z.number().int().min(1).optional(),
+  fixedDeltaSeconds: z.number().positive().optional(),
+  mode: z.enum(["stepped", "continuous"]).optional(),
+}).strict();
+
+const performanceThresholdSchema = z.union([
+  z.number(),
+  z.object({
+    max: z.number().optional(),
+    min: z.number().optional(),
+  }).strict(),
+]);
+
+export const assertPerformanceBudgetStepSchema = z.object({
+  type: z.literal("assert.performanceBudget"),
+  profile: z.string().optional(),
+  budget: z.union([
+    z.record(z.string(), performanceThresholdSchema),
+    z.object({
+      profile: z.string().optional(),
+      budgets: z.record(z.string(), performanceThresholdSchema).optional(),
+      windows: z.record(z.string(), performanceThresholdSchema).optional(),
+      linux: z.record(z.string(), performanceThresholdSchema).optional(),
+    }).passthrough(),
+  ]).optional(),
+  budgets: z.record(z.string(), performanceThresholdSchema).optional(),
+  windows: z.record(z.string(), performanceThresholdSchema).optional(),
+  linux: z.record(z.string(), performanceThresholdSchema).optional(),
+}).strict();
+
 export const acceptanceStepSchema = z.discriminatedUnion("type", [
   runtimeStartStepSchema,
   runtimeStopStepSchema,
@@ -497,6 +551,8 @@ export const acceptanceStepSchema = z.discriminatedUnion("type", [
   assertVisualSimilarityStepSchema,
   assertVisualDifferenceStepSchema,
   critiqueVisualStepSchema,
+  performanceSampleStepSchema,
+  assertPerformanceBudgetStepSchema,
 ]);
 
 export type AcceptanceStep = z.infer<typeof acceptanceStepSchema>;
@@ -532,6 +588,8 @@ export interface StepResult {
   visualEvidence?: VisualFrameEvidence | undefined;
   visualComparison?: VisualComparison | undefined;
   critiqueReport?: VisualCritiqueReport | undefined;
+  performanceEvidence?: RuntimePerformanceEvidence | undefined;
+  performanceViolations?: PerformanceBudgetViolation[] | undefined;
 }
 
 export interface AcceptanceReport {

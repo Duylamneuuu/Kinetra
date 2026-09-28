@@ -20,7 +20,10 @@ if (!canvas || !status || !fullscreenButton) {
 }
 
 const statusElement = status;
-const runtime = new PlayerRuntimeController(canvas);
+const searchParams = new URLSearchParams(window.location.search);
+const captureModeParam = searchParams.get("captureMode");
+const captureMode = captureModeParam === "visual" ? "visual" : "performance";
+const runtime = new PlayerRuntimeController(canvas, { captureMode });
 const settingsStore = new SettingsStore(runtime.getStorage());
 const shell = new GameShellController(runtime, settingsStore);
 
@@ -106,6 +109,24 @@ async function handleRuntimeCommand(request: {
       const sourceHash = typeof params.sourceHash === "string" ? params.sourceHash : undefined;
       runtime.updateAsset(assetId, dataBase64, { fingerprint, sourceHash });
       return { updated: true, assetId, ...runtime.query() };
+    }
+
+    case "performance.sample": {
+      const warmupFrames =
+        typeof params.warmupFrames === "number" ? params.warmupFrames : undefined;
+      const sampleFrames =
+        typeof params.sampleFrames === "number" ? params.sampleFrames : undefined;
+      const fixedDeltaSeconds =
+        typeof params.fixedDeltaSeconds === "number"
+          ? params.fixedDeltaSeconds
+          : undefined;
+      const mode = params.mode === "continuous" ? "continuous" : "stepped";
+      return await runtime.samplePerformance({
+        ...(warmupFrames !== undefined ? { warmupFrames } : {}),
+        ...(sampleFrames !== undefined ? { sampleFrames } : {}),
+        ...(fixedDeltaSeconds !== undefined ? { fixedDeltaSeconds } : {}),
+        mode,
+      });
     }
 
     case "runtime.pause": {

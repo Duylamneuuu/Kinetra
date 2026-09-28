@@ -77,6 +77,10 @@ const suites = [
     "Character animation",
     join(repoRoot, "packages/verification/dist/test/real-character-animation.test.js"),
   ],
+  [
+    "Runtime performance",
+    join(repoRoot, "packages/verification/dist/test/real-performance.test.js"),
+  ],
 ];
 
 for (const [label, testFile] of suites) {

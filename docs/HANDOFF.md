@@ -276,6 +276,23 @@ The engine-owned perceptual visual verification and vision critique slice is pro
 - **Truthful Claim**: Provider-neutral vision critique hook proven; authenticated live multimodal AI critique is not yet proven;
 - **Packaged Windows Verification**: Packaged executable smoke test (`smoke:win` on `KinetraGame.exe`) executes `real-visual-verification.test.js` against the real packaged player.
 
+### 15. Runtime Performance Telemetry + Acceptance Budget Gate (P7/P8 Proven)
+
+The engine-owned runtime performance telemetry and acceptance budget gate slice is proven across dev Electron and packaged `KinetraGame.exe`:
+- **Renderer Capture Mode Boundary**: Clear, explicit separation between normal performant shipping renderer (`captureMode: "performance"`, `preserveDrawingBuffer: false`, shipping default) and visual verification capture (`captureMode: "visual"`, `preserveDrawingBuffer: true`). Both modes are truthfully reported through `probe.getHostInfo().captureMode` and `probe.query("renderer")`;
+- **Engine-Owned Evidence Model (`RuntimePerformanceEvidence`)**: Captures sample count, warmup count, execution mode (`stepped` vs `continuous`), percentiles (`p50Ms`, `p95Ms`, `p99Ms`, `maxMs`) for frame, simulation, and render CPU times, alongside authoritative Three.js renderer metrics (`drawCalls`, `triangles`, `geometries`, `textures`), scene metrics (`entityCount`, `componentCount`), and physics stats (`rigidBodyCount`, `colliderCount`);
+- **Deterministic Percentile Interpolation**: Pure TypeScript `calculatePercentiles` using linear rank interpolation `(p / 100) * (len - 1)` with exact floor/ceil weights, ensuring strictly monotonic percentiles (`p50Ms <= p95Ms <= p99Ms <= maxMs`);
+- **Additive Acceptance Manifest Steps**:
+  - `performance.sample`: warms up runtime and collects frame/simulation/render CPU timings and peak Three.js metrics over specified sample frames (`sampleCount`, `warmupCount`);
+  - `assert.performanceBudget`: evaluates collected evidence against structured budget criteria with optional platform overrides (`windows`, `linux`);
+- **Grouped Machine-Readable Budget Violations**: Emits structured `performance.budgetExceeded` violation codes detailing `metric`, `actual`, `budget`, `comparator`, and `platform`;
+- **Controlled Structural Regression Proof**: A deliberate 35-box scene structurally regresses draw calls and fails acceptance (`renderer.drawCalls actual 37 exceeds max 15`), while repairing the scene to 2 boxes passes acceptance with 4 draw calls;
+- **Resource Lifecycle Stability**: 10 repeated scene start/stop cycles prove GPU geometries, textures, and entities clean up deterministically with zero resource leaks;
+- **Multi-Instance Template Parse Deduplication**: Multi-instance assets verify `assetTemplateParseCount == 1` across instances under continuous performance sampling;
+- **Post-Sampling Visual Continuity**: Demonstrates that sampling does not poison rendering; a subsequent visual frame can be captured and verified as a valid PNG;
+- **MCP Server Acceptance Tool Integration**: `test.runAcceptance` runs performance sample and budget gate steps over in-memory transport;
+- **Packaged Windows Verification**: Packaged executable smoke test (`smoke:win` on `KinetraGame.exe`) executes `real-performance.test.js` verifying budget enforcement and clean teardown with zero orphan processes.
+
 ## Completion definition
 
 Kinetra is not "done" when:

@@ -149,6 +149,7 @@ function createHost(): ElectronRuntimeHost {
   return new ElectronRuntimeHost({
     electronArgs: realElectronLaunchArgs(),
     requestTimeoutMs: 30_000,
+    captureMode: "visual",
     ...(process.env.KINETRA_RUNTIME_EXECUTABLE
       ? { runtimeExecutable: process.env.KINETRA_RUNTIME_EXECUTABLE }
       : {}),
@@ -194,6 +195,16 @@ test(
             { type: "runtime.start", sceneId: healthySceneId, assets },
             { type: "wait", milliseconds: 400 },
             { type: "runtime.step", steps: 10, deltaSeconds: 1 / 60 },
+            {
+              type: "assert.equal",
+              path: "renderer.captureMode",
+              expected: "visual",
+            },
+            {
+              type: "assert.equal",
+              path: "renderer.preserveDrawingBuffer",
+              expected: true,
+            },
             {
               type: "assert.equal",
               path: "state.byName.TargetCube.model.loaded",
