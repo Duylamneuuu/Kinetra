@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { ProjectDocument } from "@kinetra/project-model";
+import type { VisualFrameEvidence, VisualComparison } from "./visual.js";
+import type { VisualCritiqueReport } from "./critique.js";
 
 export interface RuntimeInput {
   action:string;
@@ -422,6 +424,46 @@ export const assertScreenshotValidPngStepSchema = z.object({
   minBytes: z.number().int().positive().optional(),
 }).strict();
 
+export const captureFrameStepSchema = z.object({
+  type: z.literal("capture.frame"),
+  id: z.string().min(1),
+  saveArtifact: z.boolean().optional(),
+}).strict();
+
+export const assertVisualNotBlankStepSchema = z.object({
+  type: z.literal("assert.visualNotBlank"),
+  captureId: z.string().min(1).optional(),
+  minOpaqueRatio: z.number().min(0).max(1).optional(),
+  minLuminanceVariance: z.number().min(0).optional(),
+  minEntropy: z.number().min(0).optional(),
+}).strict();
+
+export const assertVisualSimilarityStepSchema = z.object({
+  type: z.literal("assert.visualSimilarity"),
+  referenceCaptureId: z.string().min(1),
+  actualCaptureId: z.string().min(1).optional(),
+  maxChangedPixelRatio: z.number().min(0).max(1).optional(),
+  maxPerceptualHashDistance: z.number().int().min(0).max(64).optional(),
+  maxMeanAbsoluteDifference: z.number().min(0).max(1).optional(),
+  pixelDiffThreshold: z.number().int().nonnegative().optional(),
+}).strict();
+
+export const assertVisualDifferenceStepSchema = z.object({
+  type: z.literal("assert.visualDifference"),
+  referenceCaptureId: z.string().min(1),
+  actualCaptureId: z.string().min(1).optional(),
+  minChangedPixelRatio: z.number().min(0).max(1).optional(),
+  minPerceptualHashDistance: z.number().int().min(0).max(64).optional(),
+}).strict();
+
+export const critiqueVisualStepSchema = z.object({
+  type: z.literal("critique.visual"),
+  captureId: z.string().min(1).optional(),
+  rubric: z.string().min(1),
+  expectedVisualFacts: z.array(z.string()).optional(),
+  requireProvider: z.boolean().optional(),
+}).strict();
+
 export const acceptanceStepSchema = z.discriminatedUnion("type", [
   runtimeStartStepSchema,
   runtimeStopStepSchema,
@@ -450,6 +492,11 @@ export const acceptanceStepSchema = z.discriminatedUnion("type", [
   assertMetricMinStepSchema,
   assertScreenshotSha256StepSchema,
   assertScreenshotValidPngStepSchema,
+  captureFrameStepSchema,
+  assertVisualNotBlankStepSchema,
+  assertVisualSimilarityStepSchema,
+  assertVisualDifferenceStepSchema,
+  critiqueVisualStepSchema,
 ]);
 
 export type AcceptanceStep = z.infer<typeof acceptanceStepSchema>;
@@ -473,15 +520,18 @@ export interface MissingPathDiagnostic {
 }
 
 export interface StepResult {
-  index:number;
-  type:AcceptanceStep["type"];
-  passed:boolean;
-  durationMs:number;
-  message?:string;
-  error?:string;
-  expected?:unknown;
-  actual?:unknown;
-  diagnostics?: MissingPathDiagnostic;
+  index: number;
+  type: AcceptanceStep["type"];
+  passed: boolean;
+  durationMs: number;
+  message?: string | undefined;
+  error?: string | undefined;
+  expected?: unknown | undefined;
+  actual?: unknown | undefined;
+  diagnostics?: MissingPathDiagnostic | undefined;
+  visualEvidence?: VisualFrameEvidence | undefined;
+  visualComparison?: VisualComparison | undefined;
+  critiqueReport?: VisualCritiqueReport | undefined;
 }
 
 export interface AcceptanceReport {

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   AcceptanceManifest,
   AcceptanceReport,
@@ -8,6 +10,19 @@ import type {
   RuntimeProbe,
   StepResult,
 } from "./types.js";
+import {
+  calculateVisualEvidence,
+  compareVisualFrames,
+  decodePng,
+  detectBlankFrame,
+  type DecodedImage,
+  type VisualComparison,
+  type VisualFrameEvidence,
+} from "./visual.js";
+import type {
+  VisualCritiqueProvider,
+  VisualCritiqueReport,
+} from "./critique.js";
 
 const MAX_DIAGNOSTIC_KEYS = 12;
 
@@ -69,12 +84,12 @@ function formatAvailableKeys(keys: string[]): string {
   return extra > 0 ? `${shown.join(", ")} (+${extra} more)` : shown.join(", ");
 }
 
-function stableEqual(a:unknown,b:unknown):boolean{
-  return JSON.stringify(a)===JSON.stringify(b);
+function stableEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function severity(level:RuntimeLog["level"]):number{
-  return{debug:0,info:1,warning:2,error:3}[level];
+function severity(level: RuntimeLog["level"]): number {
+  return { debug: 0, info: 1, warning: 2, error: 3 }[level];
 }
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -99,12 +114,35 @@ export class StepAssertionError extends Error {
   }
 }
 
+export interface AcceptanceRunnerOptions {
+  artifactDir?: string | undefined;
+  critiqueProvider?: VisualCritiqueProvider | undefined;
+}
+
+export interface StepExecutionContext {
+  probe: RuntimeProbe;
+  seed: number;
+  capturedFrames: Map<
+    string,
+    { bytes: Uint8Array; evidence: VisualFrameEvidence; decoded: DecodedImage }
+  >;
+  options: AcceptanceRunnerOptions;
+}
+
+export interface StepExecutionOutput {
+  visualEvidence?: VisualFrameEvidence | undefined;
+  visualComparison?: VisualComparison | undefined;
+  critiqueReport?: VisualCritiqueReport | undefined;
+  message?: string | undefined;
+}
+
 async function executeStep(
-  probe:RuntimeProbe,
-  step:AcceptanceStep,
-  seed:number,
-):Promise<string|undefined>{
-  switch(step.type){
+  context: StepExecutionContext,
+  step: AcceptanceStep,
+): Promise<StepExecutionOutput | void> {
+  const { probe, seed, capturedFrames, options } = context;
+
+  switch (step.type) {
     case "runtime.start":
       if (step.assets && typeof probe.registerAsset === "function") {
         for (const [assetId, dataBase64] of Object.entries(step.assets)) {
@@ -135,24 +173,16 @@ async function executeStep(
       if (typeof probe.step === "function") {
         await probe.step(step.steps, step.deltaSeconds);
       } else {
-        const ms = Math.round((step.steps ?? 1) * (step.deltaSeconds ?? 1 / 60) * 1000);
-        await probe.wait(ms);
-      }
-      return;
-    case "navigation.bake":
-      if (typeof probe.bakeNavigation === "function") {
-        await probe.bakeNavigation({
-          ...(step.positions !== undefined ? { positions: step.positions } : {}),
-          ...(step.indices !== undefined ? { indices: step.indices } : {}),
-          ...(step.config !== undefined ? { config: step.config } : {}),
-        });
+        await probe.wait((step.steps ?? 1) * (step.deltaSeconds ?? 1 / 60) * 1000);
       }
       return;
     case "animation.play":
       if (typeof probe.playAnimation === "function") {
-        await probe.playAnimation(step.entityId, step.clip, {
-          ...(step.loop !== undefined ? { loop: step.loop } : {}),
-        });
+        await probe.playAnimation(
+          step.entityId,
+          step.clip,
+          step.loop !== undefined ? { loop: step.loop } : undefined,
+        );
       }
       return;
     case "animation.stop":
@@ -189,20 +219,25 @@ async function executeStep(
         await probe.setAudioBusMuted(step.busId, step.muted);
       }
       return;
+    case "navigation.bake":
+      if (typeof probe.bakeNavigation === "function") {
+        await probe.bakeNavigation({
+          ...(step.positions ? { positions: step.positions } : {}),
+          ...(step.indices ? { indices: step.indices } : {}),
+          ...(step.config ? { config: step.config } : {}),
+        });
+      }
+      return;
     case "navigation.load":
       if (typeof probe.loadNavigation === "function") {
-        await probe.loadNavigation({
-          dataBase64: step.dataBase64,
-        });
+        await probe.loadNavigation({ dataBase64: step.dataBase64 });
       }
       return;
     case "navigation.closestPoint":
       if (typeof probe.closestPointNavigation === "function") {
         await probe.closestPointNavigation({
           position: step.position,
-          ...(step.halfExtents !== undefined
-            ? { halfExtents: step.halfExtents }
-            : {}),
+          ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
         });
       }
       return;
@@ -211,41 +246,43 @@ async function executeStep(
         await probe.computePathNavigation({
           start: step.start,
           end: step.end,
-          ...(step.halfExtents !== undefined
-            ? { halfExtents: step.halfExtents }
-            : {}),
+          ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
         });
       }
       return;
     case "save.capture":
       if (typeof probe.captureSave === "function") {
-        await probe.captureSave(step.slotId);
+        const result = await probe.captureSave(step.slotId);
+        if (!result.success) {
+          throw new StepAssertionError(`Failed to capture save: ${result.error ?? "unknown error"}`);
+        }
       }
       return;
     case "save.load":
       if (typeof probe.loadSave === "function") {
-        await probe.loadSave({
-          ...(step.slotId !== undefined ? { slotId: step.slotId } : {}),
-          ...(step.envelope !== undefined ? { envelope: step.envelope } : {}),
+        const result = await probe.loadSave({
+          ...(step.slotId ? { slotId: step.slotId } : {}),
+          ...(step.envelope ? { envelope: step.envelope } : {}),
         });
+        if (!result.success) {
+          throw new StepAssertionError(`Failed to load save: ${result.error ?? "unknown error"}`);
+        }
       }
       return;
     case "input":
       await probe.input({
-        action:step.action,
-        phase:step.phase,
-        ...(step.value!==undefined?{value:step.value}:{}),
-        ...(step.durationMs!==undefined?{durationMs:step.durationMs}:{}),
+        action: step.action,
+        phase: step.phase,
+        ...(step.value !== undefined ? { value: step.value } : {}),
+        ...(step.durationMs !== undefined ? { durationMs: step.durationMs } : {}),
       });
       return;
     case "wait":
-      if(step.milliseconds<0) throw new Error("wait milliseconds must be >= 0");
       await probe.wait(step.milliseconds);
       return;
-    case "assert.equal":{
-      const snapshot=await probe.snapshot();
-      const actual=readAssertedPath(snapshot,step.path,step.expected);
-      if(!stableEqual(actual,step.expected)){
+    case "assert.equal": {
+      const actual = readAssertedPath(await probe.snapshot(), step.path, step.expected);
+      if (!stableEqual(actual, step.expected)) {
         throw new StepAssertionError(
           `Expected ${step.path} = ${JSON.stringify(step.expected)}, got ${JSON.stringify(actual)}`,
           step.expected,
@@ -254,16 +291,16 @@ async function executeStep(
       }
       return;
     }
-    case "assert.near":{
-      const actual=readAssertedPath(await probe.snapshot(),step.path,step.expected);
-      if(typeof actual!=="number"){
+    case "assert.near": {
+      const actual = readAssertedPath(await probe.snapshot(), step.path, step.expected);
+      if (typeof actual !== "number") {
         throw new StepAssertionError(
           `Expected numeric value at ${step.path}`,
           step.expected,
           actual,
         );
       }
-      if(Math.abs(actual-step.expected)>step.tolerance){
+      if (Math.abs(actual - step.expected) > step.tolerance) {
         throw new StepAssertionError(
           `Expected ${step.path} near ${step.expected} ± ${step.tolerance}, got ${actual}`,
           step.expected,
@@ -272,13 +309,14 @@ async function executeStep(
       }
       return;
     }
-    case "assert.logAbsent":{
-      const minimum=severity(step.minimumLevel);
-      const offending=(await probe.logs()).find(log=>
-        severity(log.level)>=minimum &&
-        (step.messageIncludes===undefined||log.message.includes(step.messageIncludes))
+    case "assert.logAbsent": {
+      const minimum = severity(step.minimumLevel);
+      const offending = (await probe.logs()).find(
+        (log) =>
+          severity(log.level) >= minimum &&
+          (step.messageIncludes === undefined || log.message.includes(step.messageIncludes)),
       );
-      if(offending){
+      if (offending) {
         throw new StepAssertionError(
           `Unexpected ${offending.level} log: ${offending.message}`,
           `no logs with level >= ${step.minimumLevel}${step.messageIncludes ? ` containing "${step.messageIncludes}"` : ""}`,
@@ -287,21 +325,33 @@ async function executeStep(
       }
       return;
     }
-    case "assert.metricMax":{
-      const value=(await probe.metrics())[step.metric];
-      if(value===undefined) throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.max, undefined);
-      if(value>step.max) throw new StepAssertionError(`Metric "${step.metric}" = ${value} exceeds max ${step.max}`, step.max, value);
+    case "assert.metricMax": {
+      const value = (await probe.metrics())[step.metric];
+      if (value === undefined)
+        throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.max, undefined);
+      if (value > step.max)
+        throw new StepAssertionError(
+          `Metric "${step.metric}" = ${value} exceeds max ${step.max}`,
+          step.max,
+          value,
+        );
       return;
     }
-    case "assert.metricMin":{
-      const value=(await probe.metrics())[step.metric];
-      if(value===undefined) throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.min, undefined);
-      if(value<step.min) throw new StepAssertionError(`Metric "${step.metric}" = ${value} is below min ${step.min}`, step.min, value);
+    case "assert.metricMin": {
+      const value = (await probe.metrics())[step.metric];
+      if (value === undefined)
+        throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.min, undefined);
+      if (value < step.min)
+        throw new StepAssertionError(
+          `Metric "${step.metric}" = ${value} is below min ${step.min}`,
+          step.min,
+          value,
+        );
       return;
     }
-    case "assert.screenshotSha256":{
-      const actual=createHash("sha256").update(await probe.captureFrame()).digest("hex");
-      if(actual!==step.sha256){
+    case "assert.screenshotSha256": {
+      const actual = createHash("sha256").update(await probe.captureFrame()).digest("hex");
+      if (actual !== step.sha256) {
         throw new StepAssertionError(
           `Screenshot hash mismatch: expected ${step.sha256}, got ${actual}`,
           step.sha256,
@@ -310,102 +360,389 @@ async function executeStep(
       }
       return;
     }
-    case "assert.screenshotValidPng":{
-      const bytes=await probe.captureFrame();
-      const minBytes=step.minBytes??1_000;
-      if(bytes.length<minBytes){
+    case "assert.screenshotValidPng": {
+      const bytes = await probe.captureFrame();
+      const minBytes = step.minBytes ?? 1_000;
+      if (bytes.length < minBytes) {
         throw new StepAssertionError(
           `Screenshot too small: expected at least ${minBytes} bytes, got ${bytes.length}`,
           minBytes,
           bytes.length,
         );
       }
-      if(!isValidPng(bytes)){
+      if (!isValidPng(bytes)) {
         throw new StepAssertionError(
           "Screenshot is not a valid PNG (missing PNG magic header)",
           "valid PNG magic header",
-          bytes.length >= 8 ? Array.from(bytes.slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join(" ") : "truncated",
+          bytes.length >= 8
+            ? Array.from(bytes.slice(0, 8))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join(" ")
+            : "truncated",
         );
       }
       return;
+    }
+    case "capture.frame": {
+      const bytes = await probe.captureFrame();
+      const evidence = calculateVisualEvidence(bytes);
+      const decoded = decodePng(bytes);
+      capturedFrames.set(step.id, { bytes, evidence, decoded });
+
+      if (step.saveArtifact && options.artifactDir) {
+        const sanitized = step.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+        await mkdir(options.artifactDir, { recursive: true });
+        await writeFile(join(options.artifactDir, `${sanitized}.png`), bytes);
+      }
+
+      return {
+        visualEvidence: evidence,
+        message: `Captured frame "${step.id}" (${evidence.width}x${evidence.height}, hash: ${evidence.perceptualHash})`,
+      };
+    }
+    case "assert.visualNotBlank": {
+      let frame = step.captureId ? capturedFrames.get(step.captureId) : undefined;
+      if (!frame) {
+        if (step.captureId) {
+          throw new StepAssertionError(
+            `Unknown capture ID "${step.captureId}". Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+            "valid capture ID",
+            step.captureId,
+          );
+        }
+        const bytes = await probe.captureFrame();
+        frame = {
+          bytes,
+          evidence: calculateVisualEvidence(bytes),
+          decoded: decodePng(bytes),
+        };
+      }
+
+      const result = detectBlankFrame(frame.evidence, {
+        ...(step.minOpaqueRatio !== undefined ? { minOpaqueRatio: step.minOpaqueRatio } : {}),
+        ...(step.minLuminanceVariance !== undefined
+          ? { minLuminanceVariance: step.minLuminanceVariance }
+          : {}),
+        ...(step.minEntropy !== undefined ? { minEntropy: step.minEntropy } : {}),
+      });
+
+      if (result.isBlank) {
+        throw new StepAssertionError(
+          `Visual blank frame detected: ${result.reason}`,
+          "non-blank frame with sufficient variance and entropy",
+          {
+            meanLuminance: frame.evidence.meanLuminance,
+            luminanceVariance: frame.evidence.luminanceVariance,
+            entropy: frame.evidence.entropy,
+            opaquePixelRatio: frame.evidence.opaquePixelRatio,
+            reason: result.reason,
+          },
+        );
+      }
+
+      return { visualEvidence: frame.evidence };
+    }
+    case "assert.visualSimilarity": {
+      const ref = capturedFrames.get(step.referenceCaptureId);
+      if (!ref) {
+        throw new StepAssertionError(
+          `Reference capture ID "${step.referenceCaptureId}" not found. Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+          "valid reference capture ID",
+          step.referenceCaptureId,
+        );
+      }
+
+      let actual = step.actualCaptureId ? capturedFrames.get(step.actualCaptureId) : undefined;
+      if (!actual) {
+        if (step.actualCaptureId) {
+          throw new StepAssertionError(
+            `Actual capture ID "${step.actualCaptureId}" not found. Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+            "valid actual capture ID",
+            step.actualCaptureId,
+          );
+        }
+        const bytes = await probe.captureFrame();
+        actual = {
+          bytes,
+          evidence: calculateVisualEvidence(bytes),
+          decoded: decodePng(bytes),
+        };
+      }
+
+      const comparison = compareVisualFrames(ref.bytes, actual.bytes, {
+        ...(step.maxChangedPixelRatio !== undefined
+          ? { maxChangedPixelRatio: step.maxChangedPixelRatio }
+          : {}),
+        ...(step.maxPerceptualHashDistance !== undefined
+          ? { maxPerceptualHashDistance: step.maxPerceptualHashDistance }
+          : {}),
+        ...(step.maxMeanAbsoluteDifference !== undefined
+          ? { maxMeanAbsoluteDifference: step.maxMeanAbsoluteDifference }
+          : {}),
+        ...(step.pixelDiffThreshold !== undefined
+          ? { pixelDiffThreshold: step.pixelDiffThreshold }
+          : {}),
+      });
+
+      if (!comparison.similar) {
+        throw new StepAssertionError(
+          `visual.perceptualMismatch: Frame "${step.actualCaptureId ?? "current"}" differs from reference "${step.referenceCaptureId}" (changedPixels: ${(comparison.changedPixelRatio * 100).toFixed(1)}%, hashDist: ${comparison.perceptualHashDistance}, meanDiff: ${comparison.meanAbsoluteDifference})`,
+          {
+            maxChangedPixelRatio: step.maxChangedPixelRatio ?? 0.05,
+            maxPerceptualHashDistance: step.maxPerceptualHashDistance ?? 8,
+            maxMeanAbsoluteDifference: step.maxMeanAbsoluteDifference ?? 0.08,
+          },
+          {
+            changedPixelRatio: comparison.changedPixelRatio,
+            perceptualHashDistance: comparison.perceptualHashDistance,
+            meanAbsoluteDifference: comparison.meanAbsoluteDifference,
+            referenceCaptureId: step.referenceCaptureId,
+            actualCaptureId: step.actualCaptureId ?? "current",
+          },
+        );
+      }
+
+      return { visualComparison: comparison };
+    }
+    case "assert.visualDifference": {
+      const ref = capturedFrames.get(step.referenceCaptureId);
+      if (!ref) {
+        throw new StepAssertionError(
+          `Reference capture ID "${step.referenceCaptureId}" not found. Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+          "valid reference capture ID",
+          step.referenceCaptureId,
+        );
+      }
+
+      let actual = step.actualCaptureId ? capturedFrames.get(step.actualCaptureId) : undefined;
+      if (!actual) {
+        if (step.actualCaptureId) {
+          throw new StepAssertionError(
+            `Actual capture ID "${step.actualCaptureId}" not found. Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+            "valid actual capture ID",
+            step.actualCaptureId,
+          );
+        }
+        const bytes = await probe.captureFrame();
+        actual = {
+          bytes,
+          evidence: calculateVisualEvidence(bytes),
+          decoded: decodePng(bytes),
+        };
+      }
+
+      const comparison = compareVisualFrames(ref.bytes, actual.bytes);
+      const minChangedPixelRatio = step.minChangedPixelRatio ?? 0.05;
+      const minPerceptualHashDistance = step.minPerceptualHashDistance ?? 6;
+
+      const hasDifference =
+        comparison.changedPixelRatio >= minChangedPixelRatio ||
+        comparison.perceptualHashDistance >= minPerceptualHashDistance;
+
+      if (!hasDifference) {
+        throw new StepAssertionError(
+          `Expected visual difference between "${step.actualCaptureId ?? "current"}" and "${step.referenceCaptureId}", but frames appear perceptually identical (changedPixels: ${(comparison.changedPixelRatio * 100).toFixed(1)}%, hashDist: ${comparison.perceptualHashDistance})`,
+          { minChangedPixelRatio, minPerceptualHashDistance },
+          {
+            changedPixelRatio: comparison.changedPixelRatio,
+            perceptualHashDistance: comparison.perceptualHashDistance,
+            referenceCaptureId: step.referenceCaptureId,
+            actualCaptureId: step.actualCaptureId ?? "current",
+          },
+        );
+      }
+
+      return { visualComparison: comparison };
+    }
+    case "critique.visual": {
+      if (!options.critiqueProvider) {
+        if (step.requireProvider) {
+          throw new StepAssertionError(
+            "visual.providerUnavailable: Visual critique was required by manifest but no VisualCritiqueProvider is configured",
+            "configured VisualCritiqueProvider",
+            undefined,
+          );
+        }
+        return { message: "Visual critique skipped: no VisualCritiqueProvider configured" };
+      }
+
+      let frame = step.captureId ? capturedFrames.get(step.captureId) : undefined;
+      if (!frame) {
+        if (step.captureId) {
+          throw new StepAssertionError(
+            `Capture ID "${step.captureId}" not found for visual critique. Available captures: ${Array.from(capturedFrames.keys()).join(", ") || "(none)"}`,
+            "valid capture ID",
+            step.captureId,
+          );
+        }
+        const bytes = await probe.captureFrame();
+        frame = {
+          bytes,
+          evidence: calculateVisualEvidence(bytes),
+          decoded: decodePng(bytes),
+        };
+      }
+
+      const snapshot = await probe.snapshot().catch(() => undefined);
+      const logs = await probe.logs().catch(() => undefined);
+
+      let report: VisualCritiqueReport;
+      try {
+        report = await options.critiqueProvider.critique({
+          captureId: step.captureId ?? "current",
+          framePng: frame.bytes,
+          evidence: frame.evidence,
+          rubric: step.rubric,
+          ...(step.expectedVisualFacts ? { expectedVisualFacts: step.expectedVisualFacts } : {}),
+          ...(snapshot?.state ? { runtimeState: snapshot.state } : {}),
+          ...(logs ? { recentLogs: logs } : {}),
+        });
+      } catch (err) {
+        throw new StepAssertionError(
+          `visual.providerError: ${err instanceof Error ? err.message : String(err)}`,
+          "successful critique report",
+          undefined,
+        );
+      }
+
+      if (report.verdict === "fail") {
+        const errorMsgs =
+          report.findings
+            .filter((f) => f.severity === "error")
+            .map((f) => f.message)
+            .join("; ") || "visual critique verdict failed";
+        throw new StepAssertionError(
+          `visual.critiqueFailed: ${errorMsgs}`,
+          { verdict: "pass" },
+          report,
+        );
+      }
+
+      return { critiqueReport: report };
     }
   }
 }
 
 export class AcceptanceRunner {
-  constructor(private readonly probe:RuntimeProbe){}
+  constructor(
+    private readonly probe: RuntimeProbe,
+    private readonly options: AcceptanceRunnerOptions = {},
+  ) {}
 
-  async run(manifest:AcceptanceManifest):Promise<AcceptanceReport>{
-    if(manifest.schemaVersion!==1) throw new Error("Unsupported acceptance manifest schema");
-    const started=new Date();
-    const startedPerf=performance.now();
-    const steps:StepResult[]=[];
-    let runtimeStarted=false;
+  async run(manifest: AcceptanceManifest): Promise<AcceptanceReport> {
+    if (manifest.schemaVersion !== 1)
+      throw new Error("Unsupported acceptance manifest schema");
+    const started = new Date();
+    const startedPerf = performance.now();
+    const steps: StepResult[] = [];
+    let runtimeStarted = false;
 
-    try{
-      for(let index=0;index<manifest.steps.length;index++){
-        const step=manifest.steps[index]!;
-        const before=performance.now();
-        try{
-          if(step.type==="runtime.start"){
-            runtimeStarted=true;
-          }else if(step.type==="runtime.stop"){
-            runtimeStarted=false;
+    const capturedFrames = new Map<
+      string,
+      { bytes: Uint8Array; evidence: VisualFrameEvidence; decoded: DecodedImage }
+    >();
+    const context: StepExecutionContext = {
+      probe: this.probe,
+      seed: manifest.seed,
+      capturedFrames,
+      options: this.options,
+    };
+
+    const visualCaptures: Record<string, VisualFrameEvidence> = {};
+    const critiqueReports: VisualCritiqueReport[] = [];
+
+    try {
+      for (let index = 0; index < manifest.steps.length; index++) {
+        const step = manifest.steps[index]!;
+        const before = performance.now();
+        try {
+          if (step.type === "runtime.start") {
+            runtimeStarted = true;
+          } else if (step.type === "runtime.stop") {
+            runtimeStarted = false;
           }
-          await executeStep(this.probe,step,manifest.seed);
-          steps.push({
-            index,type:step.type,passed:true,
-            durationMs:performance.now()-before,
-          });
-        }catch(error){
-          const message=error instanceof Error?error.message:String(error);
-          const isAssertion=error instanceof StepAssertionError;
-          const expected=isAssertion?error.expected:("expected" in step?step.expected:undefined);
-          const actual=isAssertion?error.actual:undefined;
-          const diagnostics=isAssertion?error.diagnostics:undefined;
+          const output = await executeStep(context, step);
+          if (output?.visualEvidence) {
+            if ("id" in step && typeof step.id === "string") {
+              visualCaptures[step.id] = output.visualEvidence;
+            }
+          }
+          if (output?.critiqueReport) {
+            critiqueReports.push(output.critiqueReport);
+          }
           steps.push({
             index,
-            type:step.type,
-            passed:false,
-            durationMs:performance.now()-before,
+            type: step.type,
+            passed: true,
+            durationMs: performance.now() - before,
+            ...(output?.message !== undefined ? { message: output.message } : {}),
+            ...(output?.visualEvidence !== undefined
+              ? { visualEvidence: output.visualEvidence }
+              : {}),
+            ...(output?.visualComparison !== undefined
+              ? { visualComparison: output.visualComparison }
+              : {}),
+            ...(output?.critiqueReport !== undefined
+              ? { critiqueReport: output.critiqueReport }
+              : {}),
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const isAssertion = error instanceof StepAssertionError;
+          const expected = isAssertion
+            ? error.expected
+            : ("expected" in step
+                ? (step as any).expected
+                : undefined);
+          const actual = isAssertion ? error.actual : undefined;
+          const diagnostics = isAssertion ? error.diagnostics : undefined;
+          steps.push({
+            index,
+            type: step.type,
+            passed: false,
+            durationMs: performance.now() - before,
             message,
-            error:message,
-            ...(expected!==undefined?{expected}:{}),
-            ...(actual!==undefined?{actual}:{}),
-            ...(diagnostics!==undefined?{diagnostics}:{}),
+            error: message,
+            ...(expected !== undefined ? { expected } : {}),
+            ...(actual !== undefined ? { actual } : {}),
+            ...(diagnostics !== undefined ? { diagnostics } : {}),
           });
           break;
         }
       }
-    }finally{
-      if(runtimeStarted){
-        try{
+    } finally {
+      capturedFrames.clear(); // Free image buffers
+      if (runtimeStarted) {
+        try {
           await this.probe.stop();
-        }catch{
+        } catch {
           // Clean teardown on failure
         }
       }
     }
 
-    const finished=new Date();
-    const durationMs=performance.now()-startedPerf;
-    const failedSteps=steps.filter((step)=>!step.passed);
-    const failureReason=failedSteps.length>0?failedSteps[0]?.message:undefined;
+    const finished = new Date();
+    const durationMs = performance.now() - startedPerf;
+    const failedSteps = steps.filter((step) => !step.passed);
+    const failureReason = failedSteps.length > 0 ? failedSteps[0]?.message : undefined;
 
-    return{
-      suite:manifest.suite,
-      target:manifest.target,
-      passed:steps.length===manifest.steps.length&&steps.every(step=>step.passed),
+    return {
+      suite: manifest.suite,
+      target: manifest.target,
+      passed: steps.length === manifest.steps.length && steps.every((step) => step.passed),
       durationMs,
-      startedAt:started.toISOString(),
-      finishedAt:finished.toISOString(),
+      startedAt: started.toISOString(),
+      finishedAt: finished.toISOString(),
       steps,
       failedSteps,
-      ...(failureReason!==undefined?{failureReason}:{}),
-      observations:{
-        totalSteps:manifest.steps.length,
-        executedSteps:steps.length,
-        target:manifest.target,
+      ...(failureReason !== undefined ? { failureReason } : {}),
+      observations: {
+        totalSteps: manifest.steps.length,
+        executedSteps: steps.length,
+        target: manifest.target,
+        platform: process.platform,
+        ...(Object.keys(visualCaptures).length > 0 ? { visualCaptures } : {}),
+        ...(critiqueReports.length > 0 ? { critiqueReports } : {}),
       },
     };
   }

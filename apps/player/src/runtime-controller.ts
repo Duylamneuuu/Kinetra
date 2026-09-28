@@ -314,6 +314,7 @@ export class PlayerRuntimeController {
       canvas,
       antialias: true,
       powerPreference: "high-performance",
+      preserveDrawingBuffer: true,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -2189,6 +2190,12 @@ export class PlayerRuntimeController {
     }
 
     this.renderer.render(this.#runtime.scene, this.#camera);
+  }
+
+  captureFrameBase64(): string {
+    this.renderOnce();
+    const dataUrl = this.canvas.toDataURL("image/png");
+    return dataUrl.replace(/^data:image\/png;base64,/, "");
   }
 
   frame(deltaSeconds = 1 / 60): void {

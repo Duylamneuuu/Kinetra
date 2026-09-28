@@ -311,3 +311,31 @@ if (multiInstanceRun.status !== 0) {
 }
 
 console.log("Packaged Windows skinned multi-instance tests passed successfully.");
+
+const visualVerificationTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-visual-verification.test.js",
+);
+
+console.log("Running real packaged perceptual visual verification test suite...");
+const visualRun = spawnSync(process.execPath, ["--test", visualVerificationTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (visualRun.status !== 0) {
+  throw new Error(`Packaged visual verification test failed with exit code ${String(visualRun.status)}`);
+}
+
+console.log("Packaged Windows perceptual visual verification tests passed successfully.");
+
