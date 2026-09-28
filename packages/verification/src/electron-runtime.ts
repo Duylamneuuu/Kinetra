@@ -85,10 +85,14 @@ export interface RuntimeEntityState {
       sharedTemplateId: string;
       skinnedMeshCount: number;
       skeletonCount: number;
+      fingerprint?: string;
+      templateRevision?: number;
     };
     resourceSharing?: {
       templateRefCount: number;
     };
+    assetFingerprint?: string;
+    templateRevision?: number;
     error?: string;
   };
   gameplay?: {
@@ -122,6 +126,20 @@ export interface RuntimeQueryResult {
   state?: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
   metrics?: Record<string, number>;
+  assets?: {
+    byId: Record<
+      string,
+      {
+        assetId: string;
+        sourceHash?: string;
+        fingerprint?: string;
+        importStatus: string;
+        revision?: number;
+        dependentIds?: string[];
+        error?: string;
+      }
+    >;
+  };
 }
 
 
@@ -293,6 +311,10 @@ export class ElectronRuntimeHost implements RuntimeHost {
     sceneId: string,
     projectRevision: number,
     assets?: Record<string, string>,
+    options?: {
+      assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
+      stepped?: boolean;
+    },
   ): Promise<void> {
     await this.#ensureProcess();
     await this.#request("runtime.start", {
@@ -300,12 +322,23 @@ export class ElectronRuntimeHost implements RuntimeHost {
       sceneId,
       projectRevision,
       ...(assets !== undefined ? { assets } : {}),
+      ...(options?.assetMetadata !== undefined ? { assetMetadata: options.assetMetadata } : {}),
+      ...(options?.stepped !== undefined ? { stepped: options.stepped } : {}),
     });
   }
 
-  async registerAsset(assetId: string, dataBase64: string): Promise<void> {
+  async registerAsset(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void> {
     await this.#ensureProcess();
-    await this.#request("asset.register", { assetId, dataBase64 });
+    await this.#request("asset.register", {
+      assetId,
+      dataBase64,
+      ...(options?.fingerprint ? { fingerprint: options.fingerprint } : {}),
+      ...(options?.sourceHash ? { sourceHash: options.sourceHash } : {}),
+    });
   }
 
   async stop(): Promise<void> {
@@ -627,6 +660,30 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async attachModel(entityId: string, assetId: string): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("model.attach", { entityId, assetId });
+  }
+
+  async reloadAsset(
+    assetId: string,
+  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<{ success: boolean; affectedEntities: string[]; error?: string }>(
+      "model.reloadAsset",
+      { assetId },
+    );
+  }
+
+  async updateAsset(
+    assetId: string,
+    dataBase64: string,
+    options?: { fingerprint?: string; sourceHash?: string },
+  ): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("asset.update", {
+      assetId,
+      dataBase64,
+      ...(options?.fingerprint ? { fingerprint: options.fingerprint } : {}),
+      ...(options?.sourceHash ? { sourceHash: options.sourceHash } : {}),
+    });
   }
 
 

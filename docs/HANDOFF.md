@@ -228,6 +228,20 @@ The multi-instance skinned mesh cloning and shared asset resource lifecycle slic
 - **Complete Verification Suite**: 6-scenario real Electron verification suite (`packages/verification/test/real-skinned-multi-instance.test.ts`) passing against dev Electron and packaged Windows executable `KinetraGame.exe`;
 - **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
 
+### 12. Hot Reimport & Dependency-Aware Live Reload (P4 Proven)
+
+The deterministic hot reimport and live runtime reload vertical slice is proven in dev Electron and packaged `KinetraGame.exe`:
+- **Content-Hash Watcher**: `SourceAssetWatcher` watches disk sources, debounces rapid writes (default 100ms), absorbs atomic file replace workflows, and computes content hashes (SHA-256) so touch events and identical saves trigger zero reimports (NOOP);
+- **Deterministic Reimport Service**: `AssetReimportService` executes deterministic import recipes (`GlbDirectImporter`), performs strict GLB validation (`validateGlbHeader`), writes new artifacts to temporary staging files, and atomically replaces target artifact files only after successful validation;
+- **Failure Rollback & Isolation**: When corrupt or invalid source bytes are provided, reimport validation fails safely, the temporary file is discarded, the existing artifact on disk remains intact, the `AssetDatabase` record is preserved at the previous valid fingerprint, and the live running model in Electron remains unaffected;
+- **Transitive Dependency Invalidation**: `AssetDatabase.invalidationSet(assetId)` walks dependency edges in reverse topological order (`A <- B <- C` yields invalidation set `["A", "B", "C"]`), invalidating only affected dependents while unrelated assets (`D`) remain untouched;
+- **Template Cache Invalidation & Single Re-Parse**: `ModelTemplateCache.invalidate(assetId)` and `resolveNewTemplate(assetId, resolver)` safely clear stale cached templates and parse updated GLB bytes once across all dependent entities (`metrics.assetTemplateParseCount` increments exactly once across multiple entities);
+- **Live Entity Reload without Electron Restart**: `ThreeSceneRuntime.reloadAsset(assetId, resolver)` dynamically swaps entity instances without restarting Electron or destroying the scene. It preserves entity IDs, local/world transforms, Rapier physics colliders, and cleanly tears down old `AnimationMixer`s/clips before re-initializing animation graphs;
+- **Multi-Instance Synchronized Reload**: Multiple entities sharing the same asset reload together in a single operation, updating their bounding boxes and revisions synchronously while unrelated entities remain at their prior revision;
+- **Structured Observation**: Query API truthfully exposes `model.assetFingerprint`, `model.templateRevision`, `metrics.assetTemplateParseCount`, and `assets.byId[assetId] = { assetId, sourceHash, fingerprint, importStatus, revision }`;
+- **Comprehensive Real Electron Verification Suite**: 5-scenario real Electron acceptance suite (`packages/verification/test/real-hot-reimport.test.ts`) proving all 22 verification points with valid PNG frame capture;
+- **Full Verification**: 100% pass across full workspace check (`pnpm check`) and packaged Windows binary (`smoke:win` on `KinetraGame.exe`).
+
 ## Completion definition
 
 Kinetra is not "done" when:

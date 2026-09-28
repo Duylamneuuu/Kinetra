@@ -20,7 +20,7 @@ Legend:
 | Linux x64 packaged player | PACKAGED SLICE PROVEN | Portable Linux x64 `KinetraGame` (`package:linux`, `smoke:linux:packaged`) uses the same Electron runtime bridge as Windows. Proof is the packaged binary, not dev Electron: `hostInfo.platform === "linux"`, `arch === "x64"`, `isPackaged === true`, Arena semantic input, real PNG capture, save/load across a packaged-process restart, and clean teardown. |
 | P2 AI-native runtime bridge | CORE PROVEN | Real Electron/Three.js player runtime bridge with named pipe IPC, project instantiation, live entity query, semantic input injection, structured logs, and real PNG capture verified on Windows. Linux cloud smoke proven via cross-platform stdio bridge under xvfb (`pnpm --filter @kinetra/player smoke:linux` + Linux CI): ping/hostInfo/start/query/step/injectInput/captureFrame/stop against Kinetra Arena with valid-PNG and zero-leak teardown proof. |
 | P3 observer editor | WIP | PR #22 is an old stacked implementation reference. Rebuild/port only after P2 is accepted. |
-| P4 Blender/asset pipeline | RUNTIME SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture proven via AcceptanceRunner in Electron. |
+| P4 Blender/asset pipeline | HOT REIMPORT + DEPENDENCY-AWARE LIVE RELOAD SLICE PROVEN | Asset DB/hash/dependency/diagnostic core on main. Real GLB loading via AssetResolver, Three.js GLTFLoader, structured runtime state query, transform preservation, error logging, and PNG capture. Content-hash source watcher (`SourceAssetWatcher`), atomic temp replacement, validation, rollback, and reimport service (`AssetReimportService`). Transitive dependency invalidation (`AssetDatabase.invalidationSet`). Shared asset template cache invalidation (`ModelTemplateCache.invalidate`, `resolveNewTemplate`) and live runtime reload (`ThreeSceneRuntime.reloadAsset`) swapping live entity instances without Electron restart, preserving entity IDs, world transforms, Rapier physics, and re-binding animation graphs. Proven across multi-instance entities, failure rollback, and zero-leak teardown. |
 | P5 animation | SAFE MULTI-INSTANCE SKINNED MODEL LIFECYCLE PROVEN | Reusable parsed asset template cache (`ModelTemplateCache`), ref-counted GPU resource sharing (geometry/textures), isolated instance cloning (`SkeletonUtils.clone()`) with independent skeletons, bones, `AnimationMixer`s, animation graphs, and root-motion sessions, per-instance cloned materials preventing leaks, dynamic attach/detach (`model.detach`/`model.attach`), safe disposal on `refCount === 0`, and zero-leak reload. Text-backed schema-versioned animation graph, deterministic crossfading, real external humanoid retargeting with persistent disk cache reuse, and deterministic root-motion extraction driving authoritative Rapier kinematic character movement without visual double-motion. Verified via real Electron acceptance suite and packaged Windows binary (`KinetraGame.exe`). Locomotion blend trees, IK, and morph targets remain unfinished. |
 | P6 complete-game contracts | RUNTIME SLICES PROVEN | P6 gameplay script/input + save/load + desktop file storage + audio runtime slices proven: ScriptHost lifecycle (onCreate/onStart/onUpdate/onStop/onDestroy), InputRouter semantic action routing (player.moveRight, player.jump), deterministic frame ordering, truthful structured observation (entity.gameplay), versioned save/load persistence (@kinetra/save-state) with atomic restoration and real file-backed desktop storage (multi-process restart, atomic write, path traversal protection, corrupt save resilience), hierarchical audio mixer (@kinetra/audio) with truthful gain/mute propagation, Web Audio decoding/playback via assetId, and AcceptanceRunner proofs verified in live Electron. Complete game shell contracts proven including Main Menu, HUD, Pause menu, audio/input settings, gameplay loop, save/load, and combat progression across dev Electron and packaged binaries. |
 | P7 physics/navigation/perf | RUNTIME SLICES PROVEN | Rapier physics and Recast navigation baselines proven in real Electron runtime via AcceptanceRunner: deterministic fixed-step simulation, gravity fall, floor collision, kinematic character controller clipping, navmesh generation, pathfinding (findPath), agent navigation, and live transform sync. |
@@ -46,13 +46,19 @@ What has meaningful proof:
 - truthful structured runtime query (`entity.model: { assetId, loaded, meshCount, nodeCount, bounds, error }`);
 - structured error log `model.loadFailed` on unresolvable assets;
 - recursive disposal of geometry, material, and texture resources;
-- end-to-end verification via `AcceptanceRunner` and real frame capture.
+- end-to-end verification via `AcceptanceRunner` and real frame capture;
+- content-hash change detection via `SourceAssetWatcher` handling debouncing, touches, and atomic replaces;
+- deterministic `AssetReimportService` with NOOP detection, GLB validation, atomic file replacement, and rollback on failure;
+- transitive dependency graph invalidation (`AssetDatabase.invalidationSet`);
+- runtime template invalidation and pre-resolution (`ModelTemplateCache.invalidate`, `resolveNewTemplate`);
+- live runtime reload (`ThreeSceneRuntime.reloadAsset`) without restarting Electron, swapping live instances, re-binding animation graphs/mixers, and preserving entity IDs and transforms;
+- multi-instance reload proof sharing single template parse across multiple entities;
+- failure rollback leaving valid prior instances intact upon corrupt reimport attempts, and recovering cleanly on valid repairs.
 
 Not yet equivalent to a production importer:
-- hot reimport daemon/watch;
 - thumbnails;
 - Meshopt/Draco/KTX2 final policy;
-- full dependency-aware runtime reload.
+- external asset streaming / background disk thread worker pool.
 
 ### AI asset production (Scenario)
 

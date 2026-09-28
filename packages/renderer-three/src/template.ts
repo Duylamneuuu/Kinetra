@@ -12,16 +12,25 @@ export class ModelAssetTemplate {
   readonly sharedGeometries = new Set<THREE.BufferGeometry>();
   readonly sharedTextures = new Set<THREE.Texture>();
   readonly sharedMaterials = new Set<THREE.Material>();
+  readonly fingerprint?: string | undefined;
+  readonly revision: number;
 
   #refCount = 0;
   #instanceCounter = 0;
   #disposed = false;
 
-  constructor(assetId: string, templateId: string, gltf: GLTF) {
+  constructor(
+    assetId: string,
+    templateId: string,
+    gltf: GLTF,
+    options?: { fingerprint?: string | undefined; revision?: number | undefined },
+  ) {
     this.assetId = assetId;
     this.templateId = templateId;
     this.scene = gltf.scene;
     this.animations = gltf.animations ?? [];
+    this.fingerprint = options?.fingerprint;
+    this.revision = options?.revision ?? 1;
 
     this.scene.traverse((node) => {
       if (node instanceof THREE.Mesh) {
@@ -122,6 +131,8 @@ export class ModelAssetTemplate {
       skinnedMeshCount,
       skeletonCount: instanceSkeletons.size,
       template: this,
+      fingerprint: this.fingerprint,
+      revision: this.revision,
     });
   }
 
@@ -169,6 +180,8 @@ export class ModelInstance {
   readonly skinnedMeshCount: number;
   readonly skeletonCount: number;
   readonly template: ModelAssetTemplate;
+  readonly fingerprint?: string | undefined;
+  readonly revision: number;
   #disposed = false;
 
   constructor(init: {
@@ -185,6 +198,8 @@ export class ModelInstance {
     skinnedMeshCount: number;
     skeletonCount: number;
     template: ModelAssetTemplate;
+    fingerprint?: string | undefined;
+    revision?: number | undefined;
   }) {
     this.assetId = init.assetId;
     this.templateId = init.templateId;
@@ -199,6 +214,8 @@ export class ModelInstance {
     this.skinnedMeshCount = init.skinnedMeshCount;
     this.skeletonCount = init.skeletonCount;
     this.template = init.template;
+    this.fingerprint = init.fingerprint;
+    this.revision = init.revision ?? 1;
   }
 
   get isDisposed(): boolean {
@@ -226,6 +243,7 @@ export class ModelInstance {
 
 export class ModelTemplateCache {
   #templates = new Map<string, ModelAssetTemplate>();
+  #templateRevisions = new Map<string, number>();
   #inFlightLoads = new Map<string, Promise<ModelAssetTemplate>>();
   #parseCount = 0;
 
@@ -245,6 +263,20 @@ export class ModelTemplateCache {
       return undefined;
     }
     return tmpl;
+  }
+
+  invalidate(assetId: string): void {
+    this.#templates.delete(assetId);
+    this.#inFlightLoads.delete(assetId);
+  }
+
+  async resolveNewTemplate(
+    assetId: string,
+    resolver: AssetResolver,
+    loader: GLTFLoader = new GLTFLoader(),
+  ): Promise<ModelAssetTemplate> {
+    this.invalidate(assetId);
+    return this.resolveTemplate(assetId, resolver, loader);
   }
 
   async resolveTemplate(
@@ -268,6 +300,18 @@ export class ModelTemplateCache {
         if (!resolved) {
           throw new Error(`Asset "${assetId}" could not be resolved`);
         }
+
+        const createTemplate = (gltf: GLTF): ModelAssetTemplate => {
+          const revision = (this.#templateRevisions.get(assetId) ?? 0) + 1;
+          this.#templateRevisions.set(assetId, revision);
+          const fingerprint = resolver.getFingerprint ? resolver.getFingerprint(assetId) : undefined;
+          const template = new ModelAssetTemplate(assetId, `tmpl_${assetId}_r${revision}`, gltf, {
+            fingerprint,
+            revision,
+          });
+          this.#templates.set(assetId, template);
+          return template;
+        };
 
         let arrayBuffer: ArrayBuffer;
         if (resolved instanceof Uint8Array) {
@@ -294,9 +338,7 @@ export class ModelTemplateCache {
                   `[model.instance.templateInvalid] Model "${assetId}" contains no valid scene`,
                 );
               }
-              const template = new ModelAssetTemplate(assetId, `tmpl_${assetId}`, gltf);
-              this.#templates.set(assetId, template);
-              return template;
+              return createTemplate(gltf);
             }
           } else {
             this.#parseCount++;
@@ -306,9 +348,7 @@ export class ModelTemplateCache {
                 `[model.instance.templateInvalid] Model "${assetId}" contains no valid scene`,
               );
             }
-            const template = new ModelAssetTemplate(assetId, `tmpl_${assetId}`, gltf);
-            this.#templates.set(assetId, template);
-            return template;
+            return createTemplate(gltf);
           }
         } else {
           throw new Error(`Unsupported asset resolution type for "${assetId}"`);
@@ -330,9 +370,7 @@ export class ModelTemplateCache {
           );
         }
 
-        const template = new ModelAssetTemplate(assetId, `tmpl_${assetId}`, gltf);
-        this.#templates.set(assetId, template);
-        return template;
+        return createTemplate(gltf);
       } finally {
         this.#inFlightLoads.delete(assetId);
       }

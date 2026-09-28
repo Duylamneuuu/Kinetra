@@ -130,6 +130,8 @@ export interface PlayerRuntimeModelInstanceMetadata {
   sharedTemplateId: string;
   skinnedMeshCount: number;
   skeletonCount: number;
+  fingerprint?: string | undefined;
+  templateRevision?: number | undefined;
 }
 
 export interface PlayerRuntimeModelResourceSharingMetadata {
@@ -141,18 +143,20 @@ export interface PlayerRuntimeModelState {
   loaded: boolean;
   meshCount: number;
   nodeCount: number;
-  skinnedMeshCount?: number;
-  hasSkin?: boolean;
+  skinnedMeshCount?: number | undefined;
+  hasSkin?: boolean | undefined;
   bounds?: {
     min: [number, number, number];
     max: [number, number, number];
     size: [number, number, number];
-  };
-  animation?: PlayerRuntimeModelAnimationState;
-  nodes?: PlayerRuntimeModelNodeState[];
-  instance?: PlayerRuntimeModelInstanceMetadata;
-  resourceSharing?: PlayerRuntimeModelResourceSharingMetadata;
-  error?: string;
+  } | undefined;
+  animation?: PlayerRuntimeModelAnimationState | undefined;
+  nodes?: PlayerRuntimeModelNodeState[] | undefined;
+  instance?: PlayerRuntimeModelInstanceMetadata | undefined;
+  resourceSharing?: PlayerRuntimeModelResourceSharingMetadata | undefined;
+  assetFingerprint?: string | undefined;
+  templateRevision?: number | undefined;
+  error?: string | undefined;
 }
 
 
@@ -199,6 +203,20 @@ export type GameShellMode =
   | "won"
   | "lost";
 
+export interface PlayerRuntimeAssetQueryInfo {
+  assetId: string;
+  sourceHash?: string | undefined;
+  fingerprint?: string | undefined;
+  importStatus: "imported" | "reimporting" | "failed" | "unimported";
+  revision?: number | undefined;
+  dependentIds?: string[] | undefined;
+  error?: string | undefined;
+}
+
+export interface PlayerRuntimeAssetsQueryState {
+  byId: Record<string, PlayerRuntimeAssetQueryInfo>;
+}
+
 export interface PlayerRuntimeQueryResult {
   running: boolean;
   sceneId?: string;
@@ -210,6 +228,7 @@ export interface PlayerRuntimeQueryResult {
   game?: Record<string, unknown>;
   shell?: { mode: GameShellMode; isPaused: boolean };
   metrics?: Record<string, number>;
+  assets?: PlayerRuntimeAssetsQueryState | undefined;
 }
 
 
@@ -266,6 +285,10 @@ export class PlayerRuntimeController {
   #navigationState: PlayerRuntimeNavigationState = { hasNavMesh: false };
   #assetResolver: AssetResolver;
   #assetRegistry = new Map<string, Uint8Array>();
+  #assetFingerprints = new Map<string, string>();
+  #assetSourceHashes = new Map<string, string>();
+  #assetStatuses = new Map<string, "imported" | "reimporting" | "failed" | "unimported">();
+  #assetRevisions = new Map<string, number>();
   #scripts: ScriptHost = new ScriptHost();
   #scriptRegistry: ScriptRegistry = new ScriptRegistry();
   #inputRouter: InputRouter = new InputRouter(DEFAULT_PLAYER_INPUT_MAP);
@@ -316,6 +339,9 @@ export class PlayerRuntimeController {
     this.#assetResolver = {
       resolve: (assetId: string) => {
         return this.#assetRegistry.get(assetId);
+      },
+      getFingerprint: (assetId: string) => {
+        return this.#assetFingerprints.get(assetId);
       },
     };
 
@@ -416,12 +442,48 @@ export class PlayerRuntimeController {
     }
   }
 
-  registerAsset(assetId: string, data: Uint8Array | string): void {
+  registerAsset(
+    assetId: string,
+    data: Uint8Array | string,
+    options?: { fingerprint?: string | undefined; sourceHash?: string | undefined },
+  ): void {
     const bytes = typeof data === "string" ? base64ToUint8Array(data) : data;
     this.#assetRegistry.set(assetId, bytes);
+    this.#assetStatuses.set(assetId, "imported");
+    this.#assetRevisions.set(assetId, 1);
+    if (options?.fingerprint) {
+      this.#assetFingerprints.set(assetId, options.fingerprint);
+    }
+    if (options?.sourceHash) {
+      this.#assetSourceHashes.set(assetId, options.sourceHash);
+    }
     this.#log("debug", "asset.registered", {
       assetId,
       byteLength: bytes.byteLength,
+    });
+  }
+
+  updateAsset(
+    assetId: string,
+    data: Uint8Array | string,
+    options?: { fingerprint?: string | undefined; sourceHash?: string | undefined },
+  ): void {
+    const bytes = typeof data === "string" ? base64ToUint8Array(data) : data;
+    this.#assetRegistry.set(assetId, bytes);
+    const revision = (this.#assetRevisions.get(assetId) ?? 0) + 1;
+    this.#assetRevisions.set(assetId, revision);
+    if (options?.fingerprint) {
+      this.#assetFingerprints.set(assetId, options.fingerprint);
+    }
+    if (options?.sourceHash) {
+      this.#assetSourceHashes.set(assetId, options.sourceHash);
+    }
+    this.#assetStatuses.set(assetId, "imported");
+    this.#log("info", "asset.updated", {
+      assetId,
+      byteLength: bytes.byteLength,
+      revision,
+      fingerprint: options?.fingerprint,
     });
   }
 
@@ -431,6 +493,7 @@ export class PlayerRuntimeController {
     projectRevision: number,
     options?: {
       assets?: Record<string, string>;
+      assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
     },
@@ -470,6 +533,7 @@ export class PlayerRuntimeController {
     projectRevision: number,
     options?: {
       assets?: Record<string, string>;
+      assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
     },
@@ -483,7 +547,8 @@ export class PlayerRuntimeController {
 
     if (options?.assets) {
       for (const [assetId, base64] of Object.entries(options.assets)) {
-        this.registerAsset(assetId, base64);
+        const meta = options.assetMetadata?.[assetId];
+        this.registerAsset(assetId, base64, meta);
       }
     }
 
@@ -761,6 +826,10 @@ export class PlayerRuntimeController {
     }
     this.#navigationState = { hasNavMesh: false };
     this.#assetRegistry.clear();
+    this.#assetFingerprints.clear();
+    this.#assetSourceHashes.clear();
+    this.#assetStatuses.clear();
+    this.#assetRevisions.clear();
 
     if (!this.#runtime) {
       return;
@@ -1289,6 +1358,41 @@ export class PlayerRuntimeController {
       this.#log("error", "model.attachFailed", { entityId, assetId, error: result.error });
     }
     return { success: result.success, ...(result.error ? { error: result.error } : {}) };
+  }
+
+  async reloadAsset(
+    assetId: string,
+  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "asset.runtimeReloadFailed", { assetId, error });
+      return { success: false, affectedEntities: [], error };
+    }
+
+    this.#log("info", "asset.runtimeReloadStarted", { assetId });
+    const result = await this.#runtime.reloadAsset(assetId, this.#assetResolver);
+
+    if (result.success) {
+      this.#assetStatuses.set(assetId, "imported");
+      this.#log("info", "asset.runtimeReloadSucceeded", {
+        assetId,
+        affectedEntities: result.affectedEntities,
+        newFingerprint: this.#assetFingerprints.get(assetId),
+      });
+    } else {
+      this.#assetStatuses.set(assetId, "failed");
+      this.#log("error", "asset.runtimeReloadFailed", {
+        assetId,
+        affectedEntities: result.affectedEntities,
+        error: result.error,
+      });
+    }
+
+    return {
+      success: result.success,
+      affectedEntities: result.affectedEntities,
+      ...(result.error ? { error: result.error } : {}),
+    };
   }
 
   async captureSave(slotId = "default"): Promise<{
@@ -1820,6 +1924,8 @@ export class PlayerRuntimeController {
                 ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),
                 ...(modelMeta.instance ? { instance: modelMeta.instance } : {}),
                 ...(modelMeta.resourceSharing ? { resourceSharing: modelMeta.resourceSharing } : {}),
+                ...(modelMeta.assetFingerprint ? { assetFingerprint: modelMeta.assetFingerprint } : {}),
+                ...(modelMeta.templateRevision !== undefined ? { templateRevision: modelMeta.templateRevision } : {}),
                 ...(modelMeta.error ? { error: modelMeta.error } : {}),
               },
             }
@@ -1867,7 +1973,22 @@ export class PlayerRuntimeController {
         assetTemplateParseCount: this.#runtime?.assetTemplateParseCount ?? 0,
         instanceCount: this.#runtime?.instanceCount ?? 0,
       },
+      assets: this.#getAssetsQueryState(),
     };
+  }
+
+  #getAssetsQueryState(): PlayerRuntimeAssetsQueryState {
+    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = {};
+    for (const [assetId] of this.#assetRegistry) {
+      byId[assetId] = {
+        assetId,
+        ...(this.#assetSourceHashes.has(assetId) ? { sourceHash: this.#assetSourceHashes.get(assetId) } : {}),
+        ...(this.#assetFingerprints.has(assetId) ? { fingerprint: this.#assetFingerprints.get(assetId) } : {}),
+        importStatus: this.#assetStatuses.get(assetId) ?? "imported",
+        ...(this.#assetRevisions.has(assetId) ? { revision: this.#assetRevisions.get(assetId) } : {}),
+      };
+    }
+    return { byId };
   }
 
 
