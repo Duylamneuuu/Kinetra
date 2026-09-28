@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, extname } from "node:path";
 import type { AssetDatabase } from "./database.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
@@ -19,7 +19,13 @@ export interface ReimportEvent {
     | "asset.reimportNoop"
     | "asset.reimportSucceeded"
     | "asset.reimportFailed"
-    | "asset.invalidated";
+    | "asset.invalidated"
+    | "asset.dependentReimportStarted"
+    | "asset.dependentReimportSucceeded"
+    | "asset.dependentReimportFailed"
+    | "asset.runtimeReloadStarted"
+    | "asset.runtimeReloadSucceeded"
+    | "asset.runtimeReloadFailed";
   assetId: string;
   oldContentHash?: string | undefined;
   newContentHash?: string | undefined;
@@ -30,6 +36,21 @@ export interface ReimportEvent {
   affectedAssetIds?: string[] | undefined;
   error?: string | undefined;
   diagnostics?: AssetDiagnostic[] | undefined;
+}
+
+export interface DependencyRebuildResult {
+  rootAssetId: string;
+  status: "reimported" | "noop" | "failed" | "partial_failure";
+  oldSourceHash?: string | undefined;
+  newSourceHash?: string | undefined;
+  oldFingerprint?: string | undefined;
+  newFingerprint?: string | undefined;
+  rebuildOrder: string[];
+  rebuiltAssetIds: string[];
+  failedAssetId?: string | undefined;
+  blockedAssetIds: string[];
+  unaffectedAssetIds: string[];
+  error?: string | undefined;
 }
 
 export interface ReimportResult {
@@ -283,7 +304,9 @@ export class AssetReimportService {
 
     // 7. Execute importer to generate temp artifact
     const targetPath = record.importedPath;
-    const tempPath = `${targetPath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    const ext = extname(targetPath);
+    const baseWithoutExt = ext ? targetPath.slice(0, -ext.length) : targetPath;
+    const tempPath = `${baseWithoutExt}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}${ext}`;
     let importResult: AssetImporterResult;
 
     try {
@@ -386,6 +409,125 @@ export class AssetReimportService {
       sourceHash: newSourceHash,
       affectedAssetIds,
       diagnostics: importResult.diagnostics,
+    };
+  }
+
+  async reimportWithDependents(rootAssetId: string): Promise<DependencyRebuildResult> {
+    const rootRecordBefore = this.#database.get(rootAssetId);
+    const dependents = this.#database.dependentsInRebuildOrder(rootAssetId);
+    const fullRebuildOrder = [rootAssetId, ...dependents];
+    const allAssets = this.#database.list().map((a) => a.id);
+    const unaffected = allAssets.filter((id) => !fullRebuildOrder.includes(id));
+
+    // 1. Reimport root asset
+    const rootResult = await this.reimport(rootAssetId);
+
+    if (rootResult.status === "failed") {
+      return {
+        rootAssetId,
+        status: "failed",
+        oldSourceHash: rootRecordBefore?.source.contentHash,
+        rebuildOrder: fullRebuildOrder,
+        rebuiltAssetIds: [],
+        failedAssetId: rootAssetId,
+        blockedAssetIds: dependents,
+        unaffectedAssetIds: unaffected,
+        error: rootResult.error,
+      };
+    }
+
+    if (rootResult.status === "noop") {
+      return {
+        rootAssetId,
+        status: "noop",
+        oldSourceHash: rootRecordBefore?.source.contentHash,
+        newSourceHash: rootRecordBefore?.source.contentHash,
+        oldFingerprint: rootRecordBefore?.fingerprint,
+        newFingerprint: rootRecordBefore?.fingerprint,
+        rebuildOrder: [rootAssetId],
+        rebuiltAssetIds: [],
+        blockedAssetIds: [],
+        unaffectedAssetIds: unaffected,
+      };
+    }
+
+    // 2. Root succeeded - process dependents in topological order
+    const rebuiltAssetIds: string[] = [rootAssetId];
+    const failedAssetIds: string[] = [];
+    const blockedAssetIds: string[] = [];
+
+    for (const depId of dependents) {
+      const depRecord = this.#database.get(depId);
+      if (!depRecord) continue;
+
+      // Check if depId depends on any failed or blocked asset
+      const isBlocked = depRecord.dependencies.some(
+        (d) => failedAssetIds.includes(d) || blockedAssetIds.includes(d),
+      );
+      if (isBlocked) {
+        blockedAssetIds.push(depId);
+        continue;
+      }
+
+      // Collect dependency fingerprints from current database state
+      const depFingerprints = depRecord.dependencies.map(
+        (d) => this.#database.get(d)?.fingerprint ?? "",
+      );
+
+      const desiredFingerprint = importFingerprint({
+        sourceHash: depRecord.source.contentHash,
+        importer: depRecord.recipe.importer,
+        importerVersion: depRecord.recipe.importerVersion,
+        settings: depRecord.recipe.settings,
+        dependencyFingerprints: depFingerprints,
+      });
+
+      if (depRecord.fingerprint === desiredFingerprint) {
+        // Unchanged
+        continue;
+      }
+
+      // Stale - trigger rebuild
+      this.#emit({
+        type: "asset.dependentReimportStarted",
+        assetId: depId,
+        oldFingerprint: depRecord.fingerprint,
+        newFingerprint: desiredFingerprint,
+      });
+
+      const depResult = await this.reimport(depId);
+      if (depResult.status === "reimported") {
+        rebuiltAssetIds.push(depId);
+        this.#emit({
+          type: "asset.dependentReimportSucceeded",
+          assetId: depId,
+          oldFingerprint: depRecord.fingerprint,
+          newFingerprint: desiredFingerprint,
+        });
+      } else if (depResult.status === "failed") {
+        failedAssetIds.push(depId);
+        this.#emit({
+          type: "asset.dependentReimportFailed",
+          assetId: depId,
+          error: depResult.error,
+        });
+      }
+    }
+
+    const hasFailed = failedAssetIds.length > 0;
+    return {
+      rootAssetId,
+      status: hasFailed ? "partial_failure" : "reimported",
+      oldSourceHash: rootRecordBefore?.source.contentHash,
+      newSourceHash: rootResult.sourceHash,
+      oldFingerprint: rootRecordBefore?.fingerprint,
+      newFingerprint: rootResult.newFingerprint,
+      rebuildOrder: fullRebuildOrder,
+      rebuiltAssetIds,
+      failedAssetId: failedAssetIds[0],
+      blockedAssetIds,
+      unaffectedAssetIds: unaffected,
+      error: hasFailed ? `Dependent "${failedAssetIds[0]}" failed to reimport` : undefined,
     };
   }
 

@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/asset-pipeline.test.js dist/test/reimport.test.js"
+    "test": "node --test dist/test/asset-pipeline.test.js dist/test/reimport.test.js dist/test/rebuild-order.test.js dist/test/coordinator.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",

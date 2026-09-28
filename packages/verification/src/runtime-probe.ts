@@ -120,6 +120,14 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     return { success: false, affectedEntities: [], error: "Host does not support reloadAsset" };
   }
 
+  async queryEntities(): Promise<Array<{ entityId: string; model?: { assetId?: string | undefined } | undefined }>> {
+    const q = await this.#host.query();
+    return (q.entities ?? []).map((e) => ({
+      entityId: e.entityId,
+      model: e.model ? { assetId: e.model.assetId } : undefined,
+    }));
+  }
+
   async stop(): Promise<void> {
     this.#currentSceneId = undefined;
     await this.#host.stop();

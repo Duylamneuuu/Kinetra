@@ -52,6 +52,58 @@ export class AssetDatabase {
     return [id, ...this.dependentsOf(id)];
   }
 
+  dependentsInRebuildOrder(id: string): string[] {
+    const affected = new Set(this.dependentsOf(id));
+    if (affected.size === 0) return [];
+
+    const inDegree = new Map<string, number>();
+    for (const depId of affected) {
+      const record = this.#records.get(depId);
+      let count = 0;
+      for (const dep of record?.dependencies ?? []) {
+        if (affected.has(dep)) {
+          count++;
+        }
+      }
+      inDegree.set(depId, count);
+    }
+
+    const queue: string[] = [];
+    for (const [depId, degree] of inDegree) {
+      if (degree === 0) {
+        queue.push(depId);
+      }
+    }
+    queue.sort((a, b) => a.localeCompare(b));
+
+    const result: string[] = [];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      result.push(current);
+
+      const newlyReady: string[] = [];
+      for (const depId of affected) {
+        if (result.includes(depId) || queue.includes(depId)) continue;
+        const record = this.#records.get(depId);
+        if (record?.dependencies.includes(current)) {
+          const currentDegree = inDegree.get(depId)! - 1;
+          inDegree.set(depId, currentDegree);
+          if (currentDegree === 0) {
+            newlyReady.push(depId);
+          }
+        }
+      }
+      newlyReady.sort((a, b) => a.localeCompare(b));
+      queue.push(...newlyReady);
+    }
+
+    return result;
+  }
+
+  rebuildOrder(id: string): string[] {
+    return [id, ...this.dependentsInRebuildOrder(id)];
+  }
+
   serialize(): AssetDatabaseDocument {
     return { schemaVersion: 1, assets: this.list() };
   }

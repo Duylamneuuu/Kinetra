@@ -109,7 +109,11 @@ importers:
 
   packages/audio: {}
 
-  packages/blender-bridge: {}
+  packages/blender-bridge:
+    dependencies:
+      '@kinetra/asset-pipeline':
+        specifier: workspace:*
+        version: link:../asset-pipeline
 
   packages/command-bus:
     dependencies:
@@ -218,6 +222,9 @@ importers:
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../audio
+      '@kinetra/blender-bridge':
+        specifier: workspace:*
+        version: link:../blender-bridge
       '@kinetra/input':
         specifier: workspace:*
         version: link:../input
