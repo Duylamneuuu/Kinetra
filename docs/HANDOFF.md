@@ -254,7 +254,27 @@ The full authoring-to-runtime production asset loop is closed and proven across 
 - **Normalized Transactions & NOOP Protection**: Normalizes filesystem events into a single atomic reload transaction (`AssetHotReloadTransaction`), and absorbs touch-only/identical content updates without invoking Blender or reloading runtime entities;
 - **Live Electron Verification**: Real Electron acceptance suite (`packages/verification/test/real-blender-hot-reimport.test.ts`) verifies live multi-instance entity swapping across a single continuous Electron process without restart, preserving entity IDs, world positions, and WebGL rendering with valid PNG capture;
 - **Failure Rollback & Repair**: Importer failures rollback cleanly leaving live entities running on last-known-good, and subsequent repaired source saves reimport and recover automatically;
-- **Blender DCC Boundary**: Blender remains strictly an authoring tool. Packaged shipping binaries (`KinetraGame.exe` and Linux `KinetraGame`) have zero Blender dependencies.
+- **Blender DCC Boundary**: Blender remains strictly an authoring tool. Packaged shipping binaries (`KinetraGame.exe` and Linux `KinetraGame`) have zero Blender dependencies;
+- **P4 Execution Boundary Clarification**: The P4 production asset pipeline has two distinct proofs: (1) Real headless Blender CI workflow (`.github/workflows/blender-pipeline.yml`) proving real `.blend` authoring source modification, CLI execution, and deterministic GLB export; and (2) Real Electron live hot reimport (`packages/verification/test/real-blender-hot-reimport.test.ts`), which operates inside the injected runner probe boundary to reimport, rebuild dependencies, publish runtime updates, and reload live entity instances without restarting the running Electron process.
+
+### 14. Perceptual Visual Verification + Structured Vision Critique Vertical Slice (P8 Proven)
+
+The engine-owned perceptual visual verification and vision critique slice is proven in dev Electron and packaged `KinetraGame.exe`:
+- **Engine-Owned Perceptual Visual Analysis (`@kinetra/verification`)**: Zero-native-binary pure TypeScript implementation (`pngjs`) providing deterministic `calculateVisualEvidence` to produce `VisualFrameEvidence` (`sha256`, `width`, `height`, `meanLuminance`, `luminanceVariance`, `entropy`, 64-bit dHash `perceptualHash`, Sobel `edgeDensity`, and `opaquePixelRatio`);
+- **Blank Frame Detection (`detectBlankFrame`)**: Distinguishes intentional scenes from solid/dark/transparent or low-entropy empty canvases with machine-readable failure diagnostics;
+- **Configurable Perceptual Comparison (`compareVisualFrames`)**: Compares frames using dHash Hamming distance, changed pixel ratios with configurable thresholds, and mean absolute differences;
+- **Additive Acceptance Manifest Steps**: Strictly additive extension of `AcceptanceStep` without breaking existing manifests:
+  - `capture.frame`: captures and saves named frames to memory and optionally to disk (`saveArtifact: true`);
+  - `assert.visualNotBlank`: verifies frame is non-blank;
+  - `assert.visualSimilarity`: asserts perceptual match within explicit tolerances (`maxChangedPixelRatio`, `maxPerceptualHashDistance`, `maxMeanAbsoluteDifference`);
+  - `assert.visualDifference`: asserts visual change has occurred (`minChangedPixelRatio`, `minPerceptualHashDistance`);
+  - `critique.visual`: passes captured frame to a critique provider;
+- **Direct Canvas Frame Capture**: Three.js WebGLRenderer in the player runtime enables `preserveDrawingBuffer: true`, allowing direct synchronous canvas capture via `toDataURL("image/png")` to eliminate stale compositor frames and window visibility lag on Windows and Linux;
+- **Controlled Visual Regression Proof**: A camera orientation defect produces a frame that passes non-visual checks (`state.byName.TargetCube.model.loaded == true`, `running == true`, `assert.logAbsent`, `assert.screenshotValidPng`), but fails `assert.visualSimilarity` with machine-readable diagnostic values (`visual.perceptualMismatch`), while `assert.visualDifference` passes and repairing the camera passes similarity;
+- **Real Arena Visual Verification**: Verifies baseline non-blank rendering, same-state recapture stability, and active player movement across the camera registering perceptual difference (`arenaStart` vs `arenaMoved`);
+- **Provider-Neutral Vision Critique Hook**: Interface `VisualCritiqueProvider`, structured report schema `VisualCritiqueReport`, deterministic `FakeVisualCritiqueProvider`, and error isolation ensuring third-party provider failures do not crash the engine runtime;
+- **Truthful Claim**: Provider-neutral vision critique hook proven; authenticated live multimodal AI critique is not yet proven;
+- **Packaged Windows Verification**: Packaged executable smoke test (`smoke:win` on `KinetraGame.exe`) executes `real-visual-verification.test.js` against the real packaged player.
 
 ## Completion definition
 

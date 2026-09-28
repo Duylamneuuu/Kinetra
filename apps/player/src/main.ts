@@ -431,6 +431,15 @@ async function handleRuntimeCommand(request: {
       runtime.renderOnce();
       return runtime.query();
 
+    case "runtime.captureFrame": {
+      const base64 = runtime.captureFrameBase64();
+      return {
+        available: true,
+        mimeType: "image/png",
+        base64,
+      };
+    }
+
     default:
       throw new Error(
         `Unsupported renderer runtime command "${request.method}"`,

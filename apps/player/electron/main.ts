@@ -274,6 +274,24 @@ async function handleBridgeRequest(
       return callRenderer(request.method, request.params ?? {});
 
     case "runtime.captureFrame": {
+      try {
+        const directCapture = (await callRenderer("runtime.captureFrame", {})) as {
+          available?: boolean;
+          mimeType?: string;
+          base64?: string;
+        };
+        if (
+          directCapture &&
+          directCapture.available &&
+          typeof directCapture.base64 === "string" &&
+          directCapture.base64.length > 0
+        ) {
+          return directCapture;
+        }
+      } catch {
+        // Fall back to window capturePage if renderer canvas capture is unavailable
+      }
+
       await callRenderer("runtime.render", {});
       await new Promise((resolve) => setTimeout(resolve, 32));
 
