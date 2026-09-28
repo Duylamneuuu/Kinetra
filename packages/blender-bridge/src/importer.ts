@@ -73,7 +73,16 @@ export class BlenderGlbImporter implements AssetImporter {
     );
 
     // Read exported GLB bytes from staging path
-    const artifactBytes = await this.#fs.readFile(context.targetPath);
+    let artifactBytes: Uint8Array;
+    try {
+      artifactBytes = await this.#fs.readFile(context.targetPath);
+    } catch (err) {
+      try {
+        artifactBytes = await this.#fs.readFile(`${context.targetPath}.glb`);
+      } catch {
+        throw err;
+      }
+    }
 
     // Validate GLB header
     inspectGlb(artifactBytes);

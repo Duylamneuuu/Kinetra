@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, extname } from "node:path";
 import type { AssetDatabase } from "./database.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
@@ -304,7 +304,9 @@ export class AssetReimportService {
 
     // 7. Execute importer to generate temp artifact
     const targetPath = record.importedPath;
-    const tempPath = `${targetPath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+    const ext = extname(targetPath);
+    const baseWithoutExt = ext ? targetPath.slice(0, -ext.length) : targetPath;
+    const tempPath = `${baseWithoutExt}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}${ext}`;
     let importResult: AssetImporterResult;
 
     try {

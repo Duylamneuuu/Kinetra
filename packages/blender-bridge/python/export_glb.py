@@ -57,6 +57,9 @@ def main():
         export_yup=True,
     )
 
+    if not Path(output).exists() and Path(f"{output}.glb").exists():
+        Path(f"{output}.glb").replace(output)
+
     manifest = collect_manifest(output)
     manifest_path = args.manifest or f"{output}.manifest.json"
     Path(manifest_path).write_text(
