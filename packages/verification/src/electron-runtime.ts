@@ -730,6 +730,46 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return this.#request<RuntimePerformanceEvidence>("performance.sample", options ?? {});
   }
 
+  async shellStartRun(params?: { stepped?: boolean }): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("shell.startRun", params ?? {});
+  }
+
+  async shellContinueRun(params?: { stepped?: boolean }): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("shell.continueRun", params ?? {});
+  }
+
+  async gamePause(): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("game.pause", {});
+  }
+
+  async gameResume(): Promise<void> {
+    await this.#ensureProcess();
+    await this.#request("game.resume", {});
+  }
+
+  async setSettings(settings: {
+    masterGain?: number;
+    sfxGain?: number;
+    fullscreen?: boolean;
+    remapAction?: string;
+    bindings?: unknown[];
+  }): Promise<Record<string, unknown>> {
+    await this.#ensureProcess();
+    return this.#request<Record<string, unknown>>("settings.set", settings);
+  }
+
+  async getSettings(): Promise<Record<string, unknown>> {
+    await this.#ensureProcess();
+    return this.#request<Record<string, unknown>>("settings.get", {});
+  }
+
+  getProcessId(): number | undefined {
+    return this.#child?.pid;
+  }
+
   async close(): Promise<void> {
     const child = this.#child;
     const socket = this.#socket;

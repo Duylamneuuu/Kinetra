@@ -129,16 +129,60 @@ async function handleRuntimeCommand(request: {
       });
     }
 
+    case "shell.startRun": {
+      const stepped =
+        typeof params.stepped === "boolean"
+          ? params.stepped
+          : params.mode === "realtime"
+            ? false
+            : true;
+      await shell.startArenaGame(false, { stepped });
+      return runtime.query();
+    }
+
+    case "shell.continueRun": {
+      const stepped =
+        typeof params.stepped === "boolean"
+          ? params.stepped
+          : params.mode === "realtime"
+            ? false
+            : true;
+      await shell.startArenaGame(true, { stepped });
+      return runtime.query();
+    }
+
+    case "game.pause":
     case "runtime.pause": {
       runtime.pause();
       shell.setMode("paused");
       return runtime.query();
     }
 
+    case "game.resume":
     case "runtime.resume": {
       runtime.resume();
       shell.setMode("playing");
       return runtime.query();
+    }
+
+    case "settings.get": {
+      return shell.getSettings();
+    }
+
+    case "settings.set": {
+      if (typeof params.masterGain === "number") {
+        await shell.setMasterVolume(params.masterGain);
+      }
+      if (typeof params.sfxGain === "number") {
+        await shell.setSfxVolume(params.sfxGain);
+      }
+      if (typeof params.fullscreen === "boolean") {
+        await shell.setFullscreen(params.fullscreen);
+      }
+      if (typeof params.remapAction === "string" && Array.isArray(params.bindings)) {
+        await shell.remapAction(params.remapAction, params.bindings as any);
+      }
+      return shell.getSettings();
     }
 
     case "runtime.step": {
@@ -401,9 +445,12 @@ async function handleRuntimeCommand(request: {
           ? (params.entityIds as string[])
           : undefined;
 
-      return runtime.query({
-        ...(entityIds !== undefined ? { entityIds } : {}),
-      });
+      return {
+        ...runtime.query({
+          ...(entityIds !== undefined ? { entityIds } : {}),
+        }),
+        settings: shell.getSettings(),
+      };
     }
 
     case "runtime.injectInput": {
@@ -453,6 +500,9 @@ async function handleRuntimeCommand(request: {
       return runtime.query();
 
     case "runtime.captureFrame": {
+      if (!runtime.query().running) {
+        return { available: false };
+      }
       const base64 = runtime.captureFrameBase64();
       return {
         available: true,

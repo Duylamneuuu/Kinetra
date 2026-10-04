@@ -4,5 +4,5 @@
     "rootDir": ".",
     "outDir": "./dist"
   },
-  "include": ["*.ts", "test/**/*.ts"]
+  "include": ["*.ts", "test/**/*.ts", "arena.kinetra.json"]
 }

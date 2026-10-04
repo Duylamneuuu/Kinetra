@@ -283,7 +283,7 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Engine-Owned Evidence Model (`RuntimePerformanceEvidence`)**: Captures sample count, warmup count, execution mode (`stepped` vs `continuous`), percentiles (`p50Ms`, `p95Ms`, `p99Ms`, `maxMs`) for frame, simulation, and render CPU times, alongside authoritative Three.js renderer metrics (`drawCalls`, `triangles`, `geometries`, `textures`), scene metrics (`entityCount`, `componentCount`), and physics stats (`rigidBodyCount`, `colliderCount`);
 - **Deterministic Percentile Interpolation**: Pure TypeScript `calculatePercentiles` using linear rank interpolation `(p / 100) * (len - 1)` with exact floor/ceil weights, ensuring strictly monotonic percentiles (`p50Ms <= p95Ms <= p99Ms <= maxMs`);
 - **Additive Acceptance Manifest Steps**:
-  - `performance.sample`: warms up runtime and collects frame/simulation/render CPU timings and peak Three.js metrics over specified sample frames (`sampleCount`, `warmupCount`);
+  - `performance.sample`: warms up runtime and collects frame/simulation/render CPU timings and peak Three.js metrics over specified sample frames (`sampleCount`, `warmupSamples`);
   - `assert.performanceBudget`: evaluates collected evidence against structured budget criteria with optional platform overrides (`windows`, `linux`);
 - **Grouped Machine-Readable Budget Violations**: Emits structured `performance.budgetExceeded` violation codes detailing `metric`, `actual`, `budget`, `comparator`, and `platform`;
 - **Controlled Structural Regression Proof**: A deliberate 35-box scene structurally regresses draw calls and fails acceptance (`renderer.drawCalls actual 37 exceeds max 15`), while repairing the scene to 2 boxes passes acceptance with 4 draw calls;
@@ -292,6 +292,15 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Post-Sampling Visual Continuity**: Demonstrates that sampling does not poison rendering; a subsequent visual frame can be captured and verified as a valid PNG;
 - **MCP Server Acceptance Tool Integration**: `test.runAcceptance` runs performance sample and budget gate steps over in-memory transport;
 - **Packaged Windows Verification**: Packaged executable smoke test (`smoke:win` on `KinetraGame.exe`) executes `real-performance.test.js` verifying budget enforcement and clean teardown with zero orphan processes.
+
+### 16. Canonical Complete-Game Shipping Acceptance Gate (P8 Proven)
+
+- **Source of truth**: `examples/reference-game/arena.kinetra.json` is authoritative (imported as validated JSON in the bundle); `createArenaProject()` returns a clone.
+- **Plan**: `examples/reference-game/acceptance/shipping.acceptance.json` (schema `ShippingAcceptancePlan`, suite `kinetra-arena-shipping`); reports include `planSha256`.
+- **Runner**: `ShippingAcceptanceRunner` (`packages/verification/src/shipping.ts`) resolves the packaged exe once, hashes it, requires `hostInfo.isPackaged`, runs each phase through `AcceptanceRunner` in a fresh process where required, shares a persistence directory per group, and aggregates a zero-tolerance `ShippingAcceptanceReport`.
+- **Semantic shell steps**: `shell.startRun`, `shell.continueRun`, `game.pause`, `game.resume`, `settings.set`.
+- **Run it**: `pnpm --filter @kinetra/player package:win && pnpm --filter @kinetra/player shipping:win` (CI step in `windows-player.yml`; Linux via `smoke:linux:packaged`), or MCP `test.runShippingAcceptance`.
+- **Not claimed**: Windows/Linux screenshot equality, authenticated multimodal critique, multi-level/inventory content.
 
 ## Completion definition
 

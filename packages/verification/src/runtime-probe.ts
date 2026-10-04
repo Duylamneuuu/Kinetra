@@ -352,6 +352,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
       running: query.running,
       ...(sceneId !== undefined ? { sceneId } : {}),
       ...(query.shell !== undefined ? { shell: query.shell } : {}),
+      ...(query.settings !== undefined ? { settings: query.settings } : {}),
       ...(query.renderer !== undefined ? { renderer: query.renderer } : {}),
       state: {
         ...(query.projectRevision !== undefined
@@ -365,9 +366,65 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         ...(query.gameplay ? { gameplay: query.gameplay } : {}),
         ...(query.game ? { game: query.game } : {}),
         ...(query.shell ? { shell: query.shell } : {}),
+        ...(query.settings ? { settings: query.settings } : {}),
         ...(query.renderer ? { renderer: query.renderer } : {}),
       },
     };
+  }
+
+  async shellStartRun(params?: { stepped?: boolean }): Promise<void> {
+    if (typeof this.#host.shellStartRun === "function") {
+      await this.#host.shellStartRun(params);
+    }
+  }
+
+  async shellContinueRun(params?: { stepped?: boolean }): Promise<void> {
+    if (typeof this.#host.shellContinueRun === "function") {
+      await this.#host.shellContinueRun(params);
+    }
+  }
+
+  async gamePause(): Promise<void> {
+    if (typeof this.#host.gamePause === "function") {
+      await this.#host.gamePause();
+    } else {
+      await this.pause();
+    }
+  }
+
+  async gameResume(): Promise<void> {
+    if (typeof this.#host.gameResume === "function") {
+      await this.#host.gameResume();
+    } else {
+      await this.resume();
+    }
+  }
+
+  async setSettings(settings: {
+    masterGain?: number;
+    sfxGain?: number;
+    fullscreen?: boolean;
+    remapAction?: string;
+    bindings?: unknown[];
+  }): Promise<Record<string, unknown>> {
+    if (typeof this.#host.setSettings === "function") {
+      return this.#host.setSettings(settings);
+    }
+    return {};
+  }
+
+  async getSettings(): Promise<Record<string, unknown>> {
+    if (typeof this.#host.getSettings === "function") {
+      return this.#host.getSettings();
+    }
+    return {};
+  }
+
+  getProcessId(): number | undefined {
+    if (typeof (this.#host as any).getProcessId === "function") {
+      return (this.#host as any).getProcessId();
+    }
+    return undefined;
   }
 
   async logs(): Promise<RuntimeLog[]> {

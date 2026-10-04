@@ -81,6 +81,10 @@ const suites = [
     "Runtime performance",
     join(repoRoot, "packages/verification/dist/test/real-performance.test.js"),
   ],
+  [
+    "Canonical shipping acceptance",
+    join(repoRoot, "packages/verification/dist/test/real-shipping.test.js"),
+  ],
 ];
 
 for (const [label, testFile] of suites) {

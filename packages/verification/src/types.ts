@@ -16,6 +16,7 @@ export interface RuntimeSnapshot {
   sceneId?: string | undefined;
   state: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
+  settings?: Record<string, unknown>;
   renderer?: {
     captureMode: "performance" | "visual";
     preserveDrawingBuffer: boolean;
@@ -116,6 +117,7 @@ export interface RuntimeProbeHost {
     gameplay?: Record<string, unknown>;
     game?: Record<string, unknown>;
     shell?: { mode: string; isPaused: boolean };
+    settings?: Record<string, unknown>;
     metrics?: Record<string, number>;
     renderer?: {
       captureMode: "performance" | "visual";
@@ -212,6 +214,19 @@ export interface RuntimeProbeHost {
     fixedDeltaSeconds?: number;
     mode?: "stepped" | "continuous";
   }): Promise<RuntimePerformanceEvidence>;
+  shellStartRun?(params?: { stepped?: boolean }): Promise<void>;
+  shellContinueRun?(params?: { stepped?: boolean }): Promise<void>;
+  gamePause?(): Promise<void>;
+  gameResume?(): Promise<void>;
+  setSettings?(settings: {
+    masterGain?: number;
+    sfxGain?: number;
+    fullscreen?: boolean;
+    remapAction?: string;
+    bindings?: unknown[];
+  }): Promise<Record<string, unknown>>;
+  getSettings?(): Promise<Record<string, unknown>>;
+  getProcessId?(): number | undefined;
 }
 
 
@@ -284,12 +299,34 @@ export interface RuntimeProbe {
     fixedDeltaSeconds?: number;
     mode?: "stepped" | "continuous";
   }): Promise<RuntimePerformanceEvidence>;
+  shellStartRun?(params?: { stepped?: boolean }): Promise<void>;
+  shellContinueRun?(params?: { stepped?: boolean }): Promise<void>;
+  gamePause?(): Promise<void>;
+  gameResume?(): Promise<void>;
+  setSettings?(settings: {
+    masterGain?: number;
+    sfxGain?: number;
+    fullscreen?: boolean;
+    remapAction?: string;
+    bindings?: unknown[];
+  }): Promise<Record<string, unknown>>;
+  getSettings?(): Promise<Record<string, unknown>>;
 }
 
 export const runtimeStartStepSchema = z.object({
   type: z.literal("runtime.start"),
   sceneId: z.string().min(1),
   assets: z.record(z.string(), z.string()).optional(),
+}).strict();
+
+export const shellStartRunStepSchema = z.object({
+  type: z.literal("shell.startRun"),
+  stepped: z.boolean().optional(),
+}).strict();
+
+export const shellContinueRunStepSchema = z.object({
+  type: z.literal("shell.continueRun"),
+  stepped: z.boolean().optional(),
 }).strict();
 
 export const runtimeStopStepSchema = z.object({
@@ -302,6 +339,23 @@ export const runtimePauseStepSchema = z.object({
 
 export const runtimeResumeStepSchema = z.object({
   type: z.literal("runtime.resume"),
+}).strict();
+
+export const gamePauseStepSchema = z.object({
+  type: z.literal("game.pause"),
+}).strict();
+
+export const gameResumeStepSchema = z.object({
+  type: z.literal("game.resume"),
+}).strict();
+
+export const settingsSetStepSchema = z.object({
+  type: z.literal("settings.set"),
+  masterGain: z.number().optional(),
+  sfxGain: z.number().optional(),
+  fullscreen: z.boolean().optional(),
+  remapAction: z.string().optional(),
+  bindings: z.array(z.unknown()).optional(),
 }).strict();
 
 export const runtimeStepStepSchema = z.object({
@@ -520,9 +574,14 @@ export const assertPerformanceBudgetStepSchema = z.object({
 
 export const acceptanceStepSchema = z.discriminatedUnion("type", [
   runtimeStartStepSchema,
+  shellStartRunStepSchema,
+  shellContinueRunStepSchema,
   runtimeStopStepSchema,
   runtimePauseStepSchema,
   runtimeResumeStepSchema,
+  gamePauseStepSchema,
+  gameResumeStepSchema,
+  settingsSetStepSchema,
   runtimeStepStepSchema,
   assetRegisterStepSchema,
   animationPlayStepSchema,

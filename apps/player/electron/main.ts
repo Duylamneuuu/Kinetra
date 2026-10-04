@@ -256,6 +256,12 @@ async function handleBridgeRequest(
     case "runtime.stop":
     case "runtime.pause":
     case "runtime.resume":
+    case "shell.startRun":
+    case "shell.continueRun":
+    case "game.pause":
+    case "game.resume":
+    case "settings.get":
+    case "settings.set":
     case "runtime.query":
     case "runtime.injectInput":
     case "runtime.readLogs":

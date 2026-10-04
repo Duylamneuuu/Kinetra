@@ -8,7 +8,11 @@ import {
   KinetraAgentService,
   resolvePackagedExecutable,
 } from "../src/index.js";
-import type { AcceptanceManifest, AcceptanceReport } from "@kinetra/verification";
+import type {
+  AcceptanceManifest,
+  AcceptanceReport,
+  ShippingAcceptanceReport,
+} from "@kinetra/verification";
 import {
   createArenaProject,
   ARENA_SCENE_ID,
@@ -721,6 +725,40 @@ test(
       assert.equal(perf.executionMode, "stepped");
       assert.ok(perf.renderer?.drawCalls >= 0);
       assert.equal(report.observations?.performanceViolations, undefined);
+    } finally {
+      await client.close();
+    }
+  },
+);
+
+test(
+  "Scenario M: PACKAGED SHIPPING ACCEPTANCE — MCP tool test.runShippingAcceptance executes canonical gate against real KinetraGame.exe",
+  {
+    skip: skipPackagedAcceptance(),
+    timeout: 120_000,
+  },
+  async () => {
+    const resolution = resolvePackagedExecutable();
+    assertPackagedGamePath(resolution.path);
+
+    const client = createMcpTestClient(new KinetraAgentService(fixtureProject()));
+
+    try {
+      const result = await client.callTool("test.runShippingAcceptance", {
+        target: "packaged",
+      });
+
+      assert.notEqual(result.isError, true, "Tool call must not return isError");
+      assert.ok(result.content.length > 0);
+
+      const report = JSON.parse(result.content[0]?.text ?? "{}") as ShippingAcceptanceReport;
+      assert.equal(report.passed, true, `Shipping report must pass: ${report.failureReason}`);
+      assert.equal(report.suite, "kinetra-arena-shipping");
+      assert.equal(report.artifact.isPackaged, true);
+      assert.ok(report.phases.length >= 6);
+      assert.equal(report.failedPhaseIds.length, 0);
+      assert.ok(report.visualEvidence);
+      assert.ok(report.performanceEvidence);
     } finally {
       await client.close();
     }

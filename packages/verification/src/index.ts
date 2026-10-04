@@ -7,4 +7,4 @@ export * from "./packaged-resolver.js";
 export * from "./visual.js";
 export * from "./critique.js";
 export * from "./performance.js";
-
+export * from "./shipping.js";

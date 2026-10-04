@@ -14,8 +14,10 @@ import {
 import {
   AcceptanceRunner,
   KinetraRuntimeProbe,
+  ShippingAcceptanceRunner,
   type AcceptanceManifest,
   type AcceptanceReport,
+  type ShippingAcceptanceReport,
 } from "@kinetra/verification";
 
 import { ElectronRuntimeHost } from "./electron-runtime.js";
@@ -38,6 +40,14 @@ export interface RunAcceptanceInput {
   timeoutMs?: number;
   testScriptPreset?: string;
   assets?: Record<string, string>;
+}
+
+export interface RunShippingAcceptanceInput {
+  target?: "packaged" | "dev";
+  runtimeExecutable?: string;
+  outputDir?: string;
+  saveBaseDir?: string;
+  timeoutMs?: number;
 }
 
 export interface SceneCreateInput {
@@ -369,6 +379,19 @@ export class KinetraAgentService {
       await probe.close().catch(() => {});
       await host.close().catch(() => {});
     }
+  }
+
+  async runShippingAcceptance(
+    input: RunShippingAcceptanceInput = {},
+  ): Promise<ShippingAcceptanceReport> {
+    const runner = new ShippingAcceptanceRunner({
+      target: input.target ?? "packaged",
+      ...(input.runtimeExecutable !== undefined ? { runtimeExecutable: input.runtimeExecutable } : {}),
+      ...(input.outputDir !== undefined ? { outputDir: input.outputDir } : {}),
+      ...(input.saveBaseDir !== undefined ? { saveBaseDir: input.saveBaseDir } : {}),
+      ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
+    });
+    return runner.run();
   }
 
   async #execute(command: EngineCommand): Promise<CommandResult> {

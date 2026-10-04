@@ -5,6 +5,7 @@ on:
     paths:
       - "apps/player/**"
       - "packages/**"
+      - "examples/**"
       - "package.json"
       - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
@@ -29,6 +30,8 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm check
       - run: pnpm --filter @kinetra/player package:win
+      - name: Canonical shipping acceptance gate (packaged KinetraGame.exe)
+        run: pnpm --filter @kinetra/player shipping:win
       - run: pnpm --filter @kinetra/player smoke:win
       - uses: actions/upload-artifact@v4
         with:

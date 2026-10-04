@@ -159,6 +159,20 @@ async function executeStep(
       }
       await probe.start(step.sceneId, seed);
       return;
+    case "shell.startRun":
+      if (typeof probe.shellStartRun === "function") {
+        await probe.shellStartRun(
+          step.stepped !== undefined ? { stepped: step.stepped } : undefined,
+        );
+      }
+      return;
+    case "shell.continueRun":
+      if (typeof probe.shellContinueRun === "function") {
+        await probe.shellContinueRun(
+          step.stepped !== undefined ? { stepped: step.stepped } : undefined,
+        );
+      }
+      return;
     case "asset.register":
       if (typeof probe.registerAsset === "function") {
         await probe.registerAsset(step.assetId, step.dataBase64);
@@ -167,14 +181,39 @@ async function executeStep(
     case "runtime.stop":
       await probe.stop();
       return;
+    case "game.pause":
+      if (typeof probe.gamePause === "function") {
+        await probe.gamePause();
+      } else if (typeof probe.pause === "function") {
+        await probe.pause();
+      }
+      return;
     case "runtime.pause":
       if (typeof probe.pause === "function") {
         await probe.pause();
       }
       return;
+    case "game.resume":
+      if (typeof probe.gameResume === "function") {
+        await probe.gameResume();
+      } else if (typeof probe.resume === "function") {
+        await probe.resume();
+      }
+      return;
     case "runtime.resume":
       if (typeof probe.resume === "function") {
         await probe.resume();
+      }
+      return;
+    case "settings.set":
+      if (typeof probe.setSettings === "function") {
+        await probe.setSettings({
+          ...(step.masterGain !== undefined ? { masterGain: step.masterGain } : {}),
+          ...(step.sfxGain !== undefined ? { sfxGain: step.sfxGain } : {}),
+          ...(step.fullscreen !== undefined ? { fullscreen: step.fullscreen } : {}),
+          ...(step.remapAction !== undefined ? { remapAction: step.remapAction } : {}),
+          ...(step.bindings !== undefined ? { bindings: step.bindings } : {}),
+        });
       }
       return;
     case "runtime.step":

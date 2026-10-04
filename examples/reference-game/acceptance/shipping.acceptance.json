@@ -1,0 +1,239 @@
+{
+  "schemaVersion": 1,
+  "suite": "kinetra-arena-shipping",
+  "target": "packaged",
+  "phases": [
+    {
+      "id": "boot-shell-visual",
+      "name": "Phase 1: Boot, Shell & Visual Main Menu",
+      "freshProcess": true,
+      "captureMode": "visual",
+      "persistenceGroup": "shipping-main",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-boot-shell-visual",
+        "seed": 101,
+        "target": "packaged",
+        "steps": [
+          { "type": "assert.equal", "path": "running", "expected": false },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "mainMenu" },
+          { "type": "assert.equal", "path": "state.shell.isPaused", "expected": false },
+          { "type": "assert.logAbsent", "minimumLevel": "error" },
+          { "type": "capture.frame", "id": "main-menu", "saveArtifact": true },
+          { "type": "assert.visualNotBlank", "captureId": "main-menu" },
+          { "type": "shell.startRun", "stepped": true },
+          { "type": "assert.equal", "path": "running", "expected": true },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "playing" },
+          { "type": "assert.equal", "path": "state.game.status", "expected": "playing" },
+          { "type": "assert.equal", "path": "state.game.playerHealth", "expected": 3 },
+          { "type": "assert.equal", "path": "state.game.run.status", "expected": "active" },
+          { "type": "assert.equal", "path": "state.game.objectives.length", "expected": 3 },
+          { "type": "assert.logAbsent", "minimumLevel": "error" },
+          { "type": "capture.frame", "id": "gameplay-hud", "saveArtifact": true },
+          { "type": "assert.visualNotBlank", "captureId": "gameplay-hud" },
+          { "type": "runtime.stop" }
+        ]
+      }
+    },
+    {
+      "id": "core-gameplay-save",
+      "name": "Phase 2: Core Gameplay, Objectives, Pause & Checkpoint Save",
+      "freshProcess": true,
+      "captureMode": "visual",
+      "persistenceGroup": "shipping-main",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-core-gameplay-save",
+        "seed": 102,
+        "target": "packaged",
+        "steps": [
+          { "type": "shell.startRun", "stepped": true },
+          { "type": "assert.equal", "path": "running", "expected": true },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "playing" },
+          { "type": "assert.equal", "path": "state.game.playerHealth", "expected": 3 },
+          { "type": "input", "action": "player.moveBackward", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 7 },
+          { "type": "input", "action": "player.moveBackward", "phase": "release" },
+          { "type": "assert.equal", "path": "state.game.objectives.0.completed", "expected": true },
+          { "type": "input", "action": "player.moveBackward", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 3 },
+          { "type": "input", "action": "player.moveBackward", "phase": "release" },
+          { "type": "game.pause" },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "paused" },
+          { "type": "assert.equal", "path": "state.shell.isPaused", "expected": true },
+          { "type": "runtime.step", "steps": 5 },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "paused" },
+          { "type": "game.resume" },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "playing" },
+          { "type": "assert.equal", "path": "state.shell.isPaused", "expected": false },
+          { "type": "input", "action": "player.moveRight", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 10 },
+          { "type": "input", "action": "player.moveRight", "phase": "release" },
+          { "type": "input", "action": "player.moveForward", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 3 },
+          { "type": "input", "action": "player.moveForward", "phase": "release" },
+          { "type": "assert.equal", "path": "state.game.objectives.1.completed", "expected": true },
+          { "type": "assert.equal", "path": "state.game.challenge.active", "expected": true },
+          { "type": "assert.equal", "path": "state.game.challenge.status", "expected": "active" },
+          { "type": "runtime.step", "steps": 2 },
+          { "type": "input", "action": "player.attack", "phase": "press", "value": 1 },
+          { "type": "runtime.step", "steps": 1 },
+          { "type": "save.capture", "slotId": "arena-progress" },
+          { "type": "assert.logAbsent", "minimumLevel": "error" }
+        ]
+      }
+    },
+    {
+      "id": "continue-victory",
+      "name": "Phase 3: Fresh Process Continue & Victory Terminal Flow",
+      "freshProcess": true,
+      "captureMode": "visual",
+      "persistenceGroup": "shipping-main",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-continue-victory",
+        "seed": 103,
+        "target": "packaged",
+        "steps": [
+          { "type": "assert.equal", "path": "running", "expected": false },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "mainMenu" },
+          { "type": "shell.continueRun", "stepped": true },
+          { "type": "assert.equal", "path": "running", "expected": true },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "playing" },
+          { "type": "assert.equal", "path": "state.game.run.status", "expected": "active" },
+          { "type": "assert.equal", "path": "state.game.objectives.0.completed", "expected": true },
+          { "type": "assert.equal", "path": "state.game.objectives.1.completed", "expected": true },
+          { "type": "assert.equal", "path": "state.game.challenge.status", "expected": "active" },
+          { "type": "input", "action": "player.moveForward", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 7 },
+          { "type": "input", "action": "player.moveForward", "phase": "release" },
+          { "type": "assert.equal", "path": "state.game.objectives.2.completed", "expected": true },
+          { "type": "assert.equal", "path": "state.game.status", "expected": "won" },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "won" },
+          { "type": "assert.equal", "path": "state.game.run.status", "expected": "completed" },
+          { "type": "assert.logAbsent", "minimumLevel": "error" },
+          { "type": "capture.frame", "id": "victory", "saveArtifact": true },
+          { "type": "assert.visualNotBlank", "captureId": "victory" },
+          { "type": "runtime.stop" }
+        ]
+      }
+    },
+    {
+      "id": "defeat-flow",
+      "name": "Phase 4: Fresh Process Defeat Terminal Flow",
+      "freshProcess": true,
+      "captureMode": "visual",
+      "persistenceGroup": "shipping-defeat",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-defeat-flow",
+        "seed": 104,
+        "target": "packaged",
+        "steps": [
+          { "type": "shell.startRun", "stepped": true },
+          { "type": "assert.equal", "path": "running", "expected": true },
+          { "type": "assert.equal", "path": "state.game.playerHealth", "expected": 3 },
+          { "type": "input", "action": "player.moveBackward", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 7 },
+          { "type": "input", "action": "player.moveBackward", "phase": "release" },
+          { "type": "input", "action": "player.moveRight", "phase": "hold", "value": 1 },
+          { "type": "runtime.step", "steps": 7 },
+          { "type": "input", "action": "player.moveRight", "phase": "release" },
+          { "type": "runtime.step", "steps": 25 },
+          { "type": "assert.equal", "path": "state.game.playerHealth", "expected": 0 },
+          { "type": "assert.equal", "path": "state.game.status", "expected": "lost" },
+          { "type": "assert.equal", "path": "state.shell.mode", "expected": "lost" },
+          { "type": "assert.equal", "path": "state.game.run.status", "expected": "failed" },
+          { "type": "assert.logAbsent", "minimumLevel": "error" },
+          { "type": "capture.frame", "id": "defeat", "saveArtifact": true },
+          { "type": "assert.visualNotBlank", "captureId": "defeat" },
+          { "type": "runtime.stop" }
+        ]
+      }
+    },
+    {
+      "id": "settings-mutation",
+      "name": "Phase 5a: Settings Semantic Mutation",
+      "freshProcess": true,
+      "captureMode": "performance",
+      "persistenceGroup": "shipping-settings",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-settings-mutation",
+        "seed": 105,
+        "target": "packaged",
+        "steps": [
+          {
+            "type": "settings.set",
+            "masterGain": 0.5,
+            "sfxGain": 0.25,
+            "remapAction": "player.moveRight",
+            "bindings": [{ "kind": "key", "code": "KeyL", "scale": 1 }]
+          },
+          { "type": "assert.equal", "path": "state.settings.audio.masterGain", "expected": 0.5 },
+          { "type": "assert.equal", "path": "state.settings.audio.sfxGain", "expected": 0.25 },
+          { "type": "assert.logAbsent", "minimumLevel": "error" }
+        ]
+      }
+    },
+    {
+      "id": "settings-restore",
+      "name": "Phase 5b: Settings Persistence Restore Across Process Boundary",
+      "freshProcess": true,
+      "captureMode": "performance",
+      "persistenceGroup": "shipping-settings",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-settings-restore",
+        "seed": 106,
+        "target": "packaged",
+        "steps": [
+          { "type": "assert.equal", "path": "running", "expected": false },
+          { "type": "assert.equal", "path": "state.settings.audio.masterGain", "expected": 0.5 },
+          { "type": "assert.equal", "path": "state.settings.audio.sfxGain", "expected": 0.25 },
+          { "type": "assert.logAbsent", "minimumLevel": "error" }
+        ]
+      }
+    },
+    {
+      "id": "steady-state-performance",
+      "name": "Phase 6: Arena Steady-State Runtime Performance Budget Gate",
+      "freshProcess": true,
+      "captureMode": "performance",
+      "persistenceGroup": "shipping-perf",
+      "manifest": {
+        "schemaVersion": 1,
+        "suite": "shipping-performance-gate",
+        "seed": 107,
+        "target": "packaged",
+        "steps": [
+          { "type": "shell.startRun", "stepped": false },
+          { "type": "assert.equal", "path": "running", "expected": true },
+          { "type": "assert.equal", "path": "renderer.captureMode", "expected": "performance" },
+          { "type": "assert.equal", "path": "renderer.preserveDrawingBuffer", "expected": false },
+          {
+            "type": "performance.sample",
+            "warmupFrames": 10,
+            "sampleFrames": 60,
+            "mode": "continuous"
+          },
+          {
+            "type": "assert.performanceBudget",
+            "budget": {
+              "budgets": {
+                "renderer.drawCalls": { "max": 150 },
+                "renderer.triangles": { "max": 300000 },
+                "scene.objectCount": { "max": 200 },
+                "frame.p95Ms": { "max": 120 },
+                "simulation.p95Ms": { "max": 80 },
+                "render.p95Ms": { "max": 80 }
+              }
+            }
+          },
+          { "type": "assert.logAbsent", "minimumLevel": "error" },
+          { "type": "runtime.stop" }
+        ]
+      }
+    }
+  ]
+}
