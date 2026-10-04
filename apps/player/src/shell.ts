@@ -153,11 +153,15 @@ export class GameShellController {
     return hasSave;
   }
 
-  async startArenaGame(fromSave = false): Promise<void> {
+  async startArenaGame(
+    fromSave = false,
+    options?: { stepped?: boolean },
+  ): Promise<void> {
     await this.#runtime.stop();
     const defaultArenaProject = createArenaProject();
     await this.#runtime.start(defaultArenaProject, ARENA_SCENE_ID, 0, {
       assets: arenaAudioAssets,
+      ...(options?.stepped !== undefined ? { stepped: options.stepped } : {}),
     });
 
     if (fromSave) {

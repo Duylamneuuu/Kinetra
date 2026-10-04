@@ -366,4 +366,31 @@ if (performanceRun.status !== 0) {
 
 console.log("Packaged Windows runtime performance tests passed successfully.");
 
+const shippingTestFile = join(
+  here,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "verification",
+  "dist",
+  "test",
+  "real-shipping.test.js",
+);
+
+console.log("Running real packaged canonical shipping acceptance suite...");
+const shippingRun = spawnSync(process.execPath, ["--test", shippingTestFile], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    KINETRA_RUNTIME_EXECUTABLE: exe,
+  },
+});
+
+if (shippingRun.status !== 0) {
+  throw new Error(`Packaged shipping acceptance test failed with exit code ${String(shippingRun.status)}`);
+}
+
+console.log("Packaged Windows canonical shipping acceptance tests passed successfully.");
+
 

@@ -473,5 +473,40 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
     },
   );
 
+  server.registerTool(
+    "test.runShippingAcceptance",
+    {
+      description:
+        "Execute the canonical release-blocking complete-game shipping acceptance suite against the packaged Kinetra executable, verifying multi-process boot, gameplay, save/restore, terminal win/loss, visual frames, and runtime performance budgets.",
+      inputSchema: z.object({
+        target: z.enum(["packaged", "dev"]).optional(),
+        runtimeExecutable: z.string().optional(),
+        outputDir: z.string().optional(),
+        saveBaseDir: z.string().optional(),
+        timeoutMs: z.number().int().min(1_000).max(300_000).optional(),
+      }).strict(),
+    },
+    async (input) => {
+      try {
+        const report = await service.runShippingAcceptance({
+          ...(input.target !== undefined ? { target: input.target } : {}),
+          ...(input.runtimeExecutable !== undefined
+            ? { runtimeExecutable: input.runtimeExecutable }
+            : {}),
+          ...(input.outputDir !== undefined ? { outputDir: input.outputDir } : {}),
+          ...(input.saveBaseDir !== undefined
+            ? { saveBaseDir: input.saveBaseDir }
+            : {}),
+          ...(input.timeoutMs !== undefined
+            ? { timeoutMs: input.timeoutMs }
+            : {}),
+        });
+        return success(report);
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
+
   return server;
 }
