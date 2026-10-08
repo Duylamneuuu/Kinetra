@@ -56,6 +56,8 @@ The source of truth is text data. A future visual node editor is only another fr
 
 Parameters, states, transitions, blend durations and events should be directly editable and queryable by agents.
 
+`validateAnimationGraph` rejects, with structured `anim.*` diagnostics: unknown parameter types, defaults that do not match the parameter type (`anim.parameter.default.type`), non-finite state speeds and transition priorities, unknown condition operators, and condition values that cannot match their parameter (`anim.condition.value.type`: a non-finite number for a number parameter, a non-boolean or an ordering operator on a bool). Parameter names resolve as own properties only, so `toString`/`constructor` are never parameters. `AnimationGraphMachine.set` rejects non-finite numbers so NaN cannot reach comparisons or blend spaces. Equal-priority transitions are ordered by transition id in code-point order, independent of host locale.
+
 ## Locomotion blend spaces
 
 `@kinetra/animation` owns a pure, schema-versioned blend-space contract (`packages/animation/src/blend-space.ts`):
@@ -120,4 +122,4 @@ IK is a pure contract in `@kinetra/animation/ik` (no Three.js dependency):
 - `solveTwoBoneIk` is analytic (law of cosines) with an optional pole hint choosing the bend plane; `solveFabrikIk` is iterative FABRIK with a fixed root. Both preserve bone lengths exactly, never mutate input, are deterministic, and report `reachable`, `converged`, `iterations`, `error` and `ik.solve.*` diagnostics (out-of-reach, inside-min-reach, target-at-root, pole-degenerate, not-converged, non-finite, zero-length-bone) instead of throwing.
 - `computeBoneAimRotations` converts solved positions into world-space shortest-arc rotations per bone for a runtime adapter.
 
-IK produces a visual pose only. Physics and gameplay stay authoritative over entity transforms, exactly like root motion. The runtime adapter (reading bone world positions from the skinned instance after the mixer update and writing solved rotations) is not wired yet.
+IK produces a visual pose only. Physics and gameplay stay authoritative over entity transforms, exactly like root motion. The runtime adapter `IkController` (renderer-three) reads bone world positions after the mixer update and writes solved local rotations. It records the rotation it read and wrote per bone; a bone the mixer did not rewrite since the previous frame is put back to its input rotation before the next solve, so IK is idempotent on static or partially animated rigs and `clearIkTarget` returns the bones to the input pose. Chains are applied in chain-id order.

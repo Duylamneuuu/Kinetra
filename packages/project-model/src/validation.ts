@@ -27,7 +27,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isJsonValue(value: unknown): value is JsonValue {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+/**
+ * True when the value round-trips through JSON unchanged: finite numbers, plain
+ * objects, dense arrays, no cycles. Map/Set/Date/class instances, sparse arrays and
+ * cyclic graphs are rejected instead of silently serializing to something else
+ * (or overflowing the stack).
+ */
+function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): value is JsonValue {
   if (
     value === null ||
     typeof value === "string" ||
@@ -37,15 +53,31 @@ function isJsonValue(value: unknown): value is JsonValue {
     return typeof value !== "number" || Number.isFinite(value);
   }
 
-  if (Array.isArray(value)) {
-    return value.every(isJsonValue);
+  if (typeof value !== "object") {
+    return false;
   }
 
-  if (isRecord(value)) {
-    return Object.values(value).every(isJsonValue);
+  if (ancestors.has(value)) {
+    return false;
   }
 
-  return false;
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        if (!(index in value) || !isJsonValue(value[index], ancestors)) return false;
+      }
+      return true;
+    }
+
+    if (isPlainObject(value)) {
+      return Object.values(value).every((child) => isJsonValue(child, ancestors));
+    }
+
+    return false;
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function validateEntity(
@@ -54,11 +86,11 @@ function validateEntity(
   path: string,
   issues: ValidationIssue[],
 ): void {
-  if (!entity.id) {
+  if (!isNonEmptyString(entity.id)) {
     issues.push({ path: `${path}.id`, code: "entity.id.empty", message: "Entity id is required" });
   }
 
-  if (!entity.name) {
+  if (!isNonEmptyString(entity.name)) {
     issues.push({
       path: `${path}.name`,
       code: "entity.name.empty",
@@ -92,7 +124,13 @@ function validateEntity(
     }
   }
 
-  if (entity.parentId && !scene.entities.some((candidate) => candidate.id === entity.parentId)) {
+  if (entity.parentId !== undefined && !isNonEmptyString(entity.parentId)) {
+    issues.push({
+      path: `${path}.parentId`,
+      code: "entity.parent.invalid",
+      message: "Entity parentId must be a non-empty string when present",
+    });
+  } else if (entity.parentId && !scene.entities.some((candidate) => candidate.id === entity.parentId)) {
     issues.push({
       path: `${path}.parentId`,
       code: "entity.parent.missing",
@@ -106,9 +144,9 @@ function validateParentCycles(scene: SceneDefinition, issues: ValidationIssue[])
 
   for (const entity of scene.entities) {
     const visited = new Set<string>([entity.id]);
-    let cursor = entity.parentId;
+    let cursor: unknown = entity.parentId;
 
-    while (cursor) {
+    while (typeof cursor === "string" && cursor.length > 0) {
       if (visited.has(cursor)) {
         issues.push({
           path: `scenes[${scene.id}].entities[${entity.id}].parentId`,
@@ -127,6 +165,11 @@ function validateParentCycles(scene: SceneDefinition, issues: ValidationIssue[])
 export function validateProject(project: ProjectDocument): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
+  if (!isRecord(project)) {
+    issues.push({ path: "", code: "project.invalid", message: "Project document must be an object" });
+    return issues;
+  }
+
   if (project.schemaVersion !== 1) {
     issues.push({
       path: "schemaVersion",
@@ -135,7 +178,7 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
     });
   }
 
-  if (!project.projectId) {
+  if (!isNonEmptyString(project.projectId)) {
     issues.push({
       path: "projectId",
       code: "project.id.empty",
@@ -143,59 +186,91 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
     });
   }
 
-  if (!project.name) {
+  if (!isNonEmptyString(project.name)) {
     issues.push({ path: "name", code: "project.name.empty", message: "Project name is required" });
   }
 
   const sceneIds = new Set<string>();
   const entityIds = new Set<string>();
 
-  project.scenes.forEach((scene, sceneIndex) => {
-    const scenePath = `scenes[${sceneIndex}]`;
+  // Documents arrive from disk/MCP as untrusted JSON: check the container shapes
+  // before walking them so malformed input yields structured issues, not TypeErrors.
+  const scenes: unknown = project.scenes;
+  if (!Array.isArray(scenes)) {
+    issues.push({ path: "scenes", code: "project.scenes.invalid", message: "Project scenes must be an array" });
+  } else {
+    scenes.forEach((rawScene: unknown, sceneIndex) => {
+      const scenePath = `scenes[${sceneIndex}]`;
 
-    if (!scene.id) {
-      issues.push({ path: `${scenePath}.id`, code: "scene.id.empty", message: "Scene id is required" });
-    } else if (sceneIds.has(scene.id)) {
-      issues.push({
-        path: `${scenePath}.id`,
-        code: "scene.id.duplicate",
-        message: `Duplicate scene id "${scene.id}"`,
+      if (!isRecord(rawScene)) {
+        issues.push({ path: scenePath, code: "scene.invalid", message: "Scene must be an object" });
+        return;
+      }
+      const scene = rawScene as unknown as SceneDefinition;
+
+      if (!isNonEmptyString(scene.id)) {
+        issues.push({ path: `${scenePath}.id`, code: "scene.id.empty", message: "Scene id is required" });
+      } else if (sceneIds.has(scene.id)) {
+        issues.push({
+          path: `${scenePath}.id`,
+          code: "scene.id.duplicate",
+          message: `Duplicate scene id "${scene.id}"`,
+        });
+      }
+      sceneIds.add(scene.id);
+
+      const entities: unknown = scene.entities;
+      if (!Array.isArray(entities)) {
+        issues.push({
+          path: `${scenePath}.entities`,
+          code: "scene.entities.invalid",
+          message: "Scene entities must be an array",
+        });
+        return;
+      }
+      const malformed = entities.findIndex((entity: unknown) => !isRecord(entity));
+      if (malformed !== -1) {
+        issues.push({
+          path: `${scenePath}.entities[${malformed}]`,
+          code: "entity.invalid",
+          message: "Entity must be an object",
+        });
+        return;
+      }
+
+      const localIds = new Set<string>();
+      scene.entities.forEach((entity, entityIndex) => {
+        const entityPath = `${scenePath}.entities[${entityIndex}]`;
+
+        if (localIds.has(entity.id)) {
+          issues.push({
+            path: `${entityPath}.id`,
+            code: "entity.id.duplicate-in-scene",
+            message: `Duplicate entity id "${entity.id}" in scene "${scene.id}"`,
+          });
+        }
+        localIds.add(entity.id);
+
+        if (entityIds.has(entity.id)) {
+          issues.push({
+            path: `${entityPath}.id`,
+            code: "entity.id.duplicate-in-project",
+            message: `Entity id "${entity.id}" must be globally unique within a project`,
+          });
+        }
+        entityIds.add(entity.id);
+        validateEntity(entity, scene, entityPath, issues);
       });
-    }
-    sceneIds.add(scene.id);
 
-    const localIds = new Set<string>();
-    scene.entities.forEach((entity, entityIndex) => {
-      const entityPath = `${scenePath}.entities[${entityIndex}]`;
-
-      if (localIds.has(entity.id)) {
-        issues.push({
-          path: `${entityPath}.id`,
-          code: "entity.id.duplicate-in-scene",
-          message: `Duplicate entity id "${entity.id}" in scene "${scene.id}"`,
-        });
-      }
-      localIds.add(entity.id);
-
-      if (entityIds.has(entity.id)) {
-        issues.push({
-          path: `${entityPath}.id`,
-          code: "entity.id.duplicate-in-project",
-          message: `Entity id "${entity.id}" must be globally unique within a project`,
-        });
-      }
-      entityIds.add(entity.id);
-      validateEntity(entity, scene, entityPath, issues);
+      validateParentCycles(scene, issues);
     });
+  }
 
-    validateParentCycles(scene, issues);
-  });
-
-  if (project.metadata && !isJsonValue(project.metadata)) {
+  if (project.metadata !== undefined && !(isPlainObject(project.metadata) && isJsonValue(project.metadata))) {
     issues.push({
       path: "metadata",
       code: "project.metadata.not-json",
-      message: "Project metadata must contain JSON-compatible values only",
+      message: "Project metadata must be a JSON object with JSON-compatible values only",
     });
   }
 

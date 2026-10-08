@@ -143,11 +143,10 @@ export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Arra
   const sampleRate = options.sampleRate ?? 44100;
   const durationSeconds = options.durationSeconds ?? 0.25;
   const frequency = options.frequency ?? 440;
-
   // The header stores sampleRate as an integer while samples are generated from the
   // option value, so a fractional rate would produce a self-inconsistent file.
-  if (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 768000) {
-    throw new RangeError(`createSyntheticWav: sampleRate must be an integer in (0, 768000], got ${String(sampleRate)}`);
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 0xffffffff / 2) {
+    throw new RangeError(`createSyntheticWav: sampleRate must be a positive integer, got ${String(sampleRate)}`);
   }
   if (typeof durationSeconds !== "number" || !Number.isFinite(durationSeconds) || durationSeconds < 0) {
     throw new RangeError(`createSyntheticWav: durationSeconds must be finite and >= 0, got ${String(durationSeconds)}`);

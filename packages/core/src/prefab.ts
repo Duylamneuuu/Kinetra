@@ -28,12 +28,30 @@ export function instantiatePrefab(input:{
   instanceId:string;
   overrides?:PrefabOverride[];
 }):EntityDefinition[]{
+  // Entity ids are derived from `${prefabId}:${instanceId}:${localId}`; a ":" in either
+  // prefix would let two different (prefab, instance) pairs produce identical entity ids.
+  for(const [label,value] of [["Prefab id",input.prefab.id],["Prefab instance id",input.instanceId]] as const){
+    if(value.length===0) throw new Error(`${label} must not be empty`);
+    if(value.includes(":")) throw new Error(`${label} "${value}" must not contain ":"`);
+  }
+
   const localIds=new Set(input.prefab.entities.map(entity=>entity.localId));
   if(localIds.size!==input.prefab.entities.length) throw new Error("Prefab local IDs must be unique");
 
+  const parentOf=new Map<string,string>();
   for(const entity of input.prefab.entities){
     if(entity.parentLocalId&&!localIds.has(entity.parentLocalId)){
       throw new Error(`Prefab parent "${entity.parentLocalId}" does not exist`);
+    }
+    if(entity.parentLocalId) parentOf.set(entity.localId,entity.parentLocalId);
+  }
+  for(const entity of input.prefab.entities){
+    const seen=new Set<string>([entity.localId]);
+    let cursor=parentOf.get(entity.localId);
+    while(cursor!==undefined){
+      if(seen.has(cursor)) throw new Error(`Prefab parent cycle detected at entity "${entity.localId}"`);
+      seen.add(cursor);
+      cursor=parentOf.get(cursor);
     }
   }
 
@@ -50,6 +68,9 @@ export function instantiatePrefab(input:{
   for(const override of input.overrides??[]){
     const entity=byLocal.get(override.localId);
     if(!entity) throw new Error(`Override targets unknown prefab entity "${override.localId}"`);
+    if(!jsonObject(override.patch)){
+      throw new Error(`Override patch for "${override.localId}.${override.component}" must be a JSON object`);
+    }
     const existing=entity.components[override.component];
     if(existing!==undefined&&!jsonObject(existing)){
       throw new Error(`Component "${override.component}" is not object data and cannot be patched`);

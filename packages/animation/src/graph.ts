@@ -40,9 +40,40 @@ export interface AnimationGraphDiagnostic {
   message:string;
 }
 
+const PARAMETER_TYPES:readonly AnimationParameterType[]=["bool","number","trigger"];
+const CONDITION_OPS:readonly AnimationCondition["op"][]=["==","!=",">",">=","<","<=","triggered"];
+
+/** Locale-independent ordering so transition choice never depends on the host's ICU/locale. */
+function compareCodePoints(a:string,b:string):number{
+  return a<b?-1:a>b?1:0;
+}
+
+function isFiniteNumber(value:unknown):value is number{
+  return typeof value==="number" && Number.isFinite(value);
+}
+
+/** Own-property lookup: parameter names like "toString" must not resolve to Object.prototype members. */
+function parameterDefinition(graph:AnimationGraphDefinition,name:string):AnimationParameterDefinition|undefined{
+  return Object.hasOwn(graph.parameters,name)?graph.parameters[name]:undefined;
+}
+
 export function validateAnimationGraph(graph:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
   const diagnostics:AnimationGraphDiagnostic[]=[];
   const states=new Set<string>();
+
+  for(const [name,definition] of Object.entries(graph.parameters)){
+    if(!PARAMETER_TYPES.includes(definition?.type)){
+      diagnostics.push({code:"anim.parameter.type",message:`Parameter "${name}" has unknown type "${String(definition?.type)}"`});
+      continue;
+    }
+    if(definition.default===undefined) continue;
+    const ok=definition.type==="bool"?typeof definition.default==="boolean"
+      :definition.type==="number"?isFiniteNumber(definition.default)
+      :false;
+    if(!ok){
+      diagnostics.push({code:"anim.parameter.default.type",message:`Parameter "${name}" (${definition.type}) has invalid default ${String(definition.default)}`});
+    }
+  }
 
   for(const state of graph.states){
     if(states.has(state.id)){
@@ -51,6 +82,9 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     states.add(state.id);
     if(!state.clipId){
       diagnostics.push({code:"anim.state.clip.empty",message:`State "${state.id}" has no clipId`});
+    }
+    if(state.speed!==undefined && !isFiniteNumber(state.speed)){
+      diagnostics.push({code:"anim.state.speed.invalid",message:`State "${state.id}" has non-finite speed`});
     }
   }
 
@@ -68,12 +102,32 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     if(transition.blendSeconds!==undefined && (typeof transition.blendSeconds!=="number" || !Number.isFinite(transition.blendSeconds) || transition.blendSeconds<0)){
       diagnostics.push({code:"anim.transition.blendSeconds.invalid",message:`Transition "${transition.id}" has invalid blendSeconds`});
     }
+    if(transition.priority!==undefined && !isFiniteNumber(transition.priority)){
+      diagnostics.push({code:"anim.transition.priority.invalid",message:`Transition "${transition.id}" has non-finite priority`});
+    }
     for(const condition of transition.conditions){
-      const parameter=graph.parameters[condition.parameter];
+      if(!CONDITION_OPS.includes(condition.op)){
+        diagnostics.push({code:"anim.condition.op.invalid",message:`Transition "${transition.id}" uses unknown operator "${String(condition.op)}"`});
+        continue;
+      }
+      const parameter=parameterDefinition(graph,condition.parameter);
       if(!parameter){
         diagnostics.push({code:"anim.condition.parameter.missing",message:`Condition parameter "${condition.parameter}" is missing`});
-      }else if(condition.op==="triggered" && parameter.type!=="trigger"){
-        diagnostics.push({code:"anim.condition.trigger.type",message:`Parameter "${condition.parameter}" is not a trigger`});
+      }else if(condition.op==="triggered"){
+        if(parameter.type!=="trigger"){
+          diagnostics.push({code:"anim.condition.trigger.type",message:`Parameter "${condition.parameter}" is not a trigger`});
+        }
+      }else{
+        const numericOp=condition.op!=="==" && condition.op!=="!=";
+        const ok=parameter.type==="number"?isFiniteNumber(condition.value)
+          :parameter.type==="bool"?!numericOp && typeof condition.value==="boolean"
+          :false;
+        if(!ok){
+          diagnostics.push({
+            code:"anim.condition.value.type",
+            message:`Transition "${transition.id}" compares ${parameter.type} parameter "${condition.parameter}" with ${condition.op} ${String(condition.value)}`,
+          });
+        }
       }
     }
   }
@@ -163,16 +217,16 @@ export class AnimationGraphMachine {
   }
 
   set(name:string,value:boolean|number):void{
-    const definition=this.graph.parameters[name];
+    const definition=parameterDefinition(this.graph,name);
     if(!definition) throw new Error(`Unknown animation parameter "${name}"`);
     if(definition.type==="trigger") throw new Error(`Trigger "${name}" must use trigger()`);
     if(definition.type==="bool" && typeof value!=="boolean") throw new TypeError(`Parameter "${name}" expects boolean`);
-    if(definition.type==="number" && typeof value!=="number") throw new TypeError(`Parameter "${name}" expects number`);
+    if(definition.type==="number" && !isFiniteNumber(value)) throw new TypeError(`Parameter "${name}" expects a finite number`);
     this.#values.set(name,value);
   }
 
   trigger(name:string):void{
-    const definition=this.graph.parameters[name];
+    const definition=parameterDefinition(this.graph,name);
     if(!definition || definition.type!=="trigger") throw new Error(`Unknown trigger "${name}"`);
     this.#triggers.add(name);
   }
@@ -180,7 +234,7 @@ export class AnimationGraphMachine {
   evaluate():AnimationTransitionResult|undefined{
     const candidates=this.graph.transitions
       .filter(t=> (t.from===this.#state || t.from==="*") && t.to !== this.#state)
-      .sort((a,b)=>(b.priority??0)-(a.priority??0) || a.id.localeCompare(b.id));
+      .sort((a,b)=>(b.priority??0)-(a.priority??0) || compareCodePoints(a.id,b.id));
 
     for(const transition of candidates){
       if(transition.conditions.every(condition=>this.#matches(condition))){
@@ -199,7 +253,7 @@ export class AnimationGraphMachine {
   }
 
   #matches(condition:AnimationCondition):boolean{
-    const definition=this.graph.parameters[condition.parameter];
+    const definition=parameterDefinition(this.graph,condition.parameter);
     if(!definition) return false;
     if(condition.op==="triggered") return this.#triggers.has(condition.parameter);
 
