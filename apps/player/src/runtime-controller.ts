@@ -1181,8 +1181,14 @@ export class PlayerRuntimeController {
       this.#log("error", "animation.ikFailed", { entityId, error });
       return { success: false, error };
     }
-    this.#log("info", "animation.ikChainsSet", { entityId, chains: controller.chainIds });
-    return { success: true, registered: [...controller.chainIds] };
+    const diagnostics = [...controller.registrationDiagnostics];
+    this.#log(diagnostics.length > 0 ? "warning" : "info", "animation.ikChainsSet", {
+      entityId,
+      chains: controller.chainIds,
+      ...(diagnostics.length > 0 ? { diagnostics: diagnostics.map((d) => d.code) } : {}),
+    });
+    // Rejected chains are reported, not silently skipped, so callers can see why a chain is missing.
+    return { success: true, registered: [...controller.chainIds], diagnostics };
   }
 
   setIkTarget(

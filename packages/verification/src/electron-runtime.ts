@@ -584,7 +584,14 @@ export class ElectronRuntimeHost implements RuntimeHost {
   async setIkChains(
     entityId: string,
     chains: unknown[],
-  ): Promise<RuntimeQueryResult & { success: boolean; registered?: string[]; error?: string }> {
+  ): Promise<
+    RuntimeQueryResult & {
+      success: boolean;
+      registered?: string[];
+      error?: string;
+      diagnostics?: Array<{ code: string; message: string; remediation: string }>;
+    }
+  > {
     await this.#ensureProcess();
     return this.#request("animation.ik.setChains", { entityId, chains });
   }

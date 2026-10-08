@@ -56,13 +56,21 @@ function isVec3(v: unknown): v is IkVec3 {
 }
 
 export class IkController {
+  readonly #definitions: readonly IkChainDefinition[];
   readonly #chains = new Map<string, { definition: IkChainDefinition; bones: THREE.Object3D[] }>();
   readonly #targets = new Map<string, ActiveTarget>();
   readonly #diagnostics: IkDiagnostic[] = [];
 
   /** Registers every valid chain whose bones all exist under `root`; others yield diagnostics. */
   constructor(root: THREE.Object3D, definitions: readonly IkChainDefinition[]) {
+    this.#definitions = [...definitions];
     for (const definition of definitions) {
+      if (typeof definition !== "object" || definition === null || Array.isArray(definition)) {
+        this.#diagnostics.push(
+          diag("ik.chain.invalid", "IK chain definition must be an object", "Pass { schemaVersion: 1, id, solver, joints }."),
+        );
+        continue;
+      }
       const errors = validateIkChainDefinition(definition).filter((d) => d.severity === "error");
       if (errors.length > 0) {
         this.#diagnostics.push(...errors);
@@ -93,6 +101,31 @@ export class IkController {
       }
       this.#chains.set(definition.id, { definition, bones });
     }
+  }
+
+  /** The chain definitions this controller was built from (including rejected ones), in input order. */
+  get definitions(): readonly IkChainDefinition[] {
+    return this.#definitions;
+  }
+
+  /**
+   * Copies active targets from a controller bound to a previous instance of the
+   * same entity (e.g. before a hot reimport). Targets whose chain this
+   * controller did not register are dropped; their chain ids are returned sorted.
+   */
+  adoptTargets(previous: IkController): string[] {
+    const dropped: string[] = [];
+    for (const [chainId, active] of previous.#targets) {
+      if (!this.#chains.has(chainId)) {
+        dropped.push(chainId);
+        continue;
+      }
+      this.#targets.set(chainId, {
+        target: [active.target[0], active.target[1], active.target[2]],
+        options: { ...active.options },
+      });
+    }
+    return dropped.sort();
   }
 
   get chainIds(): string[] {
