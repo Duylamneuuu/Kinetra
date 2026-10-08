@@ -157,6 +157,58 @@ export const DEFAULT_PLAYER_INPUT_MAP: InputMap = {
   ],
 };
 
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * Structural check for one binding from an untrusted source (settings files,
+ * IPC). Returns a human-readable problem, or undefined when the binding is valid.
+ */
+export function describeInvalidInputBinding(binding: unknown): string | undefined {
+  if (typeof binding !== "object" || binding === null || Array.isArray(binding)) {
+    return "binding must be an object";
+  }
+  const candidate = binding as Record<string, unknown>;
+  if (candidate.scale !== undefined && finiteOr(candidate.scale, Number.NaN) !== candidate.scale) {
+    return "scale must be a finite number";
+  }
+  switch (candidate.kind) {
+    case "key":
+      return typeof candidate.code === "string" && candidate.code.length > 0
+        ? undefined
+        : "key binding needs a non-empty string code";
+    case "gamepad-button":
+      return isNonNegativeInteger(candidate.button)
+        ? undefined
+        : "gamepad-button binding needs a non-negative integer button";
+    case "gamepad-axis":
+      if (!isNonNegativeInteger(candidate.axis)) {
+        return "gamepad-axis binding needs a non-negative integer axis";
+      }
+      if (
+        candidate.deadzone !== undefined &&
+        (typeof candidate.deadzone !== "number" || !(candidate.deadzone >= 0 && candidate.deadzone < 1))
+      ) {
+        return "deadzone must be a number in [0, 1)";
+      }
+      if (
+        candidate.direction !== undefined &&
+        candidate.direction !== "positive" &&
+        candidate.direction !== "negative"
+      ) {
+        return 'direction must be "positive" or "negative"';
+      }
+      return undefined;
+    default:
+      return `unknown binding kind ${JSON.stringify(candidate.kind)}`;
+  }
+}
+
 export class InputRouter {
   #map: InputMap;
   #semanticActions = new Map<string, { phase: InputPhase; value: number }>();
@@ -168,6 +220,11 @@ export class InputRouter {
   remap(actionId: string, bindings: InputBinding[]): void {
     const action = this.#map.actions.find(candidate => candidate.id === actionId);
     if (!action) throw new Error(`Unknown input action "${actionId}"`);
+    if (!Array.isArray(bindings)) throw new Error(`Bindings for "${actionId}" must be an array`);
+    bindings.forEach((binding, index) => {
+      const problem = describeInvalidInputBinding(binding);
+      if (problem) throw new Error(`Invalid binding ${index} for "${actionId}": ${problem}`);
+    });
     action.bindings = structuredClone(bindings);
   }
 
@@ -202,7 +259,7 @@ export class InputRouter {
 
     let rawValue: number;
     if (hasSemantic) {
-      rawValue = semantic.value;
+      rawValue = finiteOr(semantic.value, 0);
     } else if (snapshot && action) {
       rawValue = this.value(actionId, snapshot);
     } else {
@@ -226,17 +283,18 @@ export class InputRouter {
 
     let value = 0;
     for (const binding of action.bindings) {
-      const scale = binding.scale ?? 1;
+      const scale = finiteOr(binding.scale, 1);
       switch (binding.kind) {
         case "key":
           if (snapshot.keys.has(binding.code)) value += scale;
           break;
         case "gamepad-button":
-          value += (snapshot.gamepadButtons[binding.button] ?? 0) * scale;
+          value += finiteOr(snapshot.gamepadButtons[binding.button], 0) * scale;
           break;
         case "gamepad-axis": {
-          const raw = snapshot.gamepadAxes[binding.axis] ?? 0;
-          const deadzone = binding.deadzone ?? 0.12;
+          // Disconnected/glitching pads can report NaN; never let it reach gameplay.
+          const raw = finiteOr(snapshot.gamepadAxes[binding.axis], 0);
+          const deadzone = finiteOr(binding.deadzone, 0.12);
           const direction = binding.direction;
           if (direction === "positive") {
             if (raw > deadzone) value += raw * scale;
@@ -250,7 +308,7 @@ export class InputRouter {
       }
     }
 
-    value = Math.max(-1, Math.min(1, value));
+    value = Math.max(-1, Math.min(1, finiteOr(value, 0)));
     return action.type === "button" ? (value > 0.5 ? 1 : 0) : value;
   }
 

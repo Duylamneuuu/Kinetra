@@ -1,0 +1,243 @@
+import type { ProjectDocument } from "@kinetra/project-model";
+import type {
+  RuntimeInput,
+  RuntimeLog,
+  RuntimeMetrics,
+  RuntimeProbe,
+  RuntimeSnapshot,
+} from "@kinetra/verification";
+
+import { createOrbRunProject } from "./authoring.js";
+import {
+  captureOrbRunSave,
+  restoreOrbRunSave,
+  startOrbRunSimulation,
+  summarizeOrbRun,
+  type OrbRunSaveData,
+} from "./game.js";
+import { ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_SCENE_ID } from "./ids.js";
+import type { HeadlessSceneSimulation } from "./simulation.js";
+
+/**
+ * `RuntimeProbe` for Orb Run over the headless simulation, so the engine's own
+ * `AcceptanceRunner` can execute an `AcceptanceManifest` against the game in
+ * plain Node (no renderer, no Electron).
+ *
+ * Time is virtual and deterministic: `wait` and `input` "hold" advance the
+ * simulation by whole fixed steps (`round(ms / 1000 / fixedDeltaSeconds)`).
+ * Anything the headless game cannot do (frames, vector input, a different
+ * scene, a non-fixed delta) throws, so a manifest that asks for it fails
+ * loudly instead of passing without evidence.
+ *
+ * Snapshot shape (paths an `assert.equal` / `assert.near` step can read):
+ * - `state.game.<status|collectedCount|totalOrbs|exitUnlocked|elapsedSeconds|remainingSeconds|step>`
+ * - `state.entities.<EntityName>.position.<0|1|2>` and `.script` (the entity's script state)
+ * - `state.events.<orbCollected|exitUnlocked|won|lost>`: how many times each gameplay event fired
+ */
+export class OrbRunHeadlessProbe implements RuntimeProbe {
+  readonly #project: ProjectDocument;
+  #simulation: HeadlessSceneSimulation | undefined;
+  #paused = false;
+  #slots = new Map<string, OrbRunSaveData>();
+  #previousLogs: RuntimeLog[] = [];
+
+  constructor(options: { project?: ProjectDocument } = {}) {
+    this.#project = options.project ?? createOrbRunProject();
+  }
+
+  /** The running simulation (for tests that want to cross-check the probe). */
+  get simulation(): HeadlessSceneSimulation | undefined {
+    return this.#simulation;
+  }
+
+  async start(sceneId: string, _seed: number): Promise<void> {
+    if (sceneId !== ORB_RUN_SCENE_ID) {
+      throw new Error(`Orb Run probe can only start scene "${ORB_RUN_SCENE_ID}", got "${sceneId}"`);
+    }
+    await this.stop();
+    this.#simulation = await startOrbRunSimulation(this.#project);
+    this.#paused = false;
+  }
+
+  async stop(): Promise<void> {
+    if (!this.#simulation) return;
+    this.#previousLogs.push(...this.#mapLogs(this.#simulation));
+    await this.#simulation.dispose();
+    this.#simulation = undefined;
+  }
+
+  async pause(): Promise<void> {
+    this.#require();
+    this.#paused = true;
+  }
+
+  async resume(): Promise<void> {
+    this.#require();
+    this.#paused = false;
+  }
+
+  async input(event: RuntimeInput): Promise<void> {
+    const simulation = this.#require();
+    if (Array.isArray(event.value)) {
+      throw new Error(`Orb Run actions are scalar; "${event.action}" got a vector value`);
+    }
+    const value = event.value ?? 1;
+    switch (event.phase) {
+      case "press":
+        simulation.setAction(event.action, value);
+        return;
+      case "release":
+        simulation.setAction(event.action, 0);
+        return;
+      case "hold":
+        simulation.setAction(event.action, value);
+        this.#advance(this.#stepsFor(event.durationMs ?? 0));
+        simulation.setAction(event.action, 0);
+        return;
+    }
+  }
+
+  async wait(milliseconds: number): Promise<void> {
+    this.#advance(this.#stepsFor(milliseconds));
+  }
+
+  async step(steps = 1, deltaSeconds?: number): Promise<void> {
+    const simulation = this.#require();
+    if (deltaSeconds !== undefined && Math.abs(deltaSeconds - simulation.fixedDeltaSeconds) > 1e-9) {
+      throw new Error(
+        `Orb Run runs at a fixed step of ${simulation.fixedDeltaSeconds}s; runtime.step asked for ${deltaSeconds}s`,
+      );
+    }
+    this.#advance(steps);
+  }
+
+  async snapshot(): Promise<RuntimeSnapshot> {
+    const simulation = this.#simulation;
+    if (!simulation) return { running: false, state: {} };
+    const entities: Record<string, { position: number[]; script?: Record<string, unknown> }> = {};
+    const names: Record<string, string> = {
+      [ORB_RUN_ENTITY.player]: "Player",
+      [ORB_RUN_ENTITY.orbA]: "OrbA",
+      [ORB_RUN_ENTITY.orbB]: "OrbB",
+      [ORB_RUN_ENTITY.orbC]: "OrbC",
+      [ORB_RUN_ENTITY.exit]: "Exit",
+      [ORB_RUN_ENTITY.manager]: "OrbRunManager",
+    };
+    for (const [entityId, name] of Object.entries(names)) {
+      const position = simulation.getPosition(entityId);
+      const script = simulation.scriptState(entityId)?.state;
+      entities[name] = {
+        position: position ?? [],
+        ...(script ? { script: structuredClone(script) } : {}),
+      };
+    }
+    const events = {
+      orbCollected: simulation.events(ORB_RUN_EVENT.orbCollected).length,
+      exitUnlocked: simulation.events(ORB_RUN_EVENT.exitUnlocked).length,
+      won: simulation.events(ORB_RUN_EVENT.won).length,
+      lost: simulation.events(ORB_RUN_EVENT.lost).length,
+    };
+    const { player: _player, ...game } = summarizeOrbRun(simulation);
+    return {
+      running: true,
+      sceneId: simulation.sceneId,
+      state: { game, entities, events, paused: this.#paused },
+    };
+  }
+
+  async logs(): Promise<RuntimeLog[]> {
+    const current = this.#simulation ? this.#mapLogs(this.#simulation) : [];
+    return [...this.#previousLogs, ...current];
+  }
+
+  async captureFrame(): Promise<Uint8Array> {
+    throw new Error("The headless Orb Run probe has no renderer; frame and visual steps need the Electron player");
+  }
+
+  async metrics(): Promise<RuntimeMetrics> {
+    const simulation = this.#simulation;
+    if (!simulation) return {};
+    const summary = summarizeOrbRun(simulation);
+    return {
+      "simulation.steps": simulation.step,
+      "simulation.elapsedSeconds": simulation.elapsedSeconds,
+      "game.elapsedSeconds": summary.elapsedSeconds,
+      "game.remainingSeconds": summary.remainingSeconds,
+      "game.collectedCount": summary.collectedCount,
+    };
+  }
+
+  async captureSave(slotId = "default"): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }> {
+    const simulation = this.#simulation;
+    if (!simulation) return { success: false, error: "Runtime is not running" };
+    const save = captureOrbRunSave(simulation);
+    this.#slots.set(slotId, structuredClone(save));
+    return { success: true, envelope: structuredClone(save) as unknown as Record<string, unknown> };
+  }
+
+  async getSave(slotId = "default"): Promise<{ success: boolean; envelope?: Record<string, unknown>; error?: string }> {
+    const save = this.#slots.get(slotId);
+    return save
+      ? { success: true, envelope: structuredClone(save) as unknown as Record<string, unknown> }
+      : { success: false, error: `No save in slot "${slotId}"` };
+  }
+
+  /**
+   * Restores into a *fresh* simulation (like loading a save after a restart),
+   * then swaps it in. A rejected save leaves the running simulation untouched.
+   */
+  async loadSave(params: { slotId?: string; envelope?: Record<string, unknown> }): Promise<{
+    success: boolean;
+    slotId?: string;
+    schemaVersion?: number;
+    error?: string;
+  }> {
+    const slotId = params.slotId ?? "default";
+    const save = params.envelope
+      ? (structuredClone(params.envelope) as unknown as OrbRunSaveData)
+      : this.#slots.get(slotId);
+    if (!save) return { success: false, error: `No save in slot "${slotId}"` };
+    const fresh = await startOrbRunSimulation(this.#project);
+    try {
+      fresh.restoreStep(save.step);
+      await restoreOrbRunSave(fresh, save);
+    } catch (error) {
+      await fresh.dispose();
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    await this.stop();
+    this.#simulation = fresh;
+    return { success: true, slotId, schemaVersion: save.schemaVersion };
+  }
+
+  async close(): Promise<void> {
+    await this.stop();
+  }
+
+  #require(): HeadlessSceneSimulation {
+    if (!this.#simulation) throw new Error("Runtime is not running; add a runtime.start step first");
+    return this.#simulation;
+  }
+
+  #stepsFor(milliseconds: number): number {
+    const simulation = this.#require();
+    if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+      throw new RangeError(`Duration must be finite and >= 0, got ${milliseconds}`);
+    }
+    return Math.round(milliseconds / 1000 / simulation.fixedDeltaSeconds);
+  }
+
+  #advance(steps: number): void {
+    const simulation = this.#require();
+    if (this.#paused) return;
+    simulation.advance(steps);
+  }
+
+  #mapLogs(simulation: HeadlessSceneSimulation): RuntimeLog[] {
+    return simulation.logs().map((entry) => ({
+      level: entry.level,
+      message: entry.category,
+      data: { step: entry.step, ...(entry.data ?? {}) },
+    }));
+  }
+}

@@ -47,11 +47,96 @@ export interface BlankFrameOptions {
   minEntropy?: number | undefined; // Default 0.2
 }
 
+export type VisualErrorCode =
+  | "visual.decodeFailed"
+  | "visual.invalidImage"
+  | "visual.invalidPerceptualHash"
+  | "visual.invalidThreshold";
+
+/**
+ * Structured error raised by the visual helpers for malformed inputs. Callers
+ * (the verification runner, agents) can branch on `code` instead of parsing
+ * messages.
+ */
+export class VisualError extends Error {
+  readonly code: VisualErrorCode;
+  readonly details: Record<string, unknown>;
+
+  constructor(code: VisualErrorCode, message: string, details: Record<string, unknown> = {}) {
+    super(`${code}: ${message}`);
+    this.name = "VisualError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+const PERCEPTUAL_HASH_PATTERN = /^[0-9a-fA-F]{16}$/;
+const NIBBLE_POPCOUNT: readonly number[] = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4];
+
+function assertValidImage(image: DecodedImage, operation: string): void {
+  const { width, height, data } = image;
+  if (!Number.isSafeInteger(width) || width < 0 || !Number.isSafeInteger(height) || height < 0) {
+    throw new VisualError(
+      "visual.invalidImage",
+      `${operation}: width and height must be non-negative integers (got ${String(width)}x${String(height)})`,
+      { width, height },
+    );
+  }
+  const expected = width * height * 4;
+  const actual = data instanceof Uint8Array ? data.byteLength : null;
+  if (actual !== expected) {
+    throw new VisualError(
+      "visual.invalidImage",
+      `${operation}: RGBA data must be a Uint8Array of exactly width*height*4 = ${expected} bytes (got ${actual === null ? typeof data : actual})`,
+      { width, height, expectedBytes: expected, actualBytes: actual },
+    );
+  }
+}
+
+function assertValidPerceptualHash(hash: string, argument: string): void {
+  if (typeof hash !== "string" || !PERCEPTUAL_HASH_PATTERN.test(hash)) {
+    throw new VisualError(
+      "visual.invalidPerceptualHash",
+      `${argument} must be a 64-bit perceptual hash of exactly 16 hex characters (got ${JSON.stringify(hash)})`,
+      { argument, value: hash },
+    );
+  }
+}
+
+function resolveThreshold(
+  name: string,
+  value: number | undefined,
+  fallback: number,
+  max: number,
+): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > max) {
+    throw new VisualError(
+      "visual.invalidThreshold",
+      `${name} must be a finite number in [0, ${max}] (got ${String(value)})`,
+      { threshold: name, value, max },
+    );
+  }
+  return value;
+}
+
 /**
  * Decodes PNG bytes into raw RGBA pixel data.
+ * Throws `visual.decodeFailed` when the bytes are not a readable PNG.
  */
 export function decodePng(bytes: Uint8Array): DecodedImage {
-  const parsed = PNG.sync.read(Buffer.from(bytes));
+  let parsed: ReturnType<typeof PNG.sync.read>;
+  try {
+    parsed = PNG.sync.read(Buffer.from(bytes));
+  } catch (error) {
+    throw new VisualError(
+      "visual.decodeFailed",
+      `could not decode PNG (${bytes.byteLength} bytes): ${error instanceof Error ? error.message : String(error)}`,
+      { byteLength: bytes.byteLength },
+    );
+  }
   return {
     width: parsed.width,
     height: parsed.height,
@@ -63,6 +148,7 @@ export function decodePng(bytes: Uint8Array): DecodedImage {
  * Encodes raw RGBA pixel data into PNG bytes.
  */
 export function encodePng(image: DecodedImage): Uint8Array {
+  assertValidImage(image, "encodePng");
   const png = new PNG({ width: image.width, height: image.height });
   png.data = Buffer.from(image.data);
   return new Uint8Array(PNG.sync.write(png));
@@ -73,6 +159,7 @@ export function encodePng(image: DecodedImage): Uint8Array {
  * Uses a 9x8 grid of block-averaged luminance values.
  */
 export function dHash(decoded: DecodedImage): string {
+  assertValidImage(decoded, "dHash");
   const { width, height, data } = decoded;
   if (width === 0 || height === 0) {
     return "0000000000000000";
@@ -89,6 +176,10 @@ export function dHash(decoded: DecodedImage): string {
       const x0 = Math.floor((c * width) / 9);
       const x1 = Math.max(x0 + 1, Math.floor(((c + 1) * width) / 9));
 
+      // Integer luminance (Rec. 709 weights x 10000) keeps the block sum exact,
+      // so equal-luminance blocks of different pixel counts average to exactly
+      // the same value. Float accumulation could make a uniform frame hash to
+      // non-zero bits when 9 or 8 does not divide the frame size.
       let sumY = 0;
       let count = 0;
       for (let y = y0; y < y1; y++) {
@@ -97,7 +188,7 @@ export function dHash(decoded: DecodedImage): string {
           const red = data[idx] ?? 0;
           const green = data[idx + 1] ?? 0;
           const blue = data[idx + 2] ?? 0;
-          sumY += (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255.0;
+          sumY += 2126 * red + 7152 * green + 722 * blue;
           count++;
         }
       }
@@ -129,34 +220,20 @@ export function dHash(decoded: DecodedImage): string {
 }
 
 /**
- * Calculates Hamming distance (number of differing bits) between two 16-hex perceptual hashes.
+ * Calculates Hamming distance (number of differing bits) between two 64-bit
+ * perceptual hashes encoded as exactly 16 hex characters (case-insensitive).
+ *
+ * Throws `visual.invalidPerceptualHash` for anything else. The previous
+ * lenient path parsed non-hex characters as NaN, which XORs as 0, so a
+ * malformed hash silently compared as "identical" bits.
  */
 export function hammingDistance(hexA: string, hexB: string): number {
-  if (hexA.length !== 16 || hexB.length !== 16) {
-    // If lengths mismatch, compare common length and penalize
-    let dist = Math.abs(hexA.length - hexB.length) * 4;
-    const len = Math.min(hexA.length, hexB.length);
-    for (let i = 0; i < len; i++) {
-      const valA = parseInt(hexA[i] ?? "0", 16);
-      const valB = parseInt(hexB[i] ?? "0", 16);
-      let xor = valA ^ valB;
-      while (xor > 0) {
-        dist += xor & 1;
-        xor >>= 1;
-      }
-    }
-    return dist;
-  }
-
+  assertValidPerceptualHash(hexA, "hexA");
+  assertValidPerceptualHash(hexB, "hexB");
   let dist = 0;
   for (let i = 0; i < 16; i++) {
-    const valA = parseInt(hexA[i]!, 16);
-    const valB = parseInt(hexB[i]!, 16);
-    let xor = valA ^ valB;
-    while (xor > 0) {
-      dist += xor & 1;
-      xor >>= 1;
-    }
+    const xor = parseInt(hexA[i]!, 16) ^ parseInt(hexB[i]!, 16);
+    dist += NIBBLE_POPCOUNT[xor]!;
   }
   return dist;
 }
@@ -166,7 +243,10 @@ export function hammingDistance(hexA: string, hexB: string): number {
  */
 export function calculateVisualEvidence(bytes: Uint8Array): VisualFrameEvidence {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
-  const decoded = decodePng(bytes);
+  return evidenceFromDecoded(sha256, decodePng(bytes));
+}
+
+function evidenceFromDecoded(sha256: string, decoded: DecodedImage): VisualFrameEvidence {
   const { width, height, data } = decoded;
 
   const totalPixels = width * height;
@@ -285,18 +365,30 @@ export function compareVisualFrames(
   actualBytes: Uint8Array,
   options?: VisualSimilarityThresholds,
 ): VisualComparison {
+  // Validate thresholds before decoding so bad options fail fast with a
+  // structured error, independent of the frames supplied. A NaN threshold
+  // used to make every comparison silently "not similar".
+  const pixelDiffThreshold = resolveThreshold("pixelDiffThreshold", options?.pixelDiffThreshold, 24, 765);
+  const maxChangedPixelRatio = resolveThreshold("maxChangedPixelRatio", options?.maxChangedPixelRatio, 0.05, 1);
+  const maxPerceptualHashDistance = resolveThreshold(
+    "maxPerceptualHashDistance",
+    options?.maxPerceptualHashDistance,
+    8,
+    64,
+  );
+  const maxMeanAbsoluteDifference = resolveThreshold(
+    "maxMeanAbsoluteDifference",
+    options?.maxMeanAbsoluteDifference,
+    0.08,
+    1,
+  );
+
+  // Decode each frame once (it used to be decoded twice per frame) and hash
+  // the decoded pixels directly instead of recomputing full evidence.
   const refDecoded = decodePng(referenceBytes);
   const actualDecoded = decodePng(actualBytes);
 
-  const refEvidence = calculateVisualEvidence(referenceBytes);
-  const actualEvidence = calculateVisualEvidence(actualBytes);
-
-  const hashDist = hammingDistance(refEvidence.perceptualHash, actualEvidence.perceptualHash);
-
-  const pixelDiffThreshold = options?.pixelDiffThreshold ?? 24;
-  const maxChangedPixelRatio = options?.maxChangedPixelRatio ?? 0.05;
-  const maxPerceptualHashDistance = options?.maxPerceptualHashDistance ?? 8;
-  const maxMeanAbsoluteDifference = options?.maxMeanAbsoluteDifference ?? 0.08;
+  const hashDist = hammingDistance(dHash(refDecoded), dHash(actualDecoded));
 
   const minW = Math.min(refDecoded.width, actualDecoded.width);
   const minH = Math.min(refDecoded.height, actualDecoded.height);

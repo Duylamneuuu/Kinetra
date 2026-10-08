@@ -10,6 +10,47 @@ import {
   ARENA_SFX_LOSE_ASSET_ID,
 } from "./audio.js";
 
+const ARENA_MAX_HEALTH = 3;
+const ARENA_DEFAULT_FRAME_SECONDS = 0.016;
+const ARENA_MAX_FRAME_SECONDS = 1;
+const ARENA_DEFAULT_CHALLENGE_MULTIPLIER = 1.6;
+const ARENA_MIN_ENEMY_SPEED = 0.01;
+
+/**
+ * Reads a damage amount from an event payload. Script state is captured into
+ * JSON saves, so a non-finite value (NaN, ±Infinity) must never reach health
+ * or stats: JSON turns it into null and the save becomes unloadable. A
+ * missing, non-numeric, non-finite, or negative amount counts as the default
+ * hit of 1; huge amounts are capped so accumulated stats stay finite.
+ */
+export function readArenaDamageAmount(payload: unknown): number {
+  if (typeof payload === "object" && payload !== null && "amount" in payload) {
+    const amount = (payload as { amount: unknown }).amount;
+    if (typeof amount === "number" && Number.isFinite(amount) && amount >= 0) {
+      return Math.min(amount, Number.MAX_SAFE_INTEGER);
+    }
+  }
+  return 1;
+}
+
+/** Reads a broadcast health value; non-finite values are rejected, the rest clamped to [0, max]. */
+function readArenaHealth(payload: unknown): number | undefined {
+  if (typeof payload === "object" && payload !== null && "health" in payload) {
+    const health = (payload as { health: unknown }).health;
+    if (typeof health === "number" && Number.isFinite(health)) {
+      return Math.max(0, Math.min(ARENA_MAX_HEALTH, health));
+    }
+  }
+  return undefined;
+}
+
+function sanitizeFrameSeconds(deltaSeconds: number): number {
+  if (typeof deltaSeconds !== "number" || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
+    return ARENA_DEFAULT_FRAME_SECONDS;
+  }
+  return Math.min(deltaSeconds, ARENA_MAX_FRAME_SECONDS);
+}
+
 export class ArenaPlayerController implements GameScript {
   health = 3;
   moveCount = 0;
@@ -120,17 +161,11 @@ export class ArenaPlayerController implements GameScript {
 
   onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
     if (event === "gameplay.damage") {
-      const amount =
-        typeof payload === "object" &&
-        payload !== null &&
-        "amount" in payload &&
-        typeof (payload as { amount: unknown }).amount === "number"
-          ? (payload as { amount: number }).amount
-          : 1;
+      const amount = readArenaDamageAmount(payload);
 
       this.hurtCooldown = 1;
       const previous = this.health;
-      this.health = Math.max(0, Math.min(3, this.health - amount));
+      this.health = Math.max(0, Math.min(ARENA_MAX_HEALTH, this.health - amount));
       context?.log?.("info", "player.hurt", {
         entityId: context?.entityId,
         damage: amount,
@@ -607,14 +642,18 @@ export class ArenaEnemyController implements GameScript {
 
   onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
     if (event === "gameplay.challengeStarted") {
+      const rawMultiplier =
+        typeof payload === "object" && payload !== null && "multiplier" in payload
+          ? (payload as { multiplier: unknown }).multiplier
+          : undefined;
+      // A zero, negative, or non-finite multiplier would leave speed outside the
+      // (0, ∞) range validateRestoreState accepts and make the next save unloadable.
       const multiplier =
-        typeof payload === "object" &&
-        payload !== null &&
-        "multiplier" in payload &&
-        typeof (payload as { multiplier: unknown }).multiplier === "number"
-          ? (payload as { multiplier: number }).multiplier
-          : 1.6;
-      this.speed = Math.round(0.8 * multiplier * 100) / 100;
+        typeof rawMultiplier === "number" && Number.isFinite(rawMultiplier) && rawMultiplier > 0
+          ? rawMultiplier
+          : ARENA_DEFAULT_CHALLENGE_MULTIPLIER;
+      const speed = Math.round(0.8 * multiplier * 100) / 100;
+      this.speed = Number.isFinite(speed) ? Math.max(ARENA_MIN_ENEMY_SPEED, speed) : 0.8;
       context?.log?.("info", "enemy.frenzy", {
         entityId: context?.entityId,
         speed: this.speed,
@@ -624,13 +663,7 @@ export class ArenaEnemyController implements GameScript {
       if (this.state === "defeated" || this.health <= 0) {
         return;
       }
-      const amount =
-        typeof payload === "object" &&
-        payload !== null &&
-        "amount" in payload &&
-        typeof (payload as { amount: unknown }).amount === "number"
-          ? (payload as { amount: number }).amount
-          : 1;
+      const amount = readArenaDamageAmount(payload);
 
       this.hurtCooldown = 1;
       const previous = this.health;
@@ -948,7 +981,7 @@ export class ArenaGameManager implements GameScript {
     }
 
     this.stats.elapsedSteps++;
-    this.stats.elapsedTimeMs += Math.round((deltaSeconds || 0.016) * 1000);
+    this.stats.elapsedTimeMs += Math.round(sanitizeFrameSeconds(deltaSeconds) * 1000);
 
     // Check player interactions with objectives and goal
     const playerEntity = context.scene?.findEntityByName?.("Player");
@@ -1065,13 +1098,9 @@ export class ArenaGameManager implements GameScript {
 
   onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
     if (event === "gameplay.playerHealthChanged") {
-      if (
-        typeof payload === "object" &&
-        payload !== null &&
-        "health" in payload &&
-        typeof (payload as { health: unknown }).health === "number"
-      ) {
-        this.playerHealth = (payload as { health: number }).health;
+      const health = readArenaHealth(payload);
+      if (health !== undefined) {
+        this.playerHealth = health;
         if (this.playerHealth <= 0 && this.status === "playing") {
           this.status = "lost";
           this.runStatus = "failed";
@@ -1093,23 +1122,9 @@ export class ArenaGameManager implements GameScript {
         }
       }
     } else if (event === "gameplay.damage") {
-      const amount =
-        typeof payload === "object" &&
-        payload !== null &&
-        "amount" in payload &&
-        typeof (payload as { amount: unknown }).amount === "number"
-          ? (payload as { amount: number }).amount
-          : 1;
-      this.stats.damageTaken += amount;
+      this.stats.damageTaken += readArenaDamageAmount(payload);
     } else if (event === "gameplay.enemyDamage") {
-      const amount =
-        typeof payload === "object" &&
-        payload !== null &&
-        "amount" in payload &&
-        typeof (payload as { amount: unknown }).amount === "number"
-          ? (payload as { amount: number }).amount
-          : 1;
-      this.stats.damageDealt += amount;
+      this.stats.damageDealt += readArenaDamageAmount(payload);
     } else if (event === "enemy.stateChanged") {
       if (
         typeof payload === "object" &&
@@ -1120,13 +1135,9 @@ export class ArenaGameManager implements GameScript {
         this.enemyState = (payload as { state: string }).state;
       }
     } else if (event === "enemy.healthChanged") {
-      if (
-        typeof payload === "object" &&
-        payload !== null &&
-        "health" in payload &&
-        typeof (payload as { health: unknown }).health === "number"
-      ) {
-        this.enemyHealth = (payload as { health: number }).health;
+      const health = readArenaHealth(payload);
+      if (health !== undefined) {
+        this.enemyHealth = health;
       }
     } else if (event === "enemy.defeated") {
       this.stats.enemiesDefeated += 1;

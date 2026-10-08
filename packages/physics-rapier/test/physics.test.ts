@@ -225,3 +225,56 @@ test("physics world disposal is clean and idempotent", async () => {
   physics.dispose();
 });
 
+
+// --- Regression tests (luồng C): timestep leakage and non-finite input guards ---
+
+test("step(dt) does not leak its timestep into later fixed-step advance()", async () => {
+  const physics = await RapierPhysicsWorld.create({ fixedDeltaSeconds: 1 / 60 });
+  try {
+    physics.addDynamicBody({ id: "ball", position: { x: 0, y: 100, z: 0 }, shape: "sphere", radius: 0.5 });
+    physics.step(0.5);
+    const afterStep = physics.state("ball").linearVelocity.y;
+    assert.ok(Math.abs(afterStep - -9.81 * 0.5) < 1e-3, `step(0.5) should integrate 0.5s, got v=${afterStep}`);
+
+    assert.equal(physics.advance(1 / 60), 1);
+    const delta = physics.state("ball").linearVelocity.y - afterStep;
+    assert.ok(
+      Math.abs(delta - -9.81 / 60) < 1e-3,
+      `one fixed step must integrate 1/60s, got dv=${delta} (expected ${-9.81 / 60})`,
+    );
+    // Rapier stores the timestep as f32, so compare with a tolerance.
+    assert.ok(Math.abs(physics.world.timestep - 1 / 60) < 1e-6, `timestep restored, got ${physics.world.timestep}`);
+  } finally {
+    physics.dispose();
+  }
+});
+
+test("step rejects non-finite or non-positive explicit timesteps", async () => {
+  const physics = await RapierPhysicsWorld.create();
+  try {
+    for (const dt of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1 / 60]) {
+      assert.throws(() => physics.step(dt), RangeError, `step(${dt})`);
+    }
+    assert.equal(physics.stats().fixedSteps, 0);
+  } finally {
+    physics.dispose();
+  }
+});
+
+test("create rejects a non-finite fixedDeltaSeconds", async () => {
+  await assert.rejects(() => RapierPhysicsWorld.create({ fixedDeltaSeconds: Number.POSITIVE_INFINITY }), RangeError);
+  await assert.rejects(() => RapierPhysicsWorld.create({ fixedDeltaSeconds: Number.NaN }), RangeError);
+});
+
+test("moveCharacter and setBodyTranslation reject non-finite vectors without corrupting the body", async () => {
+  const physics = await RapierPhysicsWorld.create();
+  try {
+    physics.addKinematicCharacter({ id: "player", position: { x: 0, y: 1, z: 0 }, halfHeight: 0.5, radius: 0.3 });
+    assert.throws(() => physics.moveCharacter("player", { x: Number.NaN, y: 0, z: 0 }), RangeError);
+    assert.throws(() => physics.setBodyTranslation("player", { x: 0, y: Number.POSITIVE_INFINITY, z: 0 }), RangeError);
+    const state = physics.state("player");
+    assert.deepEqual(state.position, { x: 0, y: 1, z: 0 });
+  } finally {
+    physics.dispose();
+  }
+});

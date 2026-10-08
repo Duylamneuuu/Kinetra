@@ -216,6 +216,17 @@ export class HeadlessSceneSimulation {
     this.#positions.set(entityId, [...position]);
   }
 
+  /** Set the step counter when resuming a saved run (only before the first advance). */
+  restoreStep(step: number): void {
+    if (!Number.isInteger(step) || step < 0) {
+      throw new RangeError(`Saved step must be an integer >= 0, got ${String(step)}`);
+    }
+    if (this.#step !== 0) {
+      throw new Error("restoreStep is only allowed on a fresh simulation");
+    }
+    this.#step = step;
+  }
+
   async dispose(): Promise<void> {
     await this.#host.destroyAll();
   }

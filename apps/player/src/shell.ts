@@ -369,7 +369,13 @@ export class GameShellController {
     if (this.#settings.input?.customBindings) {
       for (const [actionId, bindings] of Object.entries(this.#settings.input.customBindings)) {
         if (Array.isArray(bindings)) {
-          this.#runtime.getInputRouter().remap(actionId, bindings as InputBinding[]);
+          // A stale or hand-edited settings file (renamed action, malformed
+          // binding) must not stop the shell from booting; keep the defaults.
+          try {
+            this.#runtime.getInputRouter().remap(actionId, bindings as InputBinding[]);
+          } catch (error) {
+            console.warn(`Ignoring saved bindings for "${actionId}": ${(error as Error).message}`);
+          }
         }
       }
     }
