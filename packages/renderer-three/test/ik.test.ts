@@ -268,6 +268,12 @@ test("runtime applies IK to a model without animation clips", async () => {
   runtime.updateAnimation(1 / 60);
   const p = tip.getWorldPosition(new THREE.Vector3());
   assert.ok(p.distanceTo(new THREE.Vector3(1, 1, 0)) < 1e-4, `tip at ${p.toArray()}`);
+  // Observable node state follows the IK pose even without an animator session.
+  const rootNode = runtime.getModelMetadata(prop)?.nodes?.find((n) => n.name === "Crate_Root");
+  assert.ok(rootNode, "metadata.nodes has the root bone");
+  const q = object.getObjectByName("Crate_Root")!.quaternion;
+  assert.deepEqual(rootNode.rotation, [q.x, q.y, q.z, q.w]);
+  assert.notDeepEqual(rootNode.rotation, [0, 0, 0, 1]);
   runtime.dispose();
 });
 
