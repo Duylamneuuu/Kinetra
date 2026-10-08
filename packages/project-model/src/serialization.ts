@@ -3,6 +3,11 @@ import { migrateProject } from "./migration.js";
 import type { JsonObject, JsonValue, ProjectDocument } from "./types.js";
 import { assertValidProject } from "./validation.js";
 
+/** Locale-independent, deterministic ordering (UTF-16 code units), matching Array.prototype.sort on keys. */
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function sortJson(value: JsonValue): JsonValue {
   if (Array.isArray(value)) {
     return value.map(sortJson);
@@ -26,10 +31,10 @@ export function normalizeProject(project: ProjectDocument): ProjectDocument {
   assertValidProject(project);
   const normalized = cloneProject(project);
 
-  normalized.scenes.sort((left, right) => left.id.localeCompare(right.id));
+  normalized.scenes.sort((left, right) => compareCodeUnits(left.id, right.id));
 
   for (const scene of normalized.scenes) {
-    scene.entities.sort((left, right) => left.id.localeCompare(right.id));
+    scene.entities.sort((left, right) => compareCodeUnits(left.id, right.id));
     for (const entity of scene.entities) {
       entity.components = sortJson(entity.components) as Record<string, JsonValue>;
     }
