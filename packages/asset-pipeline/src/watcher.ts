@@ -51,6 +51,14 @@ export class SourceAssetWatcher {
   }
 
   addAsset(assetId: string, sourcePath: string, initialHash?: string): void {
+    const previousPath = this.#assets.get(assetId);
+    if (previousPath !== undefined && previousPath !== sourcePath) {
+      // Re-pointing an asset: stop watching the abandoned path and forget the
+      // hash of the old file, otherwise edits to the old file keep firing
+      // change events for this asset and the old FSWatcher leaks.
+      this.#detachPath(assetId, previousPath);
+      this.#knownHashes.delete(assetId);
+    }
     this.#assets.set(assetId, sourcePath);
     this.#pathToAssetId.set(sourcePath, assetId);
     if (initialHash) {
@@ -64,17 +72,21 @@ export class SourceAssetWatcher {
 
   removeAsset(assetId: string): void {
     const sourcePath = this.#assets.get(assetId);
-    if (sourcePath) {
-      this.#unwatchFile(sourcePath);
-      this.#pathToAssetId.delete(sourcePath);
-      const timer = this.#debounceTimers.get(sourcePath);
-      if (timer) {
-        clearTimeout(timer);
-        this.#debounceTimers.delete(sourcePath);
-      }
-    }
+    if (sourcePath) this.#detachPath(assetId, sourcePath);
     this.#assets.delete(assetId);
     this.#knownHashes.delete(assetId);
+  }
+
+  /** Release `sourcePath` if `assetId` still owns it (another asset may have claimed it). */
+  #detachPath(assetId: string, sourcePath: string): void {
+    if (this.#pathToAssetId.get(sourcePath) !== assetId) return;
+    this.#unwatchFile(sourcePath);
+    this.#pathToAssetId.delete(sourcePath);
+    const timer = this.#debounceTimers.get(sourcePath);
+    if (timer) {
+      clearTimeout(timer);
+      this.#debounceTimers.delete(sourcePath);
+    }
   }
 
   getKnownHash(assetId: string): string | undefined {

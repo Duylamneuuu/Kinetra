@@ -19,15 +19,27 @@ export function validateAssetRecord(record: AssetRecord): AssetDiagnostic[] {
     severity:"error", code:"asset.recipe.importer.empty", message:"Importer name is required"
   });
 
+  const isCount = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
+
   const polycount = record.metadata.polycount;
-  if (typeof polycount === "number" && polycount > 2_000_000) diagnostics.push({
-    severity:"warning", code:"model.polycount.high", message:`Polycount ${polycount} exceeds default review threshold`
-  });
+  if (typeof polycount === "number") {
+    if (!isCount(polycount)) diagnostics.push({
+      severity:"error", code:"model.polycount.invalid", message:`Polycount ${polycount} must be a non-negative integer`
+    });
+    else if (polycount > 2_000_000) diagnostics.push({
+      severity:"warning", code:"model.polycount.high", message:`Polycount ${polycount} exceeds default review threshold`
+    });
+  }
 
   const maxTexture = record.metadata.maxTextureDimension;
-  if (typeof maxTexture === "number" && maxTexture > 8192) diagnostics.push({
-    severity:"warning", code:"texture.dimension.high", message:`Texture dimension ${maxTexture} exceeds 8192`
-  });
+  if (typeof maxTexture === "number") {
+    if (!isCount(maxTexture)) diagnostics.push({
+      severity:"error", code:"texture.dimension.invalid", message:`Texture dimension ${maxTexture} must be a non-negative integer`
+    });
+    else if (maxTexture > 8192) diagnostics.push({
+      severity:"warning", code:"texture.dimension.high", message:`Texture dimension ${maxTexture} exceeds 8192`
+    });
+  }
 
   const boundsRadius = record.metadata.boundsRadius;
   if (typeof boundsRadius === "number") {

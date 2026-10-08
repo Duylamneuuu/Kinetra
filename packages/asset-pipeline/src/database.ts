@@ -15,8 +15,17 @@ export class AssetDatabase {
     if (record.dependencies.includes(record.id)) {
       throw new Error(`Asset "${record.id}" cannot depend on itself`);
     }
+    const previous = this.#records.get(record.id);
     this.#records.set(record.id, structuredClone(record));
-    this.#assertAcyclic();
+    try {
+      this.#assertAcyclic();
+    } catch (error) {
+      // A rejected upsert must leave the database exactly as it was; otherwise
+      // the cyclic record stays stored and every later upsert throws too.
+      if (previous) this.#records.set(record.id, previous);
+      else this.#records.delete(record.id);
+      throw error;
+    }
   }
 
   get(id: string): AssetRecord | undefined {
@@ -60,7 +69,9 @@ export class AssetDatabase {
     for (const depId of affected) {
       const record = this.#records.get(depId);
       let count = 0;
-      for (const dep of record?.dependencies ?? []) {
+      // Count each distinct dependency once: it is decremented once below, so a
+      // duplicated entry would otherwise keep the asset out of the order forever.
+      for (const dep of new Set(record?.dependencies ?? [])) {
         if (affected.has(dep)) {
           count++;
         }
