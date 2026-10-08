@@ -24,7 +24,6 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 - **audio**: validate bus definitions and synthetic WAV options ([#132](https://github.com/Duylamneuuu/Kinetra/pull/132))
 - **verification**: reject malformed perceptual hashes/thresholds, exact dHash block sums, seeded property tests ([#134](https://github.com/Duylamneuuu/Kinetra/pull/134))
-- **verification**: reject malformed perceptual hashes/thresholds, exact dHash block sums, seeded property tests ([#134](https://github.com/Duylamneuuu/Kinetra/pull/134))
 - **physics**: keep explicit step timestep local, reject non-finite timesteps and vectors ([#135](https://github.com/Duylamneuuu/Kinetra/pull/135))
 - **renderer-three**: reject blend spaces whose samples resolve to the same clip ([#120](https://github.com/Duylamneuuu/Kinetra/pull/120))
 - **animation**: exact looping root motion for reverse playback and negative playback time ([#128](https://github.com/Duylamneuuu/Kinetra/pull/128))
