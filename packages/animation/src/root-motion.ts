@@ -216,58 +216,46 @@ export function computeRootMotionStepDelta(
     ];
     rawYaw = p1.yaw - p0.yaw;
   } else {
-    const t0 = prevTime % loopDuration;
-    const t1Raw = t0 + dt;
+    // Looping: express root displacement as a cumulative function of unwrapped
+    // playback time, D(T) = wraps(T) * loopDelta + (pos(T mod L) - pos(0)), and
+    // return D(prev + dt) - D(prev). This is exact for any number of loop
+    // wraps, for reverse playback (negative speed) crossing the loop start, and
+    // for negative playback times, and is additive across consecutive steps.
+    const startP = sampleRootMotionAt(samples, 0, loopDuration);
+    const endP = sampleRootMotionAt(samples, loopDuration, loopDuration);
+    const loopDelta: [number, number, number] = [
+      endP.position[0] - startP.position[0],
+      endP.position[1] - startP.position[1],
+      endP.position[2] - startP.position[2],
+    ];
+    const loopYaw = endP.yaw - startP.yaw;
 
-    if (t1Raw < loopDuration) {
-      const p0 = sampleRootMotionAt(samples, t0, loopDuration);
-      const p1 = sampleRootMotionAt(samples, t1Raw, loopDuration);
-      rawDelta = [
-        p1.position[0] - p0.position[0],
-        p1.position[1] - p0.position[1],
-        p1.position[2] - p0.position[2],
-      ];
-      rawYaw = p1.yaw - p0.yaw;
-    } else {
-      // Loop boundary crossed!
-      const fullWraps = Math.floor(t1Raw / loopDuration);
-      const t1 = t1Raw - fullWraps * loopDuration;
+    const cumulative = (time: number): { position: [number, number, number]; yaw: number } => {
+      const wraps = Math.floor(time / loopDuration);
+      const local = time - wraps * loopDuration;
+      const p = sampleRootMotionAt(samples, local, loopDuration);
+      return {
+        position: [
+          wraps * loopDelta[0] + (p.position[0] - startP.position[0]),
+          wraps * loopDelta[1] + (p.position[1] - startP.position[1]),
+          wraps * loopDelta[2] + (p.position[2] - startP.position[2]),
+        ],
+        yaw: wraps * loopYaw + (p.yaw - startP.yaw),
+      };
+    };
 
-      const startP = sampleRootMotionAt(samples, 0, loopDuration);
-      const endP = sampleRootMotionAt(samples, loopDuration, loopDuration);
-      const loopDelta: [number, number, number] = [
-        endP.position[0] - startP.position[0],
-        endP.position[1] - startP.position[1],
-        endP.position[2] - startP.position[2],
-      ];
-      const loopYaw = endP.yaw - startP.yaw;
-
-      // Segment 1: from t0 to loop end
-      const p0 = sampleRootMotionAt(samples, t0, loopDuration);
-      const seg1: [number, number, number] = [
-        endP.position[0] - p0.position[0],
-        endP.position[1] - p0.position[1],
-        endP.position[2] - p0.position[2],
-      ];
-      const yaw1 = endP.yaw - p0.yaw;
-
-      // Segment 2: from loop start to t1
-      const p1 = sampleRootMotionAt(samples, t1, loopDuration);
-      const seg2: [number, number, number] = [
-        p1.position[0] - startP.position[0],
-        p1.position[1] - startP.position[1],
-        p1.position[2] - startP.position[2],
-      ];
-      const yaw2 = p1.yaw - startP.yaw;
-
-      const intermediate = Math.max(0, fullWraps - 1);
-      rawDelta = [
-        seg1[0] + intermediate * loopDelta[0] + seg2[0],
-        seg1[1] + intermediate * loopDelta[1] + seg2[1],
-        seg1[2] + intermediate * loopDelta[2] + seg2[2],
-      ];
-      rawYaw = yaw1 + intermediate * loopYaw + yaw2;
-    }
+    // Re-base onto the current loop so large accumulated playback times do not
+    // cost precision; the delta is invariant to whole-loop shifts.
+    const base = Math.floor(prevTime / loopDuration) * loopDuration;
+    const t0 = prevTime - base;
+    const c0 = cumulative(t0);
+    const c1 = cumulative(t0 + dt);
+    rawDelta = [
+      c1.position[0] - c0.position[0],
+      c1.position[1] - c0.position[1],
+      c1.position[2] - c0.position[2],
+    ];
+    rawYaw = c1.yaw - c0.yaw;
   }
 
   switch (mode) {
