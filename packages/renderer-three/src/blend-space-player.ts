@@ -119,6 +119,26 @@ export function resolveBlendSpaceClips(
       error: `Blend space "${space.id}" cannot phase-sync zero-length clip(s): ${degenerate.map((m) => `"${m}"`).join(", ")}`,
     };
   }
+  // Two samples may name distinct clip ids that resolve to the same clip
+  // ("walk" falling back to "walk_retargeted" next to a "walk_retargeted"
+  // sample). They would share one mixer action, so one sample's weight would
+  // silently overwrite the other's. Reject instead of mis-posing.
+  const owners = new Map<string, string[]>();
+  for (const binding of bindings) {
+    const list = owners.get(binding.resolvedClipName) ?? [];
+    list.push(binding.clipId);
+    owners.set(binding.resolvedClipName, list);
+  }
+  const shared = [...owners.entries()].filter(([, ids]) => ids.length > 1);
+  if (shared.length > 0) {
+    return {
+      success: false,
+      code: "anim.blendSpace.clip.duplicate",
+      error: `Blend space "${space.id}" plays the same clip from several samples: ${shared
+        .map(([clip, ids]) => `"${clip}" (samples ${ids.map((id) => `"${id}"`).join(", ")})`)
+        .join("; ")}`,
+    };
+  }
   return { success: true, bindings };
 }
 
