@@ -581,6 +581,35 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
   }
 
+  async setIkChains(
+    entityId: string,
+    chains: unknown[],
+  ): Promise<RuntimeQueryResult & { success: boolean; registered?: string[]; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request("animation.ik.setChains", { entityId, chains });
+  }
+
+  async setIkTarget(
+    entityId: string,
+    chainId: string,
+    target: [number, number, number],
+    options: { pole?: [number, number, number]; weight?: number } = {},
+  ): Promise<
+    RuntimeQueryResult & {
+      success: boolean;
+      error?: string;
+      diagnostics?: Array<{ code: string; message: string; remediation: string }>;
+    }
+  > {
+    await this.#ensureProcess();
+    return this.#request("animation.ik.setTarget", { entityId, chainId, target, ...options });
+  }
+
+  async clearIkTarget(entityId: string, chainId?: string): Promise<RuntimeQueryResult & { success: boolean }> {
+    await this.#ensureProcess();
+    return this.#request("animation.ik.clearTarget", { entityId, ...(chainId !== undefined ? { chainId } : {}) });
+  }
+
   async stopAnimation(entityId: string): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("animation.stop", { entityId });

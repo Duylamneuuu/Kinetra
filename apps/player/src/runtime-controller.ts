@@ -1168,6 +1168,44 @@ export class PlayerRuntimeController {
     return { success: true, cleared: result.cleared ?? [] };
   }
 
+  setIkChains(entityId: string, chains: unknown): { success: boolean; error?: string; registered?: string[]; diagnostics?: unknown[] } {
+    if (!this.#runtime) return { success: false, error: "Runtime is not running" };
+    if (!Array.isArray(chains)) {
+      const error = "chains must be an array of IK chain definitions";
+      this.#log("error", "animation.ikFailed", { entityId, error });
+      return { success: false, error };
+    }
+    const controller = this.#runtime.setIkChains(entityId, chains);
+    if (!controller) {
+      const error = `Entity "${entityId}" has no loaded model`;
+      this.#log("error", "animation.ikFailed", { entityId, error });
+      return { success: false, error };
+    }
+    this.#log("info", "animation.ikChainsSet", { entityId, chains: controller.chainIds });
+    return { success: true, registered: [...controller.chainIds] };
+  }
+
+  setIkTarget(
+    entityId: string,
+    chainId: unknown,
+    target: unknown,
+    options: { pole?: never; weight?: number },
+  ): { success: boolean; error?: string; diagnostics?: unknown[] } {
+    if (!this.#runtime) return { success: false, error: "Runtime is not running" };
+    const result = this.#runtime.setIkTarget(entityId, chainId as string, target, options);
+    if (!result.success) {
+      this.#log("error", "animation.ikFailed", { entityId, error: result.error });
+      return { success: false, ...(result.error ? { error: result.error } : {}), diagnostics: result.diagnostics };
+    }
+    return { success: true };
+  }
+
+  clearIkTarget(entityId: string, chainId?: string): { success: boolean; error?: string } {
+    if (!this.#runtime) return { success: false, error: "Runtime is not running" };
+    this.#runtime.clearIkTarget(entityId, chainId);
+    return { success: true };
+  }
+
   playAnimation(
     entityId: string,
     clipName: string,

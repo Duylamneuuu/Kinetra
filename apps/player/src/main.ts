@@ -266,6 +266,27 @@ async function handleRuntimeCommand(request: {
       return { ...result, ...runtime.query() };
     }
 
+    case "animation.ik.setChains": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.setIkChains(entityId, params.chains);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.ik.setTarget": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.setIkTarget(entityId, params.chainId, params.target, {
+        ...(params.pole !== undefined ? { pole: params.pole as never } : {}),
+        ...(typeof params.weight === "number" ? { weight: params.weight } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.ik.clearTarget": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.clearIkTarget(entityId, typeof params.chainId === "string" ? params.chainId : undefined);
+      return { ...result, ...runtime.query() };
+    }
+
     case "animation.stop": {
       const entityId = requireString(params.entityId, "entityId");
       runtime.stopAnimation(entityId);

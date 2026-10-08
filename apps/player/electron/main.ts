@@ -274,6 +274,9 @@ async function handleBridgeRequest(
     case "animation.registerClip":
     case "animation.setMorphWeights":
     case "animation.clearMorphWeights":
+    case "animation.ik.setChains":
+    case "animation.ik.setTarget":
+    case "animation.ik.clearTarget":
     case "animation.rootMotion.configure":
     case "model.detach":
     case "model.attach":
