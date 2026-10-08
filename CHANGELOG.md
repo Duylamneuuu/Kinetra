@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **examples**: Orb Run acceptance manifests on the engine AcceptanceRunner (slice 2) ([#136](https://github.com/Duylamneuuu/Kinetra/pull/136))
 - **examples**: Orb Run dogfood sample, authored over MCP and playable headless ([#86](https://github.com/Duylamneuuu/Kinetra/pull/86))
 - **player**: expose IK chains/targets through the runtime bridge ([#75](https://github.com/Duylamneuuu/Kinetra/pull/75))
 - **renderer-three**: apply IK solver to skeleton bones after mixer update ([#74](https://github.com/Duylamneuuu/Kinetra/pull/74))
@@ -21,6 +22,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: reject malformed perceptual hashes/thresholds, exact dHash block sums, seeded property tests ([#134](https://github.com/Duylamneuuu/Kinetra/pull/134))
+- **physics**: keep explicit step timestep local, reject non-finite timesteps and vectors ([#135](https://github.com/Duylamneuuu/Kinetra/pull/135))
+- **renderer-three**: reject blend spaces whose samples resolve to the same clip ([#120](https://github.com/Duylamneuuu/Kinetra/pull/120))
 - **animation**: exact looping root motion for reverse playback and negative playback time ([#128](https://github.com/Duylamneuuu/Kinetra/pull/128))
 - **input**: ignore non-finite input values, validate remap bindings, keep shell booting on stale settings; add property tests ([#131](https://github.com/Duylamneuuu/Kinetra/pull/131))
 - **reference-game**: keep Arena script state restorable under hostile payloads; add seeded save-contract fuzz test ([#130](https://github.com/Duylamneuuu/Kinetra/pull/130))
@@ -39,6 +43,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Maintenance
 
+- **deps**: bump electron 38.0.0 -> 38.8.6 (security patches) and derive packager version from installed electron ([#112](https://github.com/Duylamneuuu/Kinetra/pull/112))
+- **ci**: add pnpm lint (oxlint, errors-only gate) and run it in pnpm check ([#127](https://github.com/Duylamneuuu/Kinetra/pull/127))
 - **ci**: fail on unregistered test files; run the missing real-ik-bridge test ([#118](https://github.com/Duylamneuuu/Kinetra/pull/118))
 - **ci**: cache pnpm store, enforce frozen lockfile, cancel superseded PR runs ([#76](https://github.com/Duylamneuuu/Kinetra/pull/76))
 
