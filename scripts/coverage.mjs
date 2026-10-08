@@ -153,7 +153,9 @@ async function workspacePackageDirs(root) {
   const patterns = [...workspace.matchAll(/^\s*-\s*["']?([^"'\s]+)["']?\s*$/gm)].map((match) => match[1]);
   const dirs = [];
   for (const pattern of patterns) {
-    const parent = join(root, pattern.replace(/\/\*$/, ""));
+    // Only the flat `dir/*` form is supported (what this repo uses); fail loudly otherwise.
+    if (!/^[^!*]+\/\*$/.test(pattern)) throw new Error(`Unsupported pnpm workspace pattern: ${pattern}`);
+    const parent = join(root, pattern.slice(0, -2));
     let entries = [];
     try {
       entries = await readdir(parent, { withFileTypes: true });
@@ -165,6 +167,18 @@ async function workspacePackageDirs(root) {
   }
   return dirs.sort();
 }
+
+// A nested `node --test` that inherits NODE_TEST_CONTEXT reports to the parent
+// test runner instead of running normally; strip it so the script also works
+// when launched from inside a test.
+function childEnv() {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
+}
+
+export const REPORT_NOTE =
+  "_Measured on each package's compiled JavaScript under `dist/` (excluding `dist/test/`), so line/branch counts differ from the TypeScript sources. Real-Electron `real-*` tests are excluded unless `--include-real` is passed._";
 
 function parseArgs(argv) {
   const options = { packages: [], includeReal: false, outDir: "coverage" };
@@ -221,7 +235,7 @@ async function main() {
         `--test-reporter-destination=${lcovPath}`,
         ...testFiles,
       ],
-      { cwd: packageDir, stdio: ["ignore", "inherit", "inherit"] },
+      { cwd: packageDir, stdio: ["ignore", "inherit", "inherit"], env: childEnv() },
     );
     let records = [];
     try {
@@ -237,11 +251,15 @@ async function main() {
     );
   }
 
-  const markdown = renderMarkdown(rows);
+  const markdown = `${renderMarkdown(rows)}\n${REPORT_NOTE}\n`;
   await writeFile(join(outDir, "summary.json"), `${JSON.stringify(rows, null, 2)}\n`);
   await writeFile(join(outDir, "summary.md"), markdown);
   console.log(`\nKinetra unit-test coverage (compiled dist sources, report only)\n\n${markdown}`);
   if (rows.some((row) => row.error && row.summary)) process.exitCode = 1;
+  if (!rows.some((row) => row.summary)) {
+    console.error("No package produced coverage. Run `pnpm build` first (or check --package).");
+    process.exitCode = 1;
+  }
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

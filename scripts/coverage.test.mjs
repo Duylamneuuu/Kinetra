@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -135,4 +137,87 @@ test("isPackageSourceFile keeps dist sources and drops tests, dependencies and o
   assert.equal(isPackageSourceFile(pkg, "/repo/packages/b/dist/src/index.js"), false);
   assert.equal(isPackageSourceFile(pkg, "/repo/packages/ab/dist/src/index.js"), false);
   assert.equal(isPackageSourceFile(pkg, "/repo/packages/a/dist/node_modules/x/index.js"), false);
+});
+
+const COVERAGE_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "coverage.mjs");
+
+function runCoverage(cwd, args = []) {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return spawnSync(process.execPath, [COVERAGE_SCRIPT, ...args], { cwd, env, encoding: "utf8" });
+}
+
+async function writeFixture(root, files) {
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), content);
+  }
+}
+
+test("coverage.mjs end to end: runs registered unit tests, writes lcov and summaries", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kinetra-coverage-e2e-"));
+  try {
+    await writeFixture(root, {
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/a/package.json": JSON.stringify({ name: "@x/a", scripts: { test: "node --test dist/test/*.test.js" } }),
+      "packages/a/dist/src/lib.js": "export function pick(flag) {\n  if (flag) {\n    return 1;\n  }\n  return 2;\n}\nexport function unused() {\n  return 3;\n}\n",
+      "packages/a/dist/test/lib.test.js":
+        'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { pick } from "../src/lib.js";\ntest("pick", () => assert.equal(pick(true), 1));\n',
+      "packages/a/dist/test/real-electron.test.js": 'import test from "node:test";\ntest("real", () => { throw new Error("must be skipped"); });\n',
+      "packages/b/package.json": JSON.stringify({ name: "@x/b", scripts: { build: "tsc" } }),
+    });
+    const result = runCoverage(root, ["--out", "cov"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    const summary = JSON.parse(await readFile(join(root, "cov/summary.json"), "utf8"));
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].packageName, "@x/a");
+    assert.equal(summary[0].testFiles, 1);
+    assert.equal(summary[0].summary.files, 1);
+    assert.ok(summary[0].summary.lines.pct < 100 && summary[0].summary.lines.pct > 0);
+    assert.equal(summary[0].summary.functions.found, 2);
+    assert.equal(summary[0].summary.functions.hit, 1);
+    assert.match(await readFile(join(root, "cov/x__a.lcov"), "utf8"), /SF:.*lib\.js/);
+    const markdown = await readFile(join(root, "cov/summary.md"), "utf8");
+    assert.match(markdown, /\| @x\/a \| 1 \|/);
+    assert.match(markdown, /compiled JavaScript/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("coverage.mjs exits non-zero when nothing is built or a package's tests fail", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kinetra-coverage-e2e-"));
+  try {
+    await writeFixture(root, {
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/a/package.json": JSON.stringify({ name: "@x/a", scripts: { test: "node --test dist/test/*.test.js" } }),
+    });
+    const unbuilt = runCoverage(root, ["--out", "cov"]);
+    assert.equal(unbuilt.status, 1);
+    assert.match(unbuilt.stderr, /pnpm build/);
+
+    await writeFixture(root, {
+      "packages/a/dist/src/lib.js": "export const one = () => 1;\n",
+      "packages/a/dist/test/lib.test.js":
+        'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { one } from "../src/lib.js";\ntest("one", () => assert.equal(one(), 2));\n',
+    });
+    const failing = runCoverage(root, ["--out", "cov"]);
+    assert.equal(failing.status, 1);
+    const summary = JSON.parse(await readFile(join(root, "cov/summary.json"), "utf8"));
+    assert.match(summary[0].error, /tests exited with/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("coverage.mjs rejects workspace patterns it cannot expand", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kinetra-coverage-e2e-"));
+  try {
+    await writeFixture(root, { "pnpm-workspace.yaml": 'packages:\n  - "packages/**"\n' });
+    const result = runCoverage(root);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Unsupported pnpm workspace pattern/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
