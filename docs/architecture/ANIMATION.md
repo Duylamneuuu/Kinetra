@@ -111,3 +111,13 @@ semantic name, never by mesh or slot index. Names come from
 Not covered yet: morph weights as animation-graph parameters, crossfading
 between override values, and packaged-binary proof.
 
+## Inverse kinematics
+
+IK is a pure contract in `@kinetra/animation/ik` (no Three.js dependency):
+
+- `IkChainDefinition` (schemaVersion 1): stable `id`, `solver` (`"two-bone"` for limbs, `"fabrik"` for longer chains), `joints` ordered root -> end effector, optional `tolerance`, `maxIterations` (1..1024) and `weight` (0..1).
+- `validateIkChainDefinition` returns structured `ik.chain.*` diagnostics with remediation.
+- `solveTwoBoneIk` is analytic (law of cosines) with an optional pole hint choosing the bend plane; `solveFabrikIk` is iterative FABRIK with a fixed root. Both preserve bone lengths exactly, never mutate input, are deterministic, and report `reachable`, `converged`, `iterations`, `error` and `ik.solve.*` diagnostics (out-of-reach, inside-min-reach, target-at-root, pole-degenerate, not-converged, non-finite, zero-length-bone) instead of throwing.
+- `computeBoneAimRotations` converts solved positions into world-space shortest-arc rotations per bone for a runtime adapter.
+
+IK produces a visual pose only. Physics and gameplay stay authoritative over entity transforms, exactly like root motion. The runtime adapter (reading bone world positions from the skinned instance after the mixer update and writing solved rotations) is not wired yet.

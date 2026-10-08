@@ -9,5 +9,6 @@ Current core:
 - clip metadata/events
 - root-motion extraction policies
 - text-backed animation graph validation and state-machine evaluation
+- pure IK solvers (analytic two-bone with pole, FABRIK) and bone aim rotations (`@kinetra/animation/ik`)
 
 The package intentionally keeps source-of-truth data independent from a visual graph UI. A future editor graph is another frontend over these structures.
