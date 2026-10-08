@@ -54,6 +54,12 @@ export interface BlendSpacePlaybackState {
   /** Weight-averaged cycle length in seconds (before speed). */
   cycleDuration: number;
   speed: number;
+  /**
+   * Weight of the whole blend space in [0, 1]. 1 unless a graph transition is
+   * crossfading it in or out; each action's effective weight is
+   * `weights[i].weight * groupWeight`.
+   */
+  groupWeight: number;
   /** Heaviest clip (resolved name). */
   dominantClip: string;
 }
@@ -151,6 +157,7 @@ export class BlendSpacePlayback {
   readonly #parameters: string[];
   #weights: BlendSpaceWeight[] = [];
   #phase = 0;
+  #groupWeight = 1;
   #speed: number;
   #stopped = false;
 
@@ -233,6 +240,22 @@ export class BlendSpacePlayback {
     return this.#speed;
   }
 
+  get groupWeight(): number {
+    return this.#groupWeight;
+  }
+
+  /**
+   * Scale every sample action by `weight` (clamped to [0, 1]); used to
+   * crossfade the whole blend space with a clip or another blend space.
+   * Returns false for a non-finite weight or a stopped blend space.
+   */
+  setGroupWeight(weight: number): boolean {
+    if (this.#stopped || typeof weight !== "number" || !Number.isFinite(weight)) return false;
+    this.#groupWeight = Math.min(1, Math.max(0, weight));
+    this.#applyWeights();
+    return true;
+  }
+
   /** Resolved clip names in sample order. */
   get clipNames(): string[] {
     return this.#bindings.map((b) => b.resolvedClipName);
@@ -309,7 +332,7 @@ export class BlendSpacePlayback {
     for (const binding of this.#bindings) {
       const action = this.#actions.get(binding.resolvedClipName);
       if (!action) continue;
-      action.setEffectiveWeight(this.#weightOf(binding));
+      action.setEffectiveWeight(this.#weightOf(binding) * this.#groupWeight);
       action.setEffectiveTimeScale((this.#speed * binding.clip.duration) / cycle);
     }
   }
@@ -342,6 +365,7 @@ export class BlendSpacePlayback {
       phase: this.#phase,
       cycleDuration: this.cycleDuration(),
       speed: this.#speed,
+      groupWeight: this.#groupWeight,
       dominantClip: weights[0]?.clip ?? this.#bindings[0]!.resolvedClipName,
     };
   }

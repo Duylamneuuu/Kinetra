@@ -1,3 +1,5 @@
+import {validateBlendSpace,type BlendSpaceDefinition} from "./blend-space.js";
+
 export type AnimationParameterType="bool"|"number"|"trigger";
 
 export interface AnimationParameterDefinition {
@@ -7,7 +9,14 @@ export interface AnimationParameterDefinition {
 
 export interface AnimationStateDefinition {
   id:string;
-  clipId:string;
+  /** Clip played by this state. Exactly one of `clipId` / `blendSpaceId` is set. */
+  clipId?:string;
+  /**
+   * Blend space (declared in `AnimationGraphDefinition.blendSpaces`) played by
+   * this state. Its axes are graph number parameters of the same name, so the
+   * graph parameter drives the blend every step.
+   */
+  blendSpaceId?:string;
   speed?:number;
   loop?:boolean;
 }
@@ -33,11 +42,14 @@ export interface AnimationGraphDefinition {
   parameters:Record<string,AnimationParameterDefinition>;
   states:AnimationStateDefinition[];
   transitions:AnimationTransitionDefinition[];
+  /** Blend spaces that states may reference through `blendSpaceId`. */
+  blendSpaces?:BlendSpaceDefinition[];
 }
 
 export interface AnimationGraphDiagnostic {
   code:string;
   message:string;
+  remediation?:string;
 }
 
 const PARAMETER_TYPES:readonly AnimationParameterType[]=["bool","number","trigger"];
@@ -55,6 +67,11 @@ function isFiniteNumber(value:unknown):value is number{
 /** Own-property lookup: parameter names like "toString" must not resolve to Object.prototype members. */
 function parameterDefinition(graph:AnimationGraphDefinition,name:string):AnimationParameterDefinition|undefined{
   return Object.hasOwn(graph.parameters,name)?graph.parameters[name]:undefined;
+}
+
+/** Graph parameters that drive a blend space, in axis order. */
+export function blendSpaceAxes(space:BlendSpaceDefinition):string[]{
+  return space.kind==="1d"?[space.parameter]:[space.parameters[0],space.parameters[1]];
 }
 
 export function validateAnimationGraph(graph:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
@@ -75,13 +92,65 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     }
   }
 
+  const blendSpaces=new Map<string,BlendSpaceDefinition>();
+  if(graph.blendSpaces!==undefined && !Array.isArray(graph.blendSpaces)){
+    diagnostics.push({code:"anim.graph.blendSpaces.type",message:"graph.blendSpaces must be an array",remediation:"Provide an array of blend-space definitions."});
+  }else{
+    for(const space of graph.blendSpaces??[]){
+      const spaceDiagnostics=validateBlendSpace(space);
+      for(const d of spaceDiagnostics) diagnostics.push({code:d.code,message:d.message,remediation:d.remediation});
+      if(spaceDiagnostics.length>0 || typeof space.id!=="string") continue;
+      if(blendSpaces.has(space.id)){
+        diagnostics.push({code:"anim.blendSpace.duplicate",message:`Duplicate blend space "${space.id}"`,remediation:"Give every blend space a unique id."});
+        continue;
+      }
+      blendSpaces.set(space.id,space);
+    }
+  }
+
   for(const state of graph.states){
     if(states.has(state.id)){
       diagnostics.push({code:"anim.state.duplicate",message:`Duplicate state "${state.id}"`});
     }
     states.add(state.id);
-    if(!state.clipId){
-      diagnostics.push({code:"anim.state.clip.empty",message:`State "${state.id}" has no clipId`});
+    const hasClip=typeof state.clipId==="string" && state.clipId.length>0;
+    const hasSpace=state.blendSpaceId!==undefined;
+    if(hasClip && hasSpace){
+      diagnostics.push({
+        code:"anim.state.clipAndBlendSpace",
+        message:`State "${state.id}" sets both clipId and blendSpaceId`,
+        remediation:"Give a state either a clipId or a blendSpaceId, not both.",
+      });
+    }else if(hasSpace){
+      if(typeof state.blendSpaceId!=="string" || state.blendSpaceId.length===0){
+        diagnostics.push({
+          code:"anim.state.blendSpace.empty",
+          message:`State "${state.id}" has an empty blendSpaceId`,
+          remediation:"Name a blend space declared in graph.blendSpaces.",
+        });
+      }else{
+        const space=blendSpaces.get(state.blendSpaceId);
+        if(!space){
+          diagnostics.push({
+            code:"anim.state.blendSpace.unknown",
+            message:`State "${state.id}" references unknown blend space "${state.blendSpaceId}"`,
+            remediation:"Declare the blend space in graph.blendSpaces or fix the id.",
+          });
+        }else{
+          for(const axis of blendSpaceAxes(space)){
+            const parameter=parameterDefinition(graph,axis);
+            if(parameter?.type!=="number"){
+              diagnostics.push({
+                code:"anim.state.blendSpace.parameter",
+                message:`State "${state.id}" blend space "${state.blendSpaceId}" is driven by "${axis}", which is ${parameter?`a ${parameter.type} parameter`:"not a graph parameter"}`,
+                remediation:`Declare "${axis}" as a number parameter in graph.parameters.`,
+              });
+            }
+          }
+        }
+      }
+    }else if(!hasClip){
+      diagnostics.push({code:"anim.state.clip.empty",message:`State "${state.id}" has no clipId`,remediation:"Set clipId, or blendSpaceId to play a blend space."});
     }
     if(state.speed!==undefined && !isFiniteNumber(state.speed)){
       diagnostics.push({code:"anim.state.speed.invalid",message:`State "${state.id}" has non-finite speed`});
@@ -174,6 +243,28 @@ export class AnimationGraphMachine {
 
   get currentStateDefinition(): AnimationStateDefinition | undefined {
     return this.getStateDefinition(this.#state);
+  }
+
+  /** Blend space a state plays, if it plays one. */
+  getBlendSpace(stateId: string = this.#state): BlendSpaceDefinition | undefined {
+    const id = this.getStateDefinition(stateId)?.blendSpaceId;
+    if (id === undefined) return undefined;
+    return this.graph.blendSpaces?.find((space) => space.id === id);
+  }
+
+  /**
+   * Current graph parameter values for the axes of a blend-space state, keyed
+   * by axis name. `undefined` when the state does not play a blend space.
+   */
+  getBlendSpaceInput(stateId: string = this.#state): Record<string, number> | undefined {
+    const space = this.getBlendSpace(stateId);
+    if (!space) return undefined;
+    const input: Record<string, number> = {};
+    for (const axis of blendSpaceAxes(space)) {
+      const value = this.#values.get(axis);
+      input[axis] = typeof value === "number" ? value : 0;
+    }
+    return input;
   }
 
   getParameter(name: string): boolean | number | undefined {
