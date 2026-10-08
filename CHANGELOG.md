@@ -21,6 +21,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **animation**: exact looping root motion for reverse playback and negative playback time ([#128](https://github.com/Duylamneuuu/Kinetra/pull/128))
+- **input**: ignore non-finite input values, validate remap bindings, keep shell booting on stale settings; add property tests ([#131](https://github.com/Duylamneuuu/Kinetra/pull/131))
+- **reference-game**: keep Arena script state restorable under hostile payloads; add seeded save-contract fuzz test ([#130](https://github.com/Duylamneuuu/Kinetra/pull/130))
+- **project-model**: structured validation for untrusted documents and locale-independent ordering ([#129](https://github.com/Duylamneuuu/Kinetra/pull/129))
+- **navigation**: report unreachable goals as partial paths and validate bake input ([#126](https://github.com/Duylamneuuu/Kinetra/pull/126))
 - **animation**: reject NaN graph parameters, prototype-key lookups and invalid graph data; locale-independent transition order ([#111](https://github.com/Duylamneuuu/Kinetra/pull/111))
 - **save-state**: validate save schemaVersion, reject Windows reserved keys, sanitize custom bindings; add property tests ([#124](https://github.com/Duylamneuuu/Kinetra/pull/124))
 - **renderer-three**: keep IK idempotent on un-animated bones, apply to clip-less models, deterministic chain order ([#77](https://github.com/Duylamneuuu/Kinetra/pull/77))
@@ -34,6 +39,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Maintenance
 
+- **ci**: fail on unregistered test files; run the missing real-ik-bridge test ([#118](https://github.com/Duylamneuuu/Kinetra/pull/118))
 - **ci**: cache pnpm store, enforce frozen lockfile, cancel superseded PR runs ([#76](https://github.com/Duylamneuuu/Kinetra/pull/76))
 
 ## 2026-09-28
