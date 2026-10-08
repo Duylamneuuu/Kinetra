@@ -33,6 +33,8 @@ import {
   type MorphClearResult,
   type MorphSetResult,
 } from "./morph.js";
+import { IkController, type IkSetTargetResult, type IkTargetOptions } from "./ik.js";
+import type { IkChainDefinition } from "@kinetra/animation/ik";
 
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
@@ -259,6 +261,7 @@ export class ThreeSceneRuntime {
   #templateCache = new ModelTemplateCache();
   #instances = new Map<string, ModelInstance>();
   #morphControllers = new Map<string, MorphTargetController>();
+  #ikControllers = new Map<string, IkController>();
   #disposed = false;
 
 
@@ -485,6 +488,7 @@ export class ThreeSceneRuntime {
     this.#activeActions.delete(entityId);
     this.#modelScenes.delete(entityId);
     this.#morphControllers.delete(entityId);
+    this.#ikControllers.delete(entityId);
 
     const instance = this.#instances.get(entityId);
     if (instance) {
@@ -714,6 +718,40 @@ export class ThreeSceneRuntime {
     const result = resolved.controller.clear(names);
     if (result.success) this.#refreshMorphMetadata(entityId);
     return result;
+  }
+
+  /**
+   * Registers IK chains (replacing any previous set) for the entity's loaded model.
+   * Invalid chains are skipped and reported in `registrationDiagnostics`.
+   */
+  setIkChains(entityId: string, chains: readonly IkChainDefinition[]): IkController | undefined {
+    const scene = this.#modelScenes.get(entityId);
+    if (this.#disposed || !scene) return undefined;
+    const controller = new IkController(scene, chains);
+    this.#ikControllers.set(entityId, controller);
+    return controller;
+  }
+
+  setIkTarget(entityId: string, chainId: string, target: unknown, options?: IkTargetOptions): IkSetTargetResult {
+    const controller = this.#ikControllers.get(entityId);
+    if (!controller) {
+      const d = {
+        code: "ik.runtime.no-chains",
+        severity: "error" as const,
+        message: `Entity "${entityId}" has no registered IK chains`,
+        remediation: "Call setIkChains with chain definitions after the model has loaded.",
+      };
+      return { success: false, diagnostics: [d], error: `[${d.code}] ${d.message}` };
+    }
+    return controller.setTarget(chainId, target, options);
+  }
+
+  clearIkTarget(entityId: string, chainId?: string): void {
+    this.#ikControllers.get(entityId)?.clearTarget(chainId);
+  }
+
+  getIkController(entityId: string): IkController | undefined {
+    return this.#ikControllers.get(entityId);
   }
 
   getMorphTargetController(entityId: string): MorphTargetController | undefined {
@@ -1714,6 +1752,9 @@ export class ThreeSceneRuntime {
         this.#publishBlendSpaceState(session.blendSpace, metadata);
       }
 
+      // IK corrections sit on top of the animated pose.
+      this.#ikControllers.get(entityId)?.apply();
+
       const morph = this.#morphControllers.get(entityId);
       if (morph) {
         // Runtime overrides win over clip tracks animating the same targets.
@@ -1869,6 +1910,7 @@ export class ThreeSceneRuntime {
     this.#clips.clear();
     this.#modelScenes.clear();
     this.#morphControllers.clear();
+    this.#ikControllers.clear();
 
     // Dispose all active instances (disposes cloned materials and skeletons, removes from parent, releases template refs)
     for (const instance of this.#instances.values()) {

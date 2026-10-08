@@ -172,7 +172,7 @@ What has meaningful proof:
 
 Still missing:
 - graph states that reference a blend space, smooth crossfades into/out of a blend space, and blend-space root motion;
-- inverse kinematics (IK) runtime adapter: the pure solver contract (`@kinetra/animation/ik`) is unit-tested, but no runtime path applies it to skinned instances yet.
+- inverse kinematics (IK) runtime adapter: `IkController` (renderer-three) applies the pure solver to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains/setIkTarget/clearIkTarget`; unit + runtime tests pass. Not yet proven: bridge/command-bus exposure, models without an animator session (IK is only applied for entities that have one), Electron acceptance, foot-planting helpers.
 
 ### Complete-game contracts
 
