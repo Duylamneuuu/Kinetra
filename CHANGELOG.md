@@ -18,6 +18,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 - **animation**: play 1D/2D locomotion blend spaces in the runtime with phase sync ([#70](https://github.com/Duylamneuuu/Kinetra/pull/70))
 - **animation**: add pure 1D/2D locomotion blend-space contract ([#69](https://github.com/Duylamneuuu/Kinetra/pull/69))
 
+### Tests
+
+- **animation**: seeded property tests for blend space, IK and morph-target contracts ([#115](https://github.com/Duylamneuuu/Kinetra/pull/115))
+
 ### Maintenance
 
 - **ci**: cache pnpm store, enforce frozen lockfile, cancel superseded PR runs ([#76](https://github.com/Duylamneuuu/Kinetra/pull/76))
