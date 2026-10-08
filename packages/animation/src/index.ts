@@ -1,5 +1,6 @@
 export * from "./clips.js";
 export * from "./graph.js";
+export * from "./blend-space.js";
 export * from "./root-motion.js";
 export * from "./skeleton.js";
 export * from "./retarget.js";
