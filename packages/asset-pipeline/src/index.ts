@@ -4,6 +4,7 @@ export * from "./hash.js";
 export * from "./types.js";
 export * from "./validation.js";
 export * from "./optimizer.js";
+export * from "./compression.js";
 export * from "./synthetic.js";
 export * from "./watcher.js";
 export * from "./reimport.js";

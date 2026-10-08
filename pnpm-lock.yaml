@@ -198,6 +198,9 @@ importers:
       '@types/three':
         specifier: ^0.180.0
         version: 0.180.0
+      meshoptimizer:
+        specifier: 0.22.0
+        version: 0.22.0
 
   packages/save-state: {}
 
