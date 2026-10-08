@@ -264,6 +264,8 @@ async function handleBridgeRequest(
     case "asset.register":
     case "animation.play":
     case "animation.crossfade":
+    case "animation.blendSpace.play":
+    case "animation.blendSpace.setInput":
     case "animation.graph.init":
     case "animation.graph.setParameter":
     case "animation.graph.trigger":
