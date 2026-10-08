@@ -51,6 +51,11 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
+/** Upper bound for one `runtime.step` call (~10 minutes at 60 Hz). */
+const MAX_STEPS_PER_CALL = 36_000;
+/** Upper bound for one fixed step; larger deltas tunnel physics and skip animation events. */
+const MAX_STEP_DELTA_SECONDS = 1;
+
 function requireRevision(value: unknown): number {
   if (!Number.isInteger(value) || (value as number) < 0) {
     throw new TypeError("projectRevision must be a non-negative integer");
@@ -148,10 +153,19 @@ async function handleRuntimeCommand(request: {
     }
 
     case "runtime.step": {
-      const steps = typeof params.steps === "number" ? params.steps : 1;
+      // Validate before stepping: a non-integer/Infinity step count would spin the
+      // renderer forever, and a NaN/Infinity/negative delta poisons physics,
+      // scripts and animation state for every later frame.
+      const steps = params.steps === undefined || params.steps === null ? 1 : params.steps;
+      if (!Number.isInteger(steps) || (steps as number) < 0 || (steps as number) > MAX_STEPS_PER_CALL) {
+        throw new TypeError(`steps must be an integer from 0 to ${MAX_STEPS_PER_CALL}`);
+      }
       const deltaSeconds =
-        typeof params.deltaSeconds === "number" ? params.deltaSeconds : 1 / 60;
-      runtime.step(steps, deltaSeconds);
+        params.deltaSeconds === undefined || params.deltaSeconds === null ? 1 / 60 : params.deltaSeconds;
+      if (typeof deltaSeconds !== "number" || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0 || deltaSeconds > MAX_STEP_DELTA_SECONDS) {
+        throw new TypeError(`deltaSeconds must be a finite number in (0, ${MAX_STEP_DELTA_SECONDS}]`);
+      }
+      runtime.step(steps as number, deltaSeconds);
       shell.updateFromRuntime();
       return runtime.query();
     }
