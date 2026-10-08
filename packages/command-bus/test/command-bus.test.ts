@@ -76,9 +76,11 @@ test("every command error code includes a next-step remediation", () => {
     ENTITY_NOT_FOUND: true,
     ENTITY_ALREADY_EXISTS: true,
     PARENT_NOT_FOUND: true,
+    PARENT_CYCLE: true,
     CHILDREN_EXIST: true,
     COMPONENT_NOT_OBJECT: true,
     INVALID_COMMAND: true,
+    UNDO_CONFLICT: true,
   } satisfies Record<CommandErrorCode, true>;
 
   for (const code of Object.keys(covered) as CommandErrorCode[]) {

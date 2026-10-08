@@ -67,6 +67,40 @@ function collectDescendants(scene: SceneDefinition, rootId: string): Set<string>
   return ids;
 }
 
+const RESERVED_COMPONENT_NAMES = new Set(["__proto__", "constructor", "prototype"]);
+
+function assertComponentName(component: string): void {
+  if (RESERVED_COMPONENT_NAMES.has(component)) {
+    throw new CommandError(
+      "INVALID_COMMAND",
+      `Component name "${component}" is reserved and cannot be stored as component data`,
+    );
+  }
+}
+
+function isAncestorOrSelf(scene: SceneDefinition, candidateId: string, entityId: string): boolean {
+  const byId = new Map(scene.entities.map((entity) => [entity.id, entity]));
+  const visited = new Set<string>();
+  let cursor: string | undefined = candidateId;
+  while (cursor !== undefined && !visited.has(cursor)) {
+    if (cursor === entityId) {
+      return true;
+    }
+    visited.add(cursor);
+    cursor = byId.get(cursor)?.parentId;
+  }
+  return false;
+}
+
+function normalizeOffset(value: number | undefined): number {
+  return value !== undefined && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function normalizeLimit(value: number | undefined): number {
+  const limit = value !== undefined && Number.isFinite(value) ? Math.floor(value) : 100;
+  return Math.min(500, Math.max(1, limit));
+}
+
 function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeRecord[] {
   switch (command.command) {
     case "scene.create": {
@@ -109,6 +143,7 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
     }
 
     case "component.patch": {
+      assertComponentName(command.payload.component);
       const located = findEntity(project, command.payload.entityId);
       if (!located) {
         throw new CommandError(
@@ -156,6 +191,12 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
           throw new CommandError(
             "PARENT_NOT_FOUND",
             `Parent "${command.payload.parentId}" does not exist in the same scene`,
+          );
+        }
+        if (isAncestorOrSelf(located.scene, parent.id, located.entity.id)) {
+          throw new CommandError(
+            "PARENT_CYCLE",
+            `Cannot parent "${located.entity.id}" under "${parent.id}": it would create a hierarchy cycle`,
           );
         }
         located.entity.parentId = parent.id;
@@ -231,7 +272,9 @@ export class CommandBus {
   #project: ProjectDocument;
   #revision: number;
   #events: CommandEvent[] = [];
-  #undoSnapshots = new Map<string, ProjectDocument>();
+  // Last-in, first-out: only the most recent un-undone execution can be undone,
+  // so restoring a snapshot never silently discards later changes.
+  #undoStack: Array<{ token: string; snapshot: ProjectDocument }> = [];
   #undoCounter = 0;
   #eventCounter = 0;
 
@@ -299,7 +342,7 @@ export class CommandBus {
     this.#revision = proposedRevision;
 
     const undoToken = `undo_${++this.#undoCounter}`;
-    this.#undoSnapshots.set(undoToken, before);
+    this.#undoStack.push({ token: undoToken, snapshot: before });
 
     this.#events.push({
       id: `event_${++this.#eventCounter}`,
@@ -321,14 +364,22 @@ export class CommandBus {
 
   undo(undoToken: string, expectedProjectRevision?: number): CommandResult {
     assertRevision(expectedProjectRevision, this.#revision);
-    const previous = this.#undoSnapshots.get(undoToken);
+    const index = this.#undoStack.findIndex((entry) => entry.token === undoToken);
 
-    if (!previous) {
+    if (index === -1) {
       throw new CommandError("INVALID_COMMAND", `Unknown or already-consumed undo token "${undoToken}"`);
     }
 
-    this.#undoSnapshots.delete(undoToken);
-    this.#project = cloneProject(previous);
+    if (index !== this.#undoStack.length - 1) {
+      const newer = this.#undoStack.length - 1 - index;
+      throw new CommandError(
+        "UNDO_CONFLICT",
+        `Undo token "${undoToken}" is not the most recent change; ${newer} newer change(s) must be undone first`,
+      );
+    }
+
+    const [entry] = this.#undoStack.splice(index, 1);
+    this.#project = cloneProject(entry!.snapshot);
     this.#revision += 1;
 
     const changes: ChangeRecord[] = [{ kind: "updated", id: this.#project.projectId, resource: "project" }];
@@ -379,8 +430,8 @@ export class CommandBus {
       }
     }
 
-    const offset = Math.max(0, query.offset ?? 0);
-    const limit = Math.min(500, Math.max(1, query.limit ?? 100));
+    const offset = normalizeOffset(query.offset);
+    const limit = normalizeLimit(query.limit);
     const items = matched.slice(offset, offset + limit);
     const nextOffset = offset + items.length < matched.length ? offset + items.length : undefined;
 
