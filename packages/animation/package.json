@@ -40,6 +40,14 @@
     "./morph-targets": {
       "types": "./dist/src/morph-targets.d.ts",
       "default": "./dist/src/morph-targets.js"
+    },
+    "./ik.js": {
+      "types": "./dist/src/ik.d.ts",
+      "default": "./dist/src/ik.js"
+    },
+    "./ik": {
+      "types": "./dist/src/ik.d.ts",
+      "default": "./dist/src/ik.js"
     }
   },
   "types": "./dist/src/index.d.ts",
