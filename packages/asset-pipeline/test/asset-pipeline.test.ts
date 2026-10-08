@@ -479,3 +479,40 @@ test("creates deterministic synthetic rigged character GLB with root-motion clip
 
 
 
+
+test("creates deterministic synthetic morph-target GLB with a shared target name and a weights clip", async () => {
+  const { createSyntheticMorphGlb } = await import("../src/index.js");
+  const bytes = await createSyntheticMorphGlb({ faceWeights: [0.25, 0], browWeights: [0, 0.5], blinkDuration: 2 });
+  const again = await createSyntheticMorphGlb({ faceWeights: [0.25, 0], browWeights: [0, 0.5], blinkDuration: 2 });
+  assert.deepEqual(bytes, again, "synthetic morph GLB must be byte-for-byte deterministic");
+
+  const header = inspectGlb(bytes);
+  assert.equal(header.magic, 0x46546c67);
+  assert.equal(header.length, bytes.byteLength);
+
+  const doc = await new NodeIO().readBinary(bytes);
+  const meshes = doc.getRoot().listMeshes();
+  assert.deepEqual(meshes.map((m) => m.getName()), ["Face", "Brow"]);
+  const face = meshes[0]!;
+  const brow = meshes[1]!;
+  assert.deepEqual((face.getExtras() as { targetNames: string[] }).targetNames, ["smile", "blink"]);
+  assert.deepEqual((brow.getExtras() as { targetNames: string[] }).targetNames, ["blink", "raise"]);
+  assert.deepEqual(face.getWeights(), [0.25, 0]);
+  assert.deepEqual(brow.getWeights(), [0, 0.5]);
+  assert.equal(face.listPrimitives()[0]!.listTargets().length, 2);
+
+  const blink = doc.getRoot().listAnimations().find((a) => a.getName() === "Blink");
+  assert.ok(blink, "Blink clip must exist");
+  const channel = blink.listChannels()[0]!;
+  assert.equal(channel.getTargetPath(), "weights");
+  assert.equal(channel.getTargetNode()?.getName(), "Face");
+  assert.deepEqual([...channel.getSampler()!.getInput()!.getArray()!], [0, 1, 2]);
+  assert.deepEqual([...channel.getSampler()!.getOutput()!.getArray()!], [0.25, 0, 0.25, 1, 0.25, 0]);
+});
+
+test("createSyntheticMorphGlb rejects a non-positive or non-finite blink duration", async () => {
+  const { createSyntheticMorphGlb } = await import("../src/index.js");
+  for (const blinkDuration of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    await assert.rejects(createSyntheticMorphGlb({ blinkDuration }), /blinkDuration/);
+  }
+});

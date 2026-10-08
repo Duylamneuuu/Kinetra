@@ -28,6 +28,12 @@ import {
   BlendSpacePlayback,
   type BlendSpacePlaybackState,
 } from "./blend-space-player.js";
+import {
+  MorphTargetController,
+  type MorphClearResult,
+  type MorphSetResult,
+} from "./morph.js";
+
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 import {
@@ -252,6 +258,7 @@ export class ThreeSceneRuntime {
   #animatorSessions = new Map<string, EntityAnimatorSession>();
   #templateCache = new ModelTemplateCache();
   #instances = new Map<string, ModelInstance>();
+  #morphControllers = new Map<string, MorphTargetController>();
   #disposed = false;
 
 
@@ -477,6 +484,7 @@ export class ThreeSceneRuntime {
     this.#clips.delete(entityId);
     this.#activeActions.delete(entityId);
     this.#modelScenes.delete(entityId);
+    this.#morphControllers.delete(entityId);
 
     const instance = this.#instances.get(entityId);
     if (instance) {
@@ -489,6 +497,7 @@ export class ThreeSceneRuntime {
       metadata.loaded = false;
       delete metadata.animation;
       delete metadata.nodes;
+      delete metadata.morphTargets;
       delete metadata.bounds;
       delete metadata.instance;
       delete metadata.resourceSharing;
@@ -503,7 +512,13 @@ export class ThreeSceneRuntime {
   async reloadAsset(
     assetId: string,
     resolver: AssetResolver,
-  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string | undefined }> {
+  ): Promise<{
+    success: boolean;
+    affectedEntities: string[];
+    error?: string | undefined;
+    /** Entity -> morph overrides the reloaded asset no longer supports. */
+    droppedMorphOverrides?: Record<string, string[]> | undefined;
+  }> {
     if (this.#disposed) {
       return { success: false, affectedEntities: [], error: "Runtime is disposed" };
     }
@@ -515,6 +530,7 @@ export class ThreeSceneRuntime {
       }
     }
 
+    const droppedMorphOverrides: Record<string, string[]> = {};
     let newTemplate: ModelAssetTemplate;
     try {
       newTemplate = await this.#templateCache.resolveNewTemplate(assetId, resolver);
@@ -540,6 +556,7 @@ export class ThreeSceneRuntime {
             speed: oldSession.blendSpace.speed,
           }
         : undefined;
+      const oldMorph = this.#morphControllers.get(entityId);
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
@@ -580,6 +597,15 @@ export class ThreeSceneRuntime {
       this.#instances.set(entityId, newInstance);
       this.#attachInstance(entityId, object, newInstance, metadata);
 
+      // 5b. Carry runtime morph overrides onto the new instance; targets the new
+      // asset no longer has are dropped (and reported) rather than failing the reload.
+      if (oldMorph && oldMorph.overrideCount > 0) {
+        const newMorph = this.#morphControllers.get(entityId);
+        const dropped = newMorph ? newMorph.adoptOverrides(oldMorph) : oldMorph.overriddenNames();
+        this.#refreshMorphMetadata(entityId);
+        if (dropped.length > 0) droppedMorphOverrides[entityId] = dropped;
+      }
+
       // 6. If entity had an animation graph before, re-initialize it cleanly with the new clips/mixer
       if (oldGraphDef) {
         this.initAnimationGraph(entityId, oldGraphDef);
@@ -598,7 +624,11 @@ export class ThreeSceneRuntime {
     }
 
     this.#updateResourceSharingMetadata();
-    return { success: true, affectedEntities };
+    return {
+      success: true,
+      affectedEntities,
+      ...(Object.keys(droppedMorphOverrides).length > 0 ? { droppedMorphOverrides } : {}),
+    };
   }
 
   #updateResourceSharingMetadata(): void {
@@ -661,6 +691,67 @@ export class ThreeSceneRuntime {
     }
 
     return true;
+  }
+
+  /**
+   * Sets runtime morph-target weights by semantic target name. All-or-nothing:
+   * any unknown target or invalid weight rejects the whole request. A name
+   * shared by several meshes drives all of them. Overrides persist across
+   * animation playback and asset reloads until cleared.
+   */
+  setMorphWeights(entityId: string, weights: unknown): MorphSetResult {
+    const resolved = this.#resolveMorphController(entityId);
+    if ("error" in resolved) return resolved.error;
+    const result = resolved.controller.setWeights(weights);
+    if (result.success) this.#refreshMorphMetadata(entityId);
+    return result;
+  }
+
+  /** Clears overrides for `names` (or every override) and restores authored defaults. */
+  clearMorphWeights(entityId: string, names?: unknown): MorphClearResult {
+    const resolved = this.#resolveMorphController(entityId);
+    if ("error" in resolved) return resolved.error;
+    const result = resolved.controller.clear(names);
+    if (result.success) this.#refreshMorphMetadata(entityId);
+    return result;
+  }
+
+  getMorphTargetController(entityId: string): MorphTargetController | undefined {
+    return this.#morphControllers.get(entityId);
+  }
+
+  #resolveMorphController(
+    entityId: string,
+  ): { controller: MorphTargetController } | { error: MorphSetResult } {
+    const fail = (code: string, message: string, remediation: string) => ({
+      error: { success: false, error: `[${code}] ${message}`, diagnostics: [{ code, message, remediation }] },
+    });
+    if (this.#disposed) {
+      return fail("anim.morph.runtimeDisposed", "Runtime is disposed", "Start the runtime again.");
+    }
+    const metadata = this.#models.get(entityId);
+    if (!metadata || !metadata.loaded) {
+      return fail(
+        "anim.morph.noModel",
+        `Entity "${entityId}" has no loaded model`,
+        "Attach a Model component with a loaded glTF asset before setting morph weights.",
+      );
+    }
+    const controller = this.#morphControllers.get(entityId);
+    if (!controller) {
+      return fail(
+        "anim.morph.noTargets",
+        `Model "${metadata.assetId}" on entity "${entityId}" has no morph targets`,
+        "Export blend shapes (shape keys) with the glTF asset, or target a different entity.",
+      );
+    }
+    return { controller };
+  }
+
+  #refreshMorphMetadata(entityId: string): void {
+    const metadata = this.#models.get(entityId);
+    const controller = this.#morphControllers.get(entityId);
+    if (metadata && controller) metadata.morphTargets = controller.observe();
   }
 
   getAnimatorSession(entityId: string): EntityAnimatorSession | undefined {
@@ -1623,6 +1714,13 @@ export class ThreeSceneRuntime {
         this.#publishBlendSpaceState(session.blendSpace, metadata);
       }
 
+      const morph = this.#morphControllers.get(entityId);
+      if (morph) {
+        // Runtime overrides win over clip tracks animating the same targets.
+        morph.applyOverrides();
+        if (metadata) metadata.morphTargets = morph.observe();
+      }
+
       const modelScene = this.#modelScenes.get(entityId);
       if (metadata && modelScene) {
         metadata.nodes = this.#extractNodeStates(modelScene);
@@ -1721,6 +1819,15 @@ export class ThreeSceneRuntime {
       };
     }
 
+    const morph = MorphTargetController.fromScene(modelScene);
+    if (morph) {
+      this.#morphControllers.set(entityId, morph);
+      metadata.morphTargets = morph.observe();
+    } else {
+      this.#morphControllers.delete(entityId);
+      delete metadata.morphTargets;
+    }
+
     delete metadata.error;
 
     modelScene.name = `${object.name}:Model`;
@@ -1761,6 +1868,7 @@ export class ThreeSceneRuntime {
     this.#mixers.clear();
     this.#clips.clear();
     this.#modelScenes.clear();
+    this.#morphControllers.clear();
 
     // Dispose all active instances (disposes cloned materials and skeletons, removes from parent, releases template refs)
     for (const instance of this.#instances.values()) {

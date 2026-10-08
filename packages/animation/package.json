@@ -32,6 +32,14 @@
     "./root-motion": {
       "types": "./dist/src/root-motion.d.ts",
       "default": "./dist/src/root-motion.js"
+    },
+    "./morph-targets.js": {
+      "types": "./dist/src/morph-targets.d.ts",
+      "default": "./dist/src/morph-targets.js"
+    },
+    "./morph-targets": {
+      "types": "./dist/src/morph-targets.d.ts",
+      "default": "./dist/src/morph-targets.js"
     }
   },
   "types": "./dist/src/index.d.ts",

@@ -55,6 +55,10 @@ export interface GameScriptAnimationGraphService {
 export interface GameScriptAnimationService {
   play(clipName: string, options?: { loop?: boolean }): boolean;
   stop(): void;
+  /** Sets morph-target weights by name (all-or-nothing, each in [0, 1]). */
+  setMorphWeights?(weights: Record<string, number>): boolean;
+  /** Clears morph overrides (all when `names` is omitted), restoring authored weights. */
+  clearMorphWeights?(names?: string[]): boolean;
   readonly activeClip?: string | undefined;
   readonly playing?: boolean | undefined;
   readonly graph?: GameScriptAnimationGraphService | undefined;

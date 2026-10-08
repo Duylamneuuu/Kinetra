@@ -79,6 +79,22 @@ export interface ModelAnimationState {
   blendSpace?: ModelBlendSpaceState | undefined;
 }
 
+export interface ModelMorphTargetState {
+  name: string;
+  /** Current weight of the first mesh slot carrying this target. */
+  weight: number;
+  /** Mesh names carrying this target; a shared name drives every mesh. */
+  meshes: string[];
+  /** True when a runtime override (animation.setMorphWeights) owns this target. */
+  overridden: boolean;
+}
+
+export interface ModelMorphTargetsState {
+  targets: ModelMorphTargetState[];
+  /** Active runtime overrides, keyed by target name. */
+  overrides: Record<string, number>;
+}
+
 export interface ModelNodeState {
   name: string;
   position: [number, number, number];
@@ -110,6 +126,7 @@ export interface ModelMetadata {
   bounds?: ModelBounds | undefined;
   animation?: ModelAnimationState | undefined;
   nodes?: ModelNodeState[] | undefined;
+  morphTargets?: ModelMorphTargetsState | undefined;
   instance?: ModelInstanceMetadata | undefined;
   resourceSharing?: ModelResourceSharingMetadata | undefined;
   assetFingerprint?: string | undefined;

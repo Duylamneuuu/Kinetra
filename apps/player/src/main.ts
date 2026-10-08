@@ -254,6 +254,18 @@ async function handleRuntimeCommand(request: {
       return { ...result, ...runtime.query() };
     }
 
+    case "animation.setMorphWeights": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.setMorphWeights(entityId, params.weights);
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.clearMorphWeights": {
+      const entityId = requireString(params.entityId, "entityId");
+      const result = runtime.clearMorphWeights(entityId, params.names);
+      return { ...result, ...runtime.query() };
+    }
+
     case "animation.stop": {
       const entityId = requireString(params.entityId, "entityId");
       runtime.stopAnimation(entityId);

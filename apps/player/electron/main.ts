@@ -272,6 +272,8 @@ async function handleBridgeRequest(
     case "animation.graph.evaluate":
     case "animation.stop":
     case "animation.registerClip":
+    case "animation.setMorphWeights":
+    case "animation.clearMorphWeights":
     case "animation.rootMotion.configure":
     case "model.detach":
     case "model.attach":
