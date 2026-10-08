@@ -21,6 +21,24 @@ function migrateV0ToV1(input: unknown): ProjectDocumentV1 {
   }
 
   const legacy = input as unknown as ProjectDocumentV0;
+  if (legacy.scenes !== undefined && !Array.isArray(legacy.scenes)) {
+    throw new Error("Migration v0→v1 received an invalid v0 document: scenes must be an array");
+  }
+  for (const [index, scene] of (legacy.scenes ?? []).entries()) {
+    if (!isRecord(scene)) {
+      throw new Error(`Migration v0→v1 received an invalid v0 document: scenes[${index}] must be an object`);
+    }
+    if (scene.objects !== undefined && !Array.isArray(scene.objects)) {
+      throw new Error(`Migration v0→v1 received an invalid v0 document: scenes[${index}].objects must be an array`);
+    }
+    for (const [objectIndex, object] of (scene.objects ?? []).entries()) {
+      if (!isRecord(object)) {
+        throw new Error(
+          `Migration v0→v1 received an invalid v0 document: scenes[${index}].objects[${objectIndex}] must be an object`,
+        );
+      }
+    }
+  }
 
   const scenes: SceneDefinition[] = (legacy.scenes ?? []).map((scene) => ({
     id: scene.id,

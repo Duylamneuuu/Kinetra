@@ -447,3 +447,37 @@ test("live asset reload restores the active blend space with its input on the ne
   assert.ok((runtime.getBlendSpaceState(heroId)?.phase ?? 0) > 0);
   runtime.dispose();
 });
+
+test("two samples that resolve to the same clip are rejected instead of sharing one action", () => {
+  // "walk" has no clip of its own and falls back to "walk_retargeted", which a
+  // second sample also names. Both samples would drive the single mixer action
+  // for walk_retargeted, so one sample's weight silently overwrote the other's
+  // and the published weights no longer matched the pose.
+  const root = new THREE.Object3D();
+  root.name = "Root";
+  const mixer = new THREE.AnimationMixer(root);
+  const clip = (name: string, duration: number): THREE.AnimationClip =>
+    new THREE.AnimationClip(name, duration, [
+      new THREE.NumberKeyframeTrack("Root.position[x]", [0, duration], [0, 1]),
+    ]);
+  const clips = [clip("idle", 1), clip("walk_retargeted", 0.8)];
+  const space: BlendSpace1DDefinition = {
+    schemaVersion: 1,
+    kind: "1d",
+    id: "dup",
+    parameter: "speed",
+    samples: [
+      { clipId: "idle", position: 0 },
+      { clipId: "walk", position: 1 },
+      { clipId: "walk_retargeted", position: 2 },
+    ],
+  };
+  const resolved = resolveBlendSpaceClips(space, clips);
+  assert.equal(resolved.success, false);
+  assert.equal(resolved.success ? "" : resolved.code, "anim.blendSpace.clip.duplicate");
+  assert.match(resolved.success ? "" : resolved.error, /walk_retargeted/);
+
+  const created = BlendSpacePlayback.create(space, mixer, clips, { input: { speed: 1.5 } });
+  assert.equal(created.success, false);
+  assert.equal(created.success ? "" : created.code, "anim.blendSpace.clip.duplicate");
+});

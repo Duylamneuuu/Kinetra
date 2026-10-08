@@ -749,6 +749,8 @@ export class ThreeSceneRuntime {
   setIkChains(entityId: string, chains: readonly IkChainDefinition[]): IkController | undefined {
     const scene = this.#modelScenes.get(entityId);
     if (this.#disposed || !scene) return undefined;
+    // Un-bend whatever the previous chain set posed before the new set takes over.
+    this.#ikControllers.get(entityId)?.clearTarget();
     const controller = new IkController(scene, chains);
     this.#ikControllers.set(entityId, controller);
     return controller;
@@ -1804,6 +1806,15 @@ export class ThreeSceneRuntime {
       }
     }
 
+    // Models without clips have no animator session; IK still applies to their bones.
+    for (const [entityId, ik] of this.#ikControllers) {
+      if (this.#animatorSessions.has(entityId)) continue;
+      ik.apply();
+      // Keep the observable node state in step with the IK pose, as the session loop does.
+      const metadata = this.#models.get(entityId);
+      const modelScene = this.#modelScenes.get(entityId);
+      if (metadata && modelScene) metadata.nodes = this.#extractNodeStates(modelScene);
+    }
   }
 
   #extractNodeStates(modelScene: THREE.Group): ModelNodeState[] {

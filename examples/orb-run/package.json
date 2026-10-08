@@ -1,0 +1,27 @@
+{
+  "name": "@kinetra/example-orb-run",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Orb Run: a small dogfood sample game authored entirely through Kinetra's MCP tools and command bus.",
+  "exports": {
+    ".": "./dist/src/index.js"
+  },
+  "types": "./dist/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/test/*.test.js",
+    "snapshot": "node dist/src/write-snapshot.js"
+  },
+  "dependencies": {
+    "@kinetra/command-bus": "workspace:*",
+    "@kinetra/core": "workspace:*",
+    "@kinetra/project-model": "workspace:*"
+  },
+  "devDependencies": {
+    "@kinetra/mcp-server": "workspace:*",
+    "@modelcontextprotocol/server": "2.0.0"
+  }
+}

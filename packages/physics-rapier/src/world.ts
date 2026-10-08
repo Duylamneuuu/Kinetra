@@ -15,6 +15,17 @@ interface BodyEntry {
   isCharacter: boolean;
 }
 
+function assertFiniteVec3(value: Vec3, label: string): void {
+  if (
+    !value ||
+    !Number.isFinite(value.x) ||
+    !Number.isFinite(value.y) ||
+    !Number.isFinite(value.z)
+  ) {
+    throw new RangeError(`${label} must have finite x, y, z`);
+  }
+}
+
 let rapierReady: Promise<void> | undefined;
 
 export async function initRapier(): Promise<void> {
@@ -49,8 +60,8 @@ export class RapierPhysicsWorld {
   ): Promise<RapierPhysicsWorld> {
     await initRapier();
     const fixedDeltaSeconds = options.fixedDeltaSeconds ?? 1 / 60;
-    if (!(fixedDeltaSeconds > 0)) {
-      throw new RangeError("fixedDeltaSeconds must be > 0");
+    if (!Number.isFinite(fixedDeltaSeconds) || fixedDeltaSeconds <= 0) {
+      throw new RangeError("fixedDeltaSeconds must be finite and > 0");
     }
 
     return new RapierPhysicsWorld({
@@ -202,6 +213,7 @@ export class RapierPhysicsWorld {
     if (!entry.collider) {
       throw new Error(`Body "${id}" has no collider`);
     }
+    assertFiniteVec3(desired, "moveCharacter desired");
 
     // Ensure spatial acceleration structure is populated before querying
     if (this.#fixedSteps === 0) {
@@ -241,12 +253,27 @@ export class RapierPhysicsWorld {
     };
   }
 
+  /**
+   * Runs exactly one simulation step. An explicit `fixedDeltaSeconds` applies to this
+   * step only: the world's configured fixed timestep is restored afterwards so later
+   * `advance()` calls keep integrating `this.fixedDeltaSeconds` per step.
+   */
   step(fixedDeltaSeconds?: number): void {
-    if (fixedDeltaSeconds !== undefined && fixedDeltaSeconds > 0) {
-      this.world.timestep = fixedDeltaSeconds;
+    if (fixedDeltaSeconds === undefined) {
+      this.world.step();
+      this.#fixedSteps++;
+      return;
     }
-    this.world.step();
-    this.#fixedSteps++;
+    if (!Number.isFinite(fixedDeltaSeconds) || fixedDeltaSeconds <= 0) {
+      throw new RangeError("fixedDeltaSeconds must be finite and > 0");
+    }
+    this.world.timestep = fixedDeltaSeconds;
+    try {
+      this.world.step();
+      this.#fixedSteps++;
+    } finally {
+      this.world.timestep = this.fixedDeltaSeconds;
+    }
   }
 
   advance(realDeltaSeconds: number): number {
@@ -305,6 +332,7 @@ export class RapierPhysicsWorld {
     resetVelocity = false,
   ): void {
     const entry = this.#require(id);
+    assertFiniteVec3(position, "setBodyTranslation position");
     entry.body.setTranslation(position, true);
     if (resetVelocity) {
       entry.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
