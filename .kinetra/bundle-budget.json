@@ -1,0 +1,9 @@
+{
+  "$comment": "Player web bundle budget. Baseline 2026-10-09: index chunk 3,703,556 B raw / 1,300,830 B gzip; recast chunk 726,422 B raw / 217,275 B gzip. Budgets keep ~10% headroom; raise deliberately in the PR that needs it.",
+  "assetsDir": "apps/player/dist/web/assets",
+  "budgets": {
+    "totalJsRawBytes": 4900000,
+    "totalJsGzipBytes": 1700000,
+    "largestJsGzipBytes": 1450000
+  }
+}
