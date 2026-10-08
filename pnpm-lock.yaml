@@ -78,6 +78,9 @@ importers:
       '@kinetra/project-model':
         specifier: workspace:*
         version: link:../../packages/project-model
+      '@kinetra/verification':
+        specifier: workspace:*
+        version: link:../../packages/verification
     devDependencies:
       '@kinetra/mcp-server':
         specifier: workspace:*
