@@ -734,7 +734,7 @@ test(
             const enemy0 = initialQuery.entities.find((e) => e.entityId === ARENA_ENTITY_ENEMY);
             assert.equal(enemy0?.model?.loaded, true, "Enemy model must be loaded");
             assert.equal(enemy0?.model?.hasSkin, true, "Enemy model must have skin");
-            assert.ok(enemy0?.model?.skinnedMeshCount! > 0, "Enemy model must have skinned meshes");
+            assert.ok((enemy0?.model?.skinnedMeshCount ?? 0) > 0, "Enemy model must have skinned meshes");
 
             const leftArmRot0 = [...enemy0!.model!.nodes!.find((n) => n.name === "LeftArm")!.rotation!];
             const leftLegRot0 = [...enemy0!.model!.nodes!.find((n) => n.name === "LeftLeg")!.rotation!];
