@@ -70,3 +70,31 @@ test("createSyntheticWav produces valid RIFF WAVE buffer", () => {
   assert.ok(nonZero > 0);
 });
 
+
+// --- Regression tests (luồng C): constructor and synthetic WAV input validation ---
+
+test("audio mixer constructor rejects non-finite or negative bus gain like setGain does", () => {
+  for (const gain of [Number.NaN, Number.POSITIVE_INFINITY, -0.5]) {
+    assert.throws(() => new AudioMixerModel([{ id: "master", gain }]), RangeError);
+  }
+  // A NaN gain must never leak into effective gains of children.
+  assert.throws(
+    () => new AudioMixerModel([{ id: "master", gain: 1 }, { id: "sfx", parentId: "master", gain: Number.NaN }]),
+    RangeError,
+  );
+});
+
+test("audio mixer rejects empty bus ids and self-parenting buses", () => {
+  assert.throws(() => new AudioMixerModel([{ id: "", gain: 1 }]), /id/);
+  assert.throws(() => new AudioMixerModel([{ id: "a", parentId: "a", gain: 1 }]), /cycle/);
+});
+
+test("createSyntheticWav rejects invalid parameters with a clear RangeError", () => {
+  assert.throws(() => createSyntheticWav({ sampleRate: 0 }), /sampleRate/);
+  assert.throws(() => createSyntheticWav({ sampleRate: 22050.5 }), /sampleRate/);
+  assert.throws(() => createSyntheticWav({ durationSeconds: -1 }), /durationSeconds/);
+  assert.throws(() => createSyntheticWav({ durationSeconds: Number.NaN }), /durationSeconds/);
+  assert.throws(() => createSyntheticWav({ frequency: Number.POSITIVE_INFINITY }), /frequency/);
+  // Zero-length clips stay valid: a 44-byte header with an empty data chunk.
+  assert.equal(createSyntheticWav({ durationSeconds: 0 }).byteLength, 44);
+});
