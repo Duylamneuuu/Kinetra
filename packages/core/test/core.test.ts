@@ -622,3 +622,117 @@ test("ScriptHost rejects legacy-only restoreState in prepareScriptRestore but pe
 
 
 
+
+// --- Regression tests (luồng C): lifecycle races, prefab cycles, deterministic script order ---
+
+test("scene lifecycle rejects a second transition while activate is in flight",async()=>{
+  let releaseActivate!:()=>void;
+  const log:string[]=[];
+  const scene=new SceneLifecycle("main",{
+    async load(){log.push("load")},
+    activate(){log.push("activate");return new Promise<void>(resolve=>{releaseActivate=resolve;});},
+    async unload(){log.push("unload")},
+  });
+  await scene.load();
+  const activating=scene.activate();
+  // A concurrent activate must not invoke the adapter twice.
+  await assert.rejects(()=>scene.activate(),/in progress/);
+  // A concurrent unload must not race the activation and leave the scene "active" after unloading.
+  await assert.rejects(()=>scene.unload(),/in progress/);
+  releaseActivate();
+  await activating;
+  assert.equal(scene.state,"active");
+  assert.deepEqual(log,["load","activate"]);
+  await scene.unload();
+  assert.equal(scene.state,"unloaded");
+});
+
+test("scene lifecycle restores the prior state when unload fails from active or paused",async()=>{
+  let failUnload=true;
+  const scene=new SceneLifecycle("main",{
+    async load(){},
+    async activate(){},
+    async pause(){},
+    async resume(){},
+    async unload(){if(failUnload) throw new Error("unload boom");},
+  });
+  await scene.load();
+  await scene.activate();
+  await assert.rejects(()=>scene.unload(),/unload boom/);
+  assert.equal(scene.state,"active");
+  await scene.pause();
+  await assert.rejects(()=>scene.unload(),/unload boom/);
+  assert.equal(scene.state,"paused");
+  await scene.resume();
+  assert.equal(scene.state,"active");
+  failUnload=false;
+  await scene.unload();
+  assert.equal(scene.state,"unloaded");
+});
+
+test("scene lifecycle allows retry after a failed activate",async()=>{
+  let fail=true;
+  const scene=new SceneLifecycle("main",{
+    async load(){},
+    async activate(){if(fail) throw new Error("activate boom");},
+    async unload(){},
+  });
+  await scene.load();
+  await assert.rejects(()=>scene.activate(),/activate boom/);
+  assert.equal(scene.state,"loaded");
+  fail=false;
+  await scene.activate();
+  assert.equal(scene.state,"active");
+});
+
+test("prefab instantiation rejects self-parented entities",()=>{
+  assert.throws(()=>instantiatePrefab({
+    prefab:{id:"p",name:"P",entities:[{localId:"root",name:"Root",parentLocalId:"root",components:{}}]},
+    instanceId:"i1",
+  }),/cycle/i);
+});
+
+test("prefab instantiation rejects parent cycles",()=>{
+  assert.throws(()=>instantiatePrefab({
+    prefab:{id:"p",name:"P",entities:[
+      {localId:"a",name:"A",parentLocalId:"c",components:{}},
+      {localId:"b",name:"B",parentLocalId:"a",components:{}},
+      {localId:"c",name:"C",parentLocalId:"b",components:{}},
+    ]},
+    instanceId:"i1",
+  }),/cycle/i);
+});
+
+test("prefab instantiation rejects ids that would make entity ids collide",()=>{
+  // Seeds are joined with ":"; prefab "a:b"+instance "c" and prefab "a"+instance "b:c" would share entity ids.
+  const entities=[{localId:"root",name:"Root",components:{}}];
+  assert.throws(()=>instantiatePrefab({prefab:{id:"a",name:"A",entities},instanceId:"b:c"}),/":"/);
+  assert.throws(()=>instantiatePrefab({prefab:{id:"a:b",name:"A",entities},instanceId:"c"}),/":"/);
+});
+
+test("prefab overrides reject non-object patches",()=>{
+  const prefab={id:"p",name:"P",entities:[{localId:"root",name:"Root",components:{Health:{value:1}}}]};
+  assert.throws(()=>instantiatePrefab({
+    prefab,instanceId:"i1",
+    overrides:[{localId:"root",component:"Health",patch:[1,2] as unknown as Record<string,never>}],
+  }),/patch/i);
+});
+
+test("script host orders equal-order scripts by code-unit id, independent of locale",async()=>{
+  const log:string[]=[];
+  const host=new ScriptHost();
+  // localeCompare puts "a" before "B" (case-insensitive collation); code-unit order puts "B" (0x42) first.
+  for(const id of ["a","B","_z","Z"]){
+    host.register({id,context:{entityId:id,sceneId:"main"},script:{onUpdate:()=>{log.push(id)}}});
+  }
+  await host.startAll();
+  host.update(0);
+  assert.deepEqual(log,["B","Z","_z","a"]);
+});
+
+test("script host rejects non-finite execution order",()=>{
+  const host=new ScriptHost();
+  for(const order of [Number.NaN,Number.POSITIVE_INFINITY]){
+    assert.throws(()=>host.register({id:`s${order}`,order,context:{entityId:"e",sceneId:"main"},script:{}}),/order/);
+  }
+});
