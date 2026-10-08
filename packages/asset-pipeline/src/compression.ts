@@ -98,7 +98,10 @@ export interface GlbCompressionReport {
   externalImages: number;
   /**
    * Bytes of mesh accessors (attributes, indices, morph targets) that are
-   * neither Draco- nor Meshopt-compressed. Computed from accessor metadata.
+   * neither Draco- nor Meshopt-compressed. Computed from accessor metadata:
+   * dense data counts only when the accessor has a bufferView (an accessor
+   * without one is zero-filled and stores nothing), plus sparse indices and
+   * values when present.
    */
   uncompressedGeometryBytes: number;
   diagnostics: AssetDiagnostic[];
@@ -220,9 +223,61 @@ function formatFromMime(mime: unknown): "png" | "jpeg" | "ktx2" | "other" {
 function dataUriBytes(uri: string): { format: "png" | "jpeg" | "ktx2" | "other"; bytes: number } | undefined {
   const match = /^data:([^;,]*)(;base64)?,/.exec(uri);
   if (!match) return undefined;
-  const payload = uri.length - match[0].length;
-  const bytes = match[2] ? Math.floor((payload * 3) / 4) : payload;
+  const payload = uri.slice(match[0].length);
+  if (!match[2]) return { format: formatFromMime(match[1]), bytes: payload.length };
+  // Decoded size of base64: 3 bytes per 4 characters, minus one byte per '='
+  // padding character (at most two).
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  const bytes = Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
   return { format: formatFromMime(match[1]), bytes };
+}
+
+/**
+ * Every validity rule of the ratified EXT_meshopt_compression spec ("For the
+ * extension object to be valid, the following must hold"), plus the required
+ * fields. A file that breaks one of these is rejected by the runtime decoder,
+ * so the inspector reports it up front instead.
+ */
+function meshoptExtensionProblems(ext: unknown, view: Json): string[] {
+  const problems: string[] = [];
+  if (!isObject(ext)) return ["extension is not an object"];
+  if (!isNonNegativeInteger(ext.buffer)) problems.push("buffer must be a non-negative integer");
+  if (!isNonNegativeInteger(ext.byteLength)) problems.push("byteLength must be a non-negative integer");
+  const count = isNonNegativeInteger(ext.count) && ext.count > 0 ? ext.count : undefined;
+  if (count === undefined) problems.push("count must be a positive integer");
+  const stride =
+    isNonNegativeInteger(ext.byteStride) && ext.byteStride > 0 && ext.byteStride <= 256 ? ext.byteStride : undefined;
+  if (stride === undefined) problems.push("byteStride must be an integer in 1..256");
+  const mode = typeof ext.mode === "string" && MESHOPT_MODES.has(ext.mode) ? ext.mode : undefined;
+  if (mode === undefined) problems.push("mode must be ATTRIBUTES, TRIANGLES or INDICES");
+  const filter = ext.filter === undefined ? "NONE" : ext.filter;
+  const filterValid = typeof filter === "string" && MESHOPT_FILTERS.has(filter);
+  if (!filterValid) problems.push("filter must be NONE, OCTAHEDRAL, QUATERNION or EXPONENTIAL");
+
+  if (mode === "ATTRIBUTES" && stride !== undefined && stride % 4 !== 0) {
+    problems.push("ATTRIBUTES mode byteStride must be a multiple of 4");
+  }
+  if (mode === "TRIANGLES" && count !== undefined && count % 3 !== 0) {
+    problems.push("TRIANGLES mode count must be a multiple of 3");
+  }
+  if ((mode === "TRIANGLES" || mode === "INDICES") && stride !== undefined && stride !== 2 && stride !== 4) {
+    problems.push(`${mode} mode byteStride must be 2 or 4`);
+  }
+  if ((mode === "TRIANGLES" || mode === "INDICES") && filterValid && filter !== "NONE") {
+    problems.push(`${mode} mode filter must be NONE`);
+  }
+  if (stride !== undefined && filterValid) {
+    if (filter === "OCTAHEDRAL" && stride !== 4 && stride !== 8) problems.push("OCTAHEDRAL filter byteStride must be 4 or 8");
+    if (filter === "QUATERNION" && stride !== 8) problems.push("QUATERNION filter byteStride must be 8");
+    if (filter === "EXPONENTIAL" && stride % 4 !== 0) problems.push("EXPONENTIAL filter byteStride must be a multiple of 4");
+  }
+  if (stride !== undefined && view.byteStride !== undefined && view.byteStride !== stride) {
+    problems.push(`parent bufferView byteStride ${String(view.byteStride)} must match extension byteStride ${stride}`);
+  }
+  if (stride !== undefined && count !== undefined && isNonNegativeInteger(view.byteLength) && view.byteLength !== stride * count) {
+    problems.push(`parent bufferView byteLength ${view.byteLength} must equal byteStride * count (${stride * count})`);
+  }
+  return problems;
 }
 
 /**
@@ -254,32 +309,8 @@ export function inspectGlbCompression(bytes: Uint8Array): GlbCompressionReport {
     if (ext === undefined) return;
     meshoptViews.add(index);
     report.meshopt.bufferViews += 1;
-    const problems: string[] = [];
-    if (!isObject(ext)) {
-      problems.push("extension is not an object");
-    } else {
-      if (!isNonNegativeInteger(ext.buffer)) problems.push("buffer must be a non-negative integer");
-      if (!isNonNegativeInteger(ext.byteLength)) problems.push("byteLength must be a non-negative integer");
-      else report.meshopt.compressedBytes += ext.byteLength;
-      if (!(isNonNegativeInteger(ext.count) && ext.count > 0)) problems.push("count must be a positive integer");
-      if (!(isNonNegativeInteger(ext.byteStride) && ext.byteStride > 0 && ext.byteStride <= 256)) {
-        problems.push("byteStride must be an integer in 1..256");
-      }
-      if (typeof ext.mode !== "string" || !MESHOPT_MODES.has(ext.mode)) {
-        problems.push("mode must be ATTRIBUTES, TRIANGLES or INDICES");
-      } else if (ext.mode === "TRIANGLES" && isNonNegativeInteger(ext.count) && ext.count % 3 !== 0) {
-        problems.push("TRIANGLES mode count must be a multiple of 3");
-      } else if (
-        ext.mode === "ATTRIBUTES" &&
-        isNonNegativeInteger(ext.byteStride) &&
-        ext.byteStride % 4 !== 0
-      ) {
-        problems.push("ATTRIBUTES mode byteStride must be a multiple of 4");
-      }
-      if (ext.filter !== undefined && (typeof ext.filter !== "string" || !MESHOPT_FILTERS.has(ext.filter))) {
-        problems.push("filter must be NONE, OCTAHEDRAL, QUATERNION or EXPONENTIAL");
-      }
-    }
+    const problems = meshoptExtensionProblems(ext, view);
+    if (isObject(ext) && isNonNegativeInteger(ext.byteLength)) report.meshopt.compressedBytes += ext.byteLength;
     if (problems.length > 0) {
       report.diagnostics.push({
         severity: "error",
@@ -291,15 +322,30 @@ export function inspectGlbCompression(bytes: Uint8Array): GlbCompressionReport {
   });
 
   // Geometry accessors that are not compressed.
+  const storedViewBytes = (bufferView: unknown, bytes: number): number =>
+    isNonNegativeInteger(bufferView) && !meshoptViews.has(bufferView) ? bytes : 0;
   const accessorBytes = (index: unknown): number => {
     if (!isNonNegativeInteger(index)) return 0;
     const accessor = accessors[index];
     if (!isObject(accessor)) return 0;
-    if (isNonNegativeInteger(accessor.bufferView) && meshoptViews.has(accessor.bufferView)) return 0;
     const component = typeof accessor.componentType === "number" ? COMPONENT_BYTES[accessor.componentType] : undefined;
     const comps = typeof accessor.type === "string" ? TYPE_COMPONENTS[accessor.type] : undefined;
     if (!component || !comps || !isNonNegativeInteger(accessor.count)) return 0;
-    return component * comps * accessor.count;
+    const elementBytes = component * comps;
+    // Dense data lives in the bufferView; an accessor without one is
+    // zero-initialised and stores nothing in the file.
+    let bytes = storedViewBytes(accessor.bufferView, elementBytes * accessor.count);
+    // Sparse substitution stores `count` indices plus `count` values.
+    const sparse = accessor.sparse;
+    if (isObject(sparse) && isNonNegativeInteger(sparse.count)) {
+      const indices = isObject(sparse.indices) ? sparse.indices : undefined;
+      const values = isObject(sparse.values) ? sparse.values : undefined;
+      const indexBytes =
+        indices && typeof indices.componentType === "number" ? COMPONENT_BYTES[indices.componentType] ?? 0 : 0;
+      if (indices) bytes += storedViewBytes(indices.bufferView, indexBytes * sparse.count);
+      if (values) bytes += storedViewBytes(values.bufferView, elementBytes * sparse.count);
+    }
+    return bytes;
   };
   const countedAccessors = new Set<number>();
   const addAccessor = (index: unknown): void => {
