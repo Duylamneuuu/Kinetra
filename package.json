@@ -13,11 +13,14 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "check": "pnpm check:foundation && pnpm check:licenses && pnpm build && pnpm typecheck && pnpm test",
-    "check:licenses": "node scripts/check-licenses.mjs"
+    "lint": "oxlint",
+    "check": "pnpm check:foundation && pnpm check:licenses && pnpm lint && pnpm check:test-registration && pnpm build && pnpm typecheck && pnpm test",
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "check:test-registration": "node scripts/check-test-registration.mjs && node --test scripts/check-test-registration.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",
+    "oxlint": "^1.87.0",
     "typescript": "^5.9.2"
   },
   "pnpm": {
