@@ -82,7 +82,19 @@ export interface PlayerRuntimeQuery {
 export interface PlayerRuntimeModelAnimationActionState {
   clip: string;
   weight: number;
-  role: "incoming" | "outgoing" | "active";
+  role: "incoming" | "outgoing" | "active" | "blend";
+}
+
+export interface PlayerRuntimeModelBlendSpaceState {
+  id: string;
+  kind: "1d" | "2d";
+  parameters: string[];
+  input: Record<string, number>;
+  weights: Array<{ clip: string; weight: number }>;
+  phase: number;
+  cycleDuration: number;
+  speed: number;
+  dominantClip: string;
 }
 
 export interface PlayerRuntimeModelAnimationGraphState {
@@ -106,6 +118,7 @@ export interface PlayerRuntimeModelAnimationState {
   graph?: PlayerRuntimeModelAnimationGraphState | undefined;
   actions?: PlayerRuntimeModelAnimationActionState[] | undefined;
   rootMotion?: PlayerRuntimeRootMotionState | undefined;
+  blendSpace?: PlayerRuntimeModelBlendSpaceState | undefined;
 }
 
 export interface PlayerRuntimeRootMotionState {
