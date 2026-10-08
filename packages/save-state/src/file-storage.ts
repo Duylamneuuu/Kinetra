@@ -9,6 +9,7 @@ import { resolve, sep } from "node:path";
 import type { KeyValueStorage } from "./index.js";
 
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
 export interface FileStorageOptions {
   /** Optional custom replacement primitive, primarily for deterministic testing */
@@ -50,6 +51,14 @@ export class FileKeyValueStorage implements KeyValueStorage {
     if (!SAFE_KEY_PATTERN.test(cleanKey)) {
       throw new Error(
         `Invalid storage key "${key}": contains illegal characters or path traversal sequences`,
+      );
+    }
+
+    // Windows treats device names as reserved even with an extension
+    // ("nul.json", "con.backup.json"), so such keys cannot be stored portably.
+    if (WINDOWS_RESERVED_NAME.test(cleanKey.split(".")[0] ?? "")) {
+      throw new Error(
+        `Invalid storage key "${key}": "${cleanKey.split(".")[0]}" is a reserved device name on Windows`,
       );
     }
 

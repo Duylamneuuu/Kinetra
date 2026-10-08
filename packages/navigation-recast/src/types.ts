@@ -20,7 +20,9 @@ export interface NavMeshQueryParams {
 }
 
 export interface PathResult {
+  /** Walkable waypoints. For a "partial" result they end at the closest reachable point, not the goal. */
   points: Vec3[];
+  /** True only when the path reaches the goal ("complete"). */
   success: boolean;
   status: "complete" | "partial" | "failed";
 }

@@ -174,7 +174,7 @@ What has meaningful proof:
 
 Still missing:
 - graph states that reference a blend space, smooth crossfades into/out of a blend space, and blend-space root motion;
-- inverse kinematics (IK) runtime adapter: `IkController` (renderer-three) applies the pure solver to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains/setIkTarget/clearIkTarget`; unit + runtime tests pass. The player bridge exposes `animation.ik.setChains`/`animation.ik.setTarget`/`animation.ik.clearTarget` (real Electron proof covers structured error paths only, on a model without bones). Not yet proven: IK on a real skinned model through the bridge, authoring command-bus exposure, models without an animator session (IK is only applied for entities that have one), Electron acceptance, foot-planting helpers.
+- inverse kinematics (IK) runtime adapter: `IkController` (renderer-three) applies the pure solver to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains/setIkTarget/clearIkTarget`; it also runs for models without animation clips, restores the input pose of bones no clip rewrote (so partial weights do not compound and clearing a target un-bends the chain), applies chains in chain-id order; unit + runtime tests pass. The player bridge exposes `animation.ik.setChains`/`animation.ik.setTarget`/`animation.ik.clearTarget` (real Electron proof covers structured error paths only, on a model without bones). Not yet proven: IK on a real skinned model through the bridge, authoring command-bus exposure, Electron acceptance, foot-planting helpers.
 
 ### Complete-game contracts
 
@@ -329,6 +329,17 @@ Not yet implemented:
 - weapons / inventory;
 - multiple enemy types;
 - complex enemy behavior trees or AI perception models.
+
+### Dogfood sample: Orb Run (`examples/orb-run`)
+
+Convention: each sample game is its own workspace package under `examples/<name>/` (picked up by `pnpm-workspace.yaml`) with its own `build`/`typecheck`/`test` scripts.
+
+What has meaningful proof (Slice 1, Node only):
+- the whole project is authored from an empty project through the real MCP server (`scene.create`, `entity.create`, `entity.patch` over the in-memory transport, one revision per call with `expectedProjectRevision`); the file `FileProjectStore` writes equals the checked-in `orb-run.kinetra.json`, and replaying the same plan through `CommandBus` gives the same bytes;
+- gameplay scripts on the `@kinetra/core` `GameScript` contract run in a headless `ScriptHost` harness (`HeadlessSceneSimulation`, example-local) at a fixed 1/30 s step: a semantic-input playtest bot wins; exit-before-orbs, timeout loss, arena clamp, determinism, mid-run save/restore into a fresh simulation, corrupt-save rejection, and a rules change made through the command bus are asserted;
+- proof: `pnpm --filter @kinetra/example-orb-run test` (17 tests).
+
+Not yet proven: rendering, the Electron player, packaged builds. The player cannot load a sample's scripts yet (it hard-codes the Arena registrations), and there is no engine-owned headless world; see `examples/orb-run/README.md`.
 
 ## Open implementation references
 

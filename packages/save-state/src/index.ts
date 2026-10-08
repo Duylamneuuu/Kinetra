@@ -16,6 +16,7 @@ export class SaveMigrator {
   }
 
   register(fromVersion:number,migration:SaveMigration):this{
+    if(!Number.isInteger(fromVersion)||fromVersion<1) throw new Error("Migration source version must be an integer >= 1");
     if(fromVersion>=this.currentVersion) throw new Error("Migration source must be older than current version");
     if(this.#migrations.has(fromVersion)) throw new Error(`Migration from ${fromVersion} already registered`);
     this.#migrations.set(fromVersion,migration);
@@ -23,6 +24,12 @@ export class SaveMigrator {
   }
 
   migrate<T>(save:SaveEnvelope):SaveEnvelope<T>{
+    if(typeof save!=="object"||save===null||Array.isArray(save)) throw new Error("Save envelope must be an object");
+    // A missing/NaN/fractional version used to slip past both comparisons below
+    // and be returned as "current" with every migration skipped.
+    if(!Number.isInteger(save.schemaVersion)||save.schemaVersion<1){
+      throw new Error(`Save schemaVersion must be an integer >= 1 (got ${String(save.schemaVersion)})`);
+    }
     if(save.schemaVersion>this.currentVersion) throw new Error("Save is newer than this game build");
     let version=save.schemaVersion;
     let data=structuredClone(save.data);

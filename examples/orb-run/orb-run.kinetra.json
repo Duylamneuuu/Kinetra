@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "projectId": "project_vc86d8ts05si",
+  "name": "Orb Run",
+  "scenes": [
+    {
+      "id": "scene_12q1bczg4xp8m",
+      "name": "Orb Run Courtyard",
+      "entities": [
+        {
+          "id": "entity_1hf9tj4cl48dk",
+          "name": "MainCamera",
+          "components": {
+            "Camera": {
+              "far": 100,
+              "fov": 50,
+              "near": 0.1,
+              "type": "perspective"
+            },
+            "Transform": {
+              "position": [
+                0,
+                12,
+                10
+              ],
+              "rotation": [
+                -0.88,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3bxflif3cnb2g",
+          "name": "OrbC",
+          "components": {
+            "Primitive": {
+              "color": "#facc15",
+              "kind": "sphere",
+              "metalness": 0.6,
+              "radius": 0.35,
+              "roughness": 0.25
+            },
+            "Script": {
+              "order": 0,
+              "scriptId": "OrbRunOrb"
+            },
+            "Transform": {
+              "position": [
+                -4,
+                0.5,
+                4
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3bxflwg79hd2z",
+          "name": "OrbB",
+          "components": {
+            "Primitive": {
+              "color": "#facc15",
+              "kind": "sphere",
+              "metalness": 0.6,
+              "radius": 0.35,
+              "roughness": 0.25
+            },
+            "Script": {
+              "order": 0,
+              "scriptId": "OrbRunOrb"
+            },
+            "Transform": {
+              "position": [
+                0,
+                0.5,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3bxfmahb6bf3i",
+          "name": "OrbA",
+          "components": {
+            "Primitive": {
+              "color": "#facc15",
+              "kind": "sphere",
+              "metalness": 0.6,
+              "radius": 0.35,
+              "roughness": 0.25
+            },
+            "Script": {
+              "order": 0,
+              "scriptId": "OrbRunOrb"
+            },
+            "Transform": {
+              "position": [
+                4,
+                0.5,
+                -4
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3otk2l6d7m24u",
+          "name": "OrbRunManager",
+          "components": {
+            "OrbRunRules": {
+              "arenaHalfExtent": 5.5,
+              "exitRadius": 1,
+              "pickupRadius": 0.75,
+              "playerSpeed": 4,
+              "timeLimitSeconds": 20
+            },
+            "Script": {
+              "order": 10,
+              "scriptId": "OrbRunManager"
+            },
+            "Transform": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3q752x9uopz6j",
+          "name": "Floor",
+          "components": {
+            "Primitive": {
+              "color": "#1f2937",
+              "kind": "box",
+              "size": [
+                12,
+                0.2,
+                12
+              ]
+            },
+            "Transform": {
+              "position": [
+                0,
+                -0.1,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_3rs4j46llk0iu",
+          "name": "Player",
+          "components": {
+            "Primitive": {
+              "color": "#38bdf8",
+              "kind": "box",
+              "size": [
+                0.8,
+                1,
+                0.8
+              ]
+            },
+            "Script": {
+              "order": -10,
+              "scriptId": "OrbRunPlayer"
+            },
+            "Transform": {
+              "position": [
+                -4,
+                0.5,
+                -4
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_6tejwryj73tz",
+          "name": "Exit",
+          "components": {
+            "Primitive": {
+              "color": "#ef4444",
+              "kind": "box",
+              "size": [
+                2,
+                0.1,
+                2
+              ]
+            },
+            "Transform": {
+              "position": [
+                4,
+                0.05,
+                4
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_bcx4izvl6ysh",
+          "name": "Ambient",
+          "components": {
+            "Light": {
+              "color": "#94a3b8",
+              "intensity": 0.5,
+              "kind": "ambient"
+            },
+            "Transform": {
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "id": "entity_dlegwo6hde8v",
+          "name": "Sun",
+          "components": {
+            "Light": {
+              "color": "#ffffff",
+              "intensity": 1.2,
+              "kind": "directional"
+            },
+            "Transform": {
+              "position": [
+                4,
+                10,
+                6
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "scale": [
+                1,
+                1,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

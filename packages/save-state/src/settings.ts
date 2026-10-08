@@ -28,6 +28,31 @@ export const DEFAULT_PLAYER_SETTINGS: PlayerSettingsData = {
   },
 };
 
+/**
+ * Keeps only `action -> unknown[]` entries from an untrusted settings document.
+ * Returns undefined when nothing usable remains, so `input` is omitted.
+ */
+function sanitizeCustomBindings(value: unknown): Record<string, unknown[]> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const result: Record<string, unknown[]> = {};
+  let kept = 0;
+  for (const [action, bindings] of Object.entries(value)) {
+    if (Array.isArray(bindings)) {
+      // defineProperty keeps a "__proto__" action as plain data instead of a prototype swap.
+      Object.defineProperty(result, action, {
+        value: structuredClone(bindings),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+      kept += 1;
+    }
+  }
+  return kept > 0 ? result : undefined;
+}
+
 export class SettingsStore {
   readonly #docStore: JsonDocumentStore<PlayerSettingsData>;
 
@@ -40,7 +65,7 @@ export class SettingsStore {
     if (!data) {
       return structuredClone(DEFAULT_PLAYER_SETTINGS);
     }
-    return {
+    const base: PlayerSettingsData = {
       schemaVersion: 1,
       audio: {
         masterGain: typeof data.audio?.masterGain === "number" ? Math.max(0, Math.min(1, data.audio.masterGain)) : 1.0,
@@ -49,7 +74,11 @@ export class SettingsStore {
       display: {
         fullscreen: Boolean(data.display?.fullscreen),
       },
-      ...(data.input?.customBindings ? { input: { customBindings: structuredClone(data.input.customBindings) } } : {}),
+    };
+    const customBindings = sanitizeCustomBindings(data.input?.customBindings);
+    return {
+      ...base,
+      ...(customBindings ? { input: { customBindings } } : {}),
     };
   }
 
