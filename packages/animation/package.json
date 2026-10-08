@@ -21,6 +21,14 @@
       "types": "./dist/src/root-motion.d.ts",
       "default": "./dist/src/root-motion.js"
     },
+    "./blend-space.js": {
+      "types": "./dist/src/blend-space.d.ts",
+      "default": "./dist/src/blend-space.js"
+    },
+    "./blend-space": {
+      "types": "./dist/src/blend-space.d.ts",
+      "default": "./dist/src/blend-space.js"
+    },
     "./root-motion": {
       "types": "./dist/src/root-motion.d.ts",
       "default": "./dist/src/root-motion.js"

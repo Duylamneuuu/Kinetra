@@ -164,7 +164,6 @@ What has meaningful proof:
 - dynamic model detachment (`model.detach`) and reattachment/live reload (`model.attach`) reusing existing cached templates without reparsing or leaking GPU resources;
 - structured model instance and resource sharing observation (`model.instance: { instanceId, templateAssetId }`, `model.resourceSharing: { sharedGeometry: true, sharedTextures: true, uniqueSkeleton: true, uniqueMixer: true }`, `metrics: { assetTemplateParseCount, instanceCount }`);
 - 6-scenario real Electron verification suite (`packages/verification/test/real-skinned-multi-instance.test.ts`) passing against dev Electron and packaged Windows executable (`KinetraGame.exe`).
-
 - pure locomotion blend-space contract (`BlendSpace1DDefinition`, `BlendSpace2DDefinition`, schemaVersion: 1) with structured validation diagnostics (`anim.blendSpace.*`, each with a remediation hint) and deterministic weight evaluation: 1D linear between neighbours with end clamping, 2D cartesian gradient band interpolation, weights normalized to 1 and exact on samples, driven by `AnimationGraphMachine` number parameters (`evaluateBlendSpace`). Proof level: `@kinetra/animation` unit tests (`blend-space.test.ts`). Not yet wired into `ThreeSceneRuntime`; no Electron or packaged proof.
 
 Still missing:

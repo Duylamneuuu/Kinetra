@@ -59,13 +59,22 @@ export const BLEND_SPACE_WEIGHT_EPSILON=1e-6;
 
 const MIN_SAMPLE_SEPARATION=1e-6;
 
+/** Locale-independent ordering so evaluation output never depends on the host's ICU/locale. */
+function compareCodePoints(a:string,b:string):number{
+  return a<b?-1:a>b?1:0;
+}
+
 function isFiniteNumber(value:unknown):value is number{
   return typeof value==="number" && Number.isFinite(value);
 }
 
 export function validateBlendSpace(space:BlendSpaceDefinition):BlendSpaceDiagnostic[]{
   const diagnostics:BlendSpaceDiagnostic[]=[];
-  const label=`Blend space "${space.id}"`;
+  if(typeof space!=="object" || space===null){
+    diagnostics.push({code:"anim.blendSpace.invalid",message:"Blend space must be an object",remediation:"Pass a { schemaVersion, kind, id, samples } blend-space definition."});
+    return diagnostics;
+  }
+  const label=`Blend space "${String(space.id)}"`;
 
   if(space.schemaVersion!==1){
     diagnostics.push({
@@ -74,17 +83,17 @@ export function validateBlendSpace(space:BlendSpaceDefinition):BlendSpaceDiagnos
       remediation:"Set schemaVersion to 1.",
     });
   }
-  if(!space.id){
+  if(typeof space.id!=="string" || space.id.length===0){
     diagnostics.push({code:"anim.blendSpace.id.empty",message:"Blend space has no id",remediation:"Give the blend space a stable id."});
   }
 
   if(space.kind==="1d"){
-    if(!space.parameter){
+    if(typeof space.parameter!=="string" || space.parameter.length===0){
       diagnostics.push({code:"anim.blendSpace.parameter.empty",message:`${label} has no parameter`,remediation:"Name the number parameter that drives the blend, e.g. \"speed\"."});
     }
   }else if(space.kind==="2d"){
-    const [x,y]=space.parameters??[];
-    if(!x || !y){
+    const [x,y]=Array.isArray(space.parameters)?space.parameters:[];
+    if(typeof x!=="string" || typeof y!=="string" || !x || !y || space.parameters.length!==2){
       diagnostics.push({code:"anim.blendSpace.parameter.empty",message:`${label} needs two parameters`,remediation:"Name the X and Y number parameters, e.g. [\"velocityX\", \"velocityZ\"]."});
     }else if(x===y){
       diagnostics.push({code:"anim.blendSpace.parameter.duplicate",message:`${label} uses "${x}" for both axes`,remediation:"Use distinct parameters for X and Y."});
@@ -98,6 +107,10 @@ export function validateBlendSpace(space:BlendSpaceDefinition):BlendSpaceDiagnos
     return diagnostics;
   }
 
+  if(!Array.isArray(space.samples)){
+    diagnostics.push({code:"anim.blendSpace.samples.invalid",message:`${label} samples must be an array`,remediation:"Set samples to an array of { clipId, position } entries."});
+    return diagnostics;
+  }
   if(space.samples.length===0){
     diagnostics.push({code:"anim.blendSpace.samples.empty",message:`${label} has no samples`,remediation:"Add at least one { clipId, position } sample."});
     return diagnostics;
@@ -105,8 +118,13 @@ export function validateBlendSpace(space:BlendSpaceDefinition):BlendSpaceDiagnos
 
   const seenClips=new Set<string>();
   const points:Array<[number,number]>=[];
-  for(const [index,sample] of space.samples.entries()){
-    if(!sample.clipId){
+  for(const [index,rawSample] of space.samples.entries()){
+    if(typeof rawSample!=="object" || rawSample===null){
+      diagnostics.push({code:"anim.blendSpace.sample.invalid",message:`${label} sample ${index} is not an object`,remediation:"Use a { clipId, position } object for every sample."});
+      continue;
+    }
+    const sample=rawSample;
+    if(typeof sample.clipId!=="string" || sample.clipId.length===0){
       diagnostics.push({code:"anim.blendSpace.sample.clip.empty",message:`${label} sample ${index} has no clipId`,remediation:"Set clipId to an existing clip."});
     }else if(seenClips.has(sample.clipId)){
       diagnostics.push({code:"anim.blendSpace.sample.clip.duplicate",message:`${label} uses clip "${sample.clipId}" more than once`,remediation:"Use each clip at most once per blend space."});
@@ -160,7 +178,7 @@ function normalize(raw:BlendSpaceWeight[]):BlendSpaceWeight[]{
   if(total<=0) return [];
   return kept
     .map(entry=>({clipId:entry.clipId,weight:entry.weight/total}))
-    .sort((a,b)=>b.weight-a.weight || a.clipId.localeCompare(b.clipId));
+    .sort((a,b)=>b.weight-a.weight || compareCodePoints(a.clipId,b.clipId));
 }
 
 /**
@@ -219,7 +237,21 @@ export function evaluateBlendSpace2D(space:BlendSpace2DDefinition,x:number,y:num
     }
     raw.push({clipId:samples[i]!.clipId,weight:Math.max(0,influence)});
   }
-  return normalize(raw);
+  const weights=normalize(raw);
+  if(weights.length>0) return weights;
+  // Defensive: gradient band always leaves the extreme sample in the query
+  // direction with positive influence, but if rounding ever zeroes every
+  // influence, fall back to the nearest sample instead of returning no pose.
+  let nearest=samples[0]!;
+  let nearestDist=Number.POSITIVE_INFINITY;
+  for(const sample of samples){
+    const dist=Math.hypot(x-sample.position[0],y-sample.position[1]);
+    if(dist<nearestDist || (dist===nearestDist && compareCodePoints(sample.clipId,nearest.clipId)<0)){
+      nearest=sample;
+      nearestDist=dist;
+    }
+  }
+  return [{clipId:nearest.clipId,weight:1}];
 }
 
 /**

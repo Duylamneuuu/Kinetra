@@ -198,3 +198,81 @@ test("blend spaces read number parameters from an AnimationGraphMachine", () => 
     /parameter "missing" must be a number, got undefined/,
   );
 });
+
+test("validation rejects untyped JSON shapes with diagnostics instead of throwing", () => {
+  assert.deepEqual(codes(null as unknown as BlendSpaceDefinition), ["anim.blendSpace.invalid"]);
+  assert.deepEqual(
+    codes({ ...locomotion1D, samples: undefined } as unknown as BlendSpaceDefinition),
+    ["anim.blendSpace.samples.invalid"],
+  );
+  assert.deepEqual(
+    codes({ ...locomotion1D, samples: [null, { clipId: "walk", position: 1 }] } as unknown as BlendSpaceDefinition),
+    ["anim.blendSpace.sample.invalid"],
+  );
+  assert.deepEqual(
+    codes({ ...strafe2D, parameters: undefined } as unknown as BlendSpaceDefinition),
+    ["anim.blendSpace.parameter.empty"],
+  );
+  assert.deepEqual(
+    codes({ ...strafe2D, parameters: ["a", "b", "c"] } as unknown as BlendSpaceDefinition),
+    ["anim.blendSpace.parameter.empty"],
+  );
+  assert.deepEqual(
+    codes({ ...locomotion1D, samples: [{ clipId: 7, position: 0 }] } as unknown as BlendSpaceDefinition),
+    ["anim.blendSpace.sample.clip.empty"],
+  );
+  assert.deepEqual(codes({ ...locomotion1D, id: "" }), ["anim.blendSpace.id.empty"]);
+});
+
+test("2D weights stay non-empty and normalized far outside the sample hull", () => {
+  const probes: Array<[number, number]> = [
+    [100, 37],
+    [-1000, -1000],
+    [1e6, 0],
+    [0, -1e6],
+    [-3, 2],
+  ];
+  for (const [x, y] of probes) {
+    const weights = evaluateBlendSpace2D(strafe2D, x, y);
+    assert.ok(weights.length > 0, `non-empty at ${x},${y}`);
+    assert.ok(Math.abs(sum(weights) - 1) < 1e-9, `sum at ${x},${y}`);
+    assert.equal(weightOf(weights, "idle"), 0, `centre sample does not leak in at ${x},${y}`);
+  }
+});
+
+test("equal weights are ordered by clip id independent of locale", () => {
+  const space: BlendSpace1DDefinition = {
+    schemaVersion: 1,
+    kind: "1d",
+    id: "tie",
+    parameter: "speed",
+    samples: [
+      { clipId: "b", position: 1 },
+      { clipId: "B", position: 0 },
+    ],
+  };
+  const weights = evaluateBlendSpace1D(space, 0.5);
+  assert.deepEqual(weights.map((w) => w.clipId), ["B", "b"], "code-point order puts uppercase first");
+});
+
+test("2D blend works with an irregular, non-symmetric sample layout", () => {
+  const irregular: BlendSpace2DDefinition = {
+    schemaVersion: 1,
+    kind: "2d",
+    id: "irregular",
+    parameters: ["x", "y"],
+    samples: [
+      { clipId: "a", position: [0, 0] },
+      { clipId: "b", position: [3, 0.5] },
+      { clipId: "c", position: [-1, 2] },
+    ],
+  };
+  for (let ix = -10; ix <= 10; ix++) {
+    for (let iy = -10; iy <= 10; iy++) {
+      const weights = evaluateBlendSpace2D(irregular, ix * 0.4, iy * 0.4);
+      assert.ok(weights.length > 0);
+      assert.ok(Math.abs(sum(weights) - 1) < 1e-9);
+    }
+  }
+  assert.deepEqual(evaluateBlendSpace2D(irregular, 3, 0.5), [{ clipId: "b", weight: 1 }]);
+});
