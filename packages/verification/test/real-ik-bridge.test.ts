@@ -126,9 +126,12 @@ test("P5 IK bridge ops return structured results in the real Electron runtime", 
     });
 
     await t.test("setIkChains on a model without bones skips invalid chains and never throws", async () => {
-      const result = await host.setIkChains(HEAD_A, [{ id: "arm" }, 42]);
+      const result = await host.setIkChains(HEAD_A, [{ id: "arm" }, 42, null]);
       assert.equal(result.success, true);
       assert.deepEqual(result.registered, []);
+      const codes = (result.diagnostics ?? []).map((d) => d.code);
+      assert.ok(codes.includes("ik.chain.schema.unsupported"), `rejections must be reported, got ${codes.join(",")}`);
+      assert.ok(codes.includes("ik.chain.invalid"), `a null chain must be reported, got ${codes.join(",")}`);
       const target = await host.setIkTarget(HEAD_A, "arm", [0, 1, 0]);
       assert.equal(target.success, false);
       assert.equal(target.diagnostics?.[0]?.code, "ik.target.unknown-chain");

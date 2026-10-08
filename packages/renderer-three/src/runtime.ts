@@ -522,6 +522,8 @@ export class ThreeSceneRuntime {
     error?: string | undefined;
     /** Entity -> morph overrides the reloaded asset no longer supports. */
     droppedMorphOverrides?: Record<string, string[]> | undefined;
+    /** Entity -> IK chains with active targets the reloaded asset no longer supports. */
+    droppedIkChains?: Record<string, string[]> | undefined;
   }> {
     if (this.#disposed) {
       return { success: false, affectedEntities: [], error: "Runtime is disposed" };
@@ -535,6 +537,7 @@ export class ThreeSceneRuntime {
     }
 
     const droppedMorphOverrides: Record<string, string[]> = {};
+    const droppedIkChains: Record<string, string[]> = {};
     let newTemplate: ModelAssetTemplate;
     try {
       newTemplate = await this.#templateCache.resolveNewTemplate(assetId, resolver);
@@ -561,6 +564,7 @@ export class ThreeSceneRuntime {
           }
         : undefined;
       const oldMorph = this.#morphControllers.get(entityId);
+      const oldIk = this.#ikControllers.get(entityId);
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
@@ -610,6 +614,23 @@ export class ThreeSceneRuntime {
         if (dropped.length > 0) droppedMorphOverrides[entityId] = dropped;
       }
 
+      // 5c. Re-bind IK chains to the new instance's bones. The old controller holds
+      // bones of the disposed scene; keeping it would silently pose detached bones
+      // while still reporting convergence.
+      if (oldIk) {
+        const newScene = this.#modelScenes.get(entityId);
+        if (newScene) {
+          const newIk = new IkController(newScene, oldIk.definitions);
+          const dropped = newIk.adoptTargets(oldIk);
+          this.#ikControllers.set(entityId, newIk);
+          if (dropped.length > 0) droppedIkChains[entityId] = dropped;
+        } else {
+          this.#ikControllers.delete(entityId);
+          const dropped = oldIk.observe().map((o) => o.chainId);
+          if (dropped.length > 0) droppedIkChains[entityId] = dropped;
+        }
+      }
+
       // 6. If entity had an animation graph before, re-initialize it cleanly with the new clips/mixer
       if (oldGraphDef) {
         this.initAnimationGraph(entityId, oldGraphDef);
@@ -632,6 +653,7 @@ export class ThreeSceneRuntime {
       success: true,
       affectedEntities,
       ...(Object.keys(droppedMorphOverrides).length > 0 ? { droppedMorphOverrides } : {}),
+      ...(Object.keys(droppedIkChains).length > 0 ? { droppedIkChains } : {}),
     };
   }
 
