@@ -144,6 +144,18 @@ export interface StepExecutionOutput {
   message?: string | undefined;
 }
 
+/**
+ * A step whose probe method is optional must not pass when the probe lacks it:
+ * that would report evidence the run never gathered (issue #122).
+ */
+function unsupportedStep(stepType: AcceptanceStep["type"], method: string): never {
+  throw new StepAssertionError(
+    `UNSUPPORTED_STEP: runtime probe does not implement ${method}() required by step "${stepType}"`,
+    `probe.${method}()`,
+    undefined,
+  );
+}
+
 async function executeStep(
   context: StepExecutionContext,
   step: AcceptanceStep,
@@ -152,7 +164,8 @@ async function executeStep(
 
   switch (step.type) {
     case "runtime.start":
-      if (step.assets && typeof probe.registerAsset === "function") {
+      if (step.assets && Object.keys(step.assets).length > 0) {
+        if (typeof probe.registerAsset !== "function") unsupportedStep(step.type, "registerAsset");
         for (const [assetId, dataBase64] of Object.entries(step.assets)) {
           await probe.registerAsset(assetId, dataBase64);
         }
@@ -160,22 +173,19 @@ async function executeStep(
       await probe.start(step.sceneId, seed);
       return;
     case "asset.register":
-      if (typeof probe.registerAsset === "function") {
-        await probe.registerAsset(step.assetId, step.dataBase64);
-      }
+      if (typeof probe.registerAsset !== "function") unsupportedStep(step.type, "registerAsset");
+      await probe.registerAsset(step.assetId, step.dataBase64);
       return;
     case "runtime.stop":
       await probe.stop();
       return;
     case "runtime.pause":
-      if (typeof probe.pause === "function") {
-        await probe.pause();
-      }
+      if (typeof probe.pause !== "function") unsupportedStep(step.type, "pause");
+      await probe.pause();
       return;
     case "runtime.resume":
-      if (typeof probe.resume === "function") {
-        await probe.resume();
-      }
+      if (typeof probe.resume !== "function") unsupportedStep(step.type, "resume");
+      await probe.resume();
       return;
     case "runtime.step":
       if (typeof probe.step === "function") {
@@ -185,98 +195,88 @@ async function executeStep(
       }
       return;
     case "animation.play":
-      if (typeof probe.playAnimation === "function") {
-        await probe.playAnimation(
-          step.entityId,
-          step.clip,
-          step.loop !== undefined ? { loop: step.loop } : undefined,
-        );
-      }
+      if (typeof probe.playAnimation !== "function") unsupportedStep(step.type, "playAnimation");
+      await probe.playAnimation(
+        step.entityId,
+        step.clip,
+        step.loop !== undefined ? { loop: step.loop } : undefined,
+      );
       return;
     case "animation.stop":
-      if (typeof probe.stopAnimation === "function") {
-        await probe.stopAnimation(step.entityId);
-      }
+      if (typeof probe.stopAnimation !== "function") unsupportedStep(step.type, "stopAnimation");
+      await probe.stopAnimation(step.entityId);
       return;
     case "audio.play":
-      if (typeof probe.playAudio === "function") {
-        await probe.playAudio({
-          assetId: step.assetId,
-          ...(step.bus !== undefined ? { bus: step.bus } : {}),
-          ...(step.loop !== undefined ? { loop: step.loop } : {}),
-          ...(step.gain !== undefined ? { gain: step.gain } : {}),
-          ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
-        });
-      }
+      if (typeof probe.playAudio !== "function") unsupportedStep(step.type, "playAudio");
+      await probe.playAudio({
+        assetId: step.assetId,
+        ...(step.bus !== undefined ? { bus: step.bus } : {}),
+        ...(step.loop !== undefined ? { loop: step.loop } : {}),
+        ...(step.gain !== undefined ? { gain: step.gain } : {}),
+        ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
+      });
       return;
     case "audio.stop":
-      if (typeof probe.stopAudio === "function") {
-        await probe.stopAudio({
-          ...(step.playbackId !== undefined ? { playbackId: step.playbackId } : {}),
-          ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
-        });
-      }
+      if (typeof probe.stopAudio !== "function") unsupportedStep(step.type, "stopAudio");
+      await probe.stopAudio({
+        ...(step.playbackId !== undefined ? { playbackId: step.playbackId } : {}),
+        ...(step.entityId !== undefined ? { entityId: step.entityId } : {}),
+      });
       return;
     case "audio.setBusGain":
-      if (typeof probe.setAudioBusGain === "function") {
-        await probe.setAudioBusGain(step.busId, step.gain);
-      }
+      if (typeof probe.setAudioBusGain !== "function") unsupportedStep(step.type, "setAudioBusGain");
+      await probe.setAudioBusGain(step.busId, step.gain);
       return;
     case "audio.setBusMuted":
-      if (typeof probe.setAudioBusMuted === "function") {
-        await probe.setAudioBusMuted(step.busId, step.muted);
-      }
+      if (typeof probe.setAudioBusMuted !== "function") unsupportedStep(step.type, "setAudioBusMuted");
+      await probe.setAudioBusMuted(step.busId, step.muted);
       return;
     case "navigation.bake":
-      if (typeof probe.bakeNavigation === "function") {
-        await probe.bakeNavigation({
-          ...(step.positions ? { positions: step.positions } : {}),
-          ...(step.indices ? { indices: step.indices } : {}),
-          ...(step.config ? { config: step.config } : {}),
-        });
-      }
+      if (typeof probe.bakeNavigation !== "function") unsupportedStep(step.type, "bakeNavigation");
+      await probe.bakeNavigation({
+        ...(step.positions ? { positions: step.positions } : {}),
+        ...(step.indices ? { indices: step.indices } : {}),
+        ...(step.config ? { config: step.config } : {}),
+      });
       return;
     case "navigation.load":
-      if (typeof probe.loadNavigation === "function") {
-        await probe.loadNavigation({ dataBase64: step.dataBase64 });
-      }
+      if (typeof probe.loadNavigation !== "function") unsupportedStep(step.type, "loadNavigation");
+      await probe.loadNavigation({ dataBase64: step.dataBase64 });
       return;
     case "navigation.closestPoint":
-      if (typeof probe.closestPointNavigation === "function") {
-        await probe.closestPointNavigation({
-          position: step.position,
-          ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
-        });
-      }
+      if (typeof probe.closestPointNavigation !== "function") unsupportedStep(step.type, "closestPointNavigation");
+      await probe.closestPointNavigation({
+        position: step.position,
+        ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
+      });
       return;
     case "navigation.computePath":
-      if (typeof probe.computePathNavigation === "function") {
-        await probe.computePathNavigation({
-          start: step.start,
-          end: step.end,
-          ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
-        });
+      if (typeof probe.computePathNavigation !== "function") unsupportedStep(step.type, "computePathNavigation");
+      await probe.computePathNavigation({
+        start: step.start,
+        end: step.end,
+        ...(step.halfExtents ? { halfExtents: step.halfExtents } : {}),
+      });
+      return;
+    case "save.capture": {
+      if (typeof probe.captureSave !== "function") unsupportedStep(step.type, "captureSave");
+      const result = await probe.captureSave(step.slotId);
+      if (!result.success) {
+        throw new StepAssertionError(`Failed to capture save: ${result.error ?? "unknown error"}`);
       }
       return;
-    case "save.capture":
-      if (typeof probe.captureSave === "function") {
-        const result = await probe.captureSave(step.slotId);
-        if (!result.success) {
-          throw new StepAssertionError(`Failed to capture save: ${result.error ?? "unknown error"}`);
-        }
+    }
+    case "save.load": {
+      if (typeof probe.loadSave !== "function") unsupportedStep(step.type, "loadSave");
+      const result = await probe.loadSave({
+        ...(step.slotId ? { slotId: step.slotId } : {}),
+        ...(step.envelope ? { envelope: step.envelope } : {}),
+      });
+      if (!result.success) {
+        throw new StepAssertionError(`Failed to load save: ${result.error ?? "unknown error"}`);
       }
       return;
-    case "save.load":
-      if (typeof probe.loadSave === "function") {
-        const result = await probe.loadSave({
-          ...(step.slotId ? { slotId: step.slotId } : {}),
-          ...(step.envelope ? { envelope: step.envelope } : {}),
-        });
-        if (!result.success) {
-          throw new StepAssertionError(`Failed to load save: ${result.error ?? "unknown error"}`);
-        }
-      }
-      return;
+    }
     case "input":
       await probe.input({
         action: step.action,
