@@ -67,6 +67,25 @@ importers:
         specifier: ^7.1.0
         version: 7.3.6(@types/node@22.20.4)
 
+  examples/orb-run:
+    dependencies:
+      '@kinetra/command-bus':
+        specifier: workspace:*
+        version: link:../../packages/command-bus
+      '@kinetra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@kinetra/project-model':
+        specifier: workspace:*
+        version: link:../../packages/project-model
+    devDependencies:
+      '@kinetra/mcp-server':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0
+        version: 2.0.0
+
   examples/reference-game:
     dependencies:
       '@kinetra/animation':
