@@ -22,6 +22,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: fail optional-probe steps with UNSUPPORTED_STEP instead of passing silently ([#142](https://github.com/Duylamneuuu/Kinetra/pull/142))
+- **assets**: roll back rejected cyclic upserts, dedupe rebuild-order deps, release re-pointed watcher paths, validate polycount/texture size ([#141](https://github.com/Duylamneuuu/Kinetra/pull/141))
+- **mcp-server**: serialize project saves and use unique temp files ([#140](https://github.com/Duylamneuuu/Kinetra/pull/140))
+- **blender-bridge**: structured errors, flag-safe paths, drained process output and validated manifest ([#137](https://github.com/Duylamneuuu/Kinetra/pull/137))
 - **audio**: validate bus definitions and synthetic WAV options ([#132](https://github.com/Duylamneuuu/Kinetra/pull/132))
 - **verification**: reject malformed perceptual hashes/thresholds, exact dHash block sums, seeded property tests ([#134](https://github.com/Duylamneuuu/Kinetra/pull/134))
 - **physics**: keep explicit step timestep local, reject non-finite timesteps and vectors ([#135](https://github.com/Duylamneuuu/Kinetra/pull/135))
@@ -44,6 +48,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Maintenance
 
+- **ci**: add player bundle-size budget gate with tested evaluator ([#114](https://github.com/Duylamneuuu/Kinetra/pull/114))
 - **deps**: bump transitive source-map-js to 1.2.2 (DoS advisory) ([#113](https://github.com/Duylamneuuu/Kinetra/pull/113))
 - **deps**: bump electron 38.0.0 -> 38.8.6 (security patches) and derive packager version from installed electron ([#112](https://github.com/Duylamneuuu/Kinetra/pull/112))
 - **ci**: add pnpm lint (oxlint, errors-only gate) and run it in pnpm check ([#127](https://github.com/Duylamneuuu/Kinetra/pull/127))
