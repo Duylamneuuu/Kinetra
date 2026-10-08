@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **examples**: Orb Run dogfood sample, authored over MCP and playable headless ([#86](https://github.com/Duylamneuuu/Kinetra/pull/86))
 - **player**: expose IK chains/targets through the runtime bridge ([#75](https://github.com/Duylamneuuu/Kinetra/pull/75))
 - **renderer-three**: apply IK solver to skeleton bones after mixer update ([#74](https://github.com/Duylamneuuu/Kinetra/pull/74))
 - **assets**: add GLB compression policy and Meshopt decoding in the runtime loader ([#73](https://github.com/Duylamneuuu/Kinetra/pull/73))
@@ -17,6 +18,15 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 - **animation**: drive glTF morph targets by name in the runtime ([#72](https://github.com/Duylamneuuu/Kinetra/pull/72))
 - **animation**: play 1D/2D locomotion blend spaces in the runtime with phase sync ([#70](https://github.com/Duylamneuuu/Kinetra/pull/70))
 - **animation**: add pure 1D/2D locomotion blend-space contract ([#69](https://github.com/Duylamneuuu/Kinetra/pull/69))
+
+### Fixed
+
+- **animation**: reject NaN graph parameters, prototype-key lookups and invalid graph data; locale-independent transition order ([#111](https://github.com/Duylamneuuu/Kinetra/pull/111))
+- **save-state**: validate save schemaVersion, reject Windows reserved keys, sanitize custom bindings; add property tests ([#124](https://github.com/Duylamneuuu/Kinetra/pull/124))
+- **renderer-three**: keep IK idempotent on un-animated bones, apply to clip-less models, deterministic chain order ([#77](https://github.com/Duylamneuuu/Kinetra/pull/77))
+- **core,audio**: serialize scene lifecycle transitions, reject prefab cycles/id collisions, locale-free script order, validate audio inputs ([#119](https://github.com/Duylamneuuu/Kinetra/pull/119))
+- **command-bus**: structured parent-cycle errors, LIFO undo, reserved component names; add model-based property tests ([#121](https://github.com/Duylamneuuu/Kinetra/pull/121))
+- **assets**: enforce full EXT_meshopt_compression validity rules and count stored geometry/image bytes exactly ([#117](https://github.com/Duylamneuuu/Kinetra/pull/117))
 
 ### Tests
 
