@@ -299,10 +299,16 @@ test("unknown required extension is an error; known required extensions are fine
 test("large uncompressed geometry gets a Meshopt advisory; small does not", () => {
   const large = glbFromJson({
     asset,
+    buffers: [{ byteLength: 900000 }],
+    bufferViews: [
+      { buffer: 0, byteLength: 360000 },
+      { buffer: 0, byteOffset: 360000, byteLength: 360000 },
+      { buffer: 0, byteOffset: 720000, byteLength: 180000 },
+    ],
     accessors: [
-      { componentType: 5126, count: 30000, type: "VEC3" },
-      { componentType: 5126, count: 30000, type: "VEC3" },
-      { componentType: 5123, count: 90000, type: "SCALAR" },
+      { bufferView: 0, componentType: 5126, count: 30000, type: "VEC3" },
+      { bufferView: 1, componentType: 5126, count: 30000, type: "VEC3" },
+      { bufferView: 2, componentType: 5123, count: 90000, type: "SCALAR" },
     ],
     meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, indices: 2 }] }],
   });
@@ -312,7 +318,9 @@ test("large uncompressed geometry gets a Meshopt advisory; small does not", () =
 
   const small = glbFromJson({
     asset,
-    accessors: [{ componentType: 5126, count: 100, type: "VEC3" }],
+    buffers: [{ byteLength: 1200 }],
+    bufferViews: [{ buffer: 0, byteLength: 1200 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 100, type: "VEC3" }],
     meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
   });
   assert.deepEqual(checkGlbCompression(small).diagnostics, []);
@@ -321,9 +329,14 @@ test("large uncompressed geometry gets a Meshopt advisory; small does not", () =
 test("shared accessors are counted once and morph targets are included", () => {
   const bytes = glbFromJson({
     asset,
+    buffers: [{ byteLength: 240 }],
+    bufferViews: [
+      { buffer: 0, byteLength: 120 },
+      { buffer: 0, byteOffset: 120, byteLength: 120 },
+    ],
     accessors: [
-      { componentType: 5126, count: 10, type: "VEC3" },
-      { componentType: 5126, count: 10, type: "VEC3" },
+      { bufferView: 0, componentType: 5126, count: 10, type: "VEC3" },
+      { bufferView: 1, componentType: 5126, count: 10, type: "VEC3" },
     ],
     meshes: [
       {
@@ -389,4 +402,140 @@ test("works on a Uint8Array view with a non-zero byteOffset", () => {
   outer.set(inner, 8);
   const view = outer.subarray(8);
   assert.equal(inspectGlbCompression(view).meshopt.bufferViews, 1);
+});
+
+test("Meshopt extension is checked against every EXT_meshopt_compression validity rule", () => {
+  // Each entry violates exactly one rule of the ratified spec ("For the
+  // extension object to be valid, the following must hold"). Before the fix
+  // these were accepted and only failed later inside the runtime decoder.
+  const parent = (byteLength: number, byteStride?: number): Record<string, unknown> => ({
+    buffer: 0,
+    byteLength,
+    ...(byteStride !== undefined ? { byteStride } : {}),
+  });
+  const cases: Array<{ rule: string; view: Record<string, unknown>; ext: Record<string, unknown> }> = [
+    {
+      rule: "INDICES byteStride must be 2 or 4",
+      view: parent(9),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 3, mode: "INDICES" },
+    },
+    {
+      rule: "TRIANGLES byteStride must be 2 or 4",
+      view: parent(24),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 8, mode: "TRIANGLES" },
+    },
+    {
+      rule: "TRIANGLES/INDICES filter must be NONE",
+      view: parent(12),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 4, mode: "INDICES", filter: "OCTAHEDRAL" },
+    },
+    {
+      rule: "OCTAHEDRAL byteStride must be 4 or 8",
+      view: parent(36),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 12, mode: "ATTRIBUTES", filter: "OCTAHEDRAL" },
+    },
+    {
+      rule: "QUATERNION byteStride must be 8",
+      view: parent(12),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 4, mode: "ATTRIBUTES", filter: "QUATERNION" },
+    },
+    {
+      rule: "parent byteLength must equal byteStride * count",
+      view: parent(40),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 12, mode: "ATTRIBUTES" },
+    },
+    {
+      rule: "parent byteStride must match the extension byteStride",
+      view: parent(36, 16),
+      ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 12, mode: "ATTRIBUTES" },
+    },
+  ];
+  for (const { rule, view, ext } of cases) {
+    const json = {
+      asset,
+      extensionsUsed: ["EXT_meshopt_compression"],
+      extensionsRequired: ["EXT_meshopt_compression"],
+      buffers: [{ byteLength: 64 }, { byteLength: 8 }],
+      bufferViews: [{ ...view, extensions: { EXT_meshopt_compression: ext } }],
+    };
+    const found = checkGlbCompression(glbFromJson(json)).diagnostics.find(
+      (d) => d.code === "asset.compression.meshopt.bufferView.invalid",
+    );
+    assert.ok(found, `expected a diagnostic for: ${rule}`);
+    assert.equal(found?.severity, "error", rule);
+  }
+
+  // Spec-valid combinations stay clean.
+  const valid: Array<{ view: Record<string, unknown>; ext: Record<string, unknown> }> = [
+    { view: parent(6), ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 2, mode: "TRIANGLES" } },
+    { view: parent(20), ext: { buffer: 1, byteLength: 8, count: 5, byteStride: 4, mode: "INDICES", filter: "NONE" } },
+    { view: parent(24, 8), ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 8, mode: "ATTRIBUTES", filter: "OCTAHEDRAL" } },
+    { view: parent(24), ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 8, mode: "ATTRIBUTES", filter: "QUATERNION" } },
+    { view: parent(36), ext: { buffer: 1, byteLength: 8, count: 3, byteStride: 12, mode: "ATTRIBUTES", filter: "EXPONENTIAL" } },
+  ];
+  for (const { view, ext } of valid) {
+    const json = {
+      asset,
+      extensionsUsed: ["EXT_meshopt_compression"],
+      buffers: [{ byteLength: 64 }, { byteLength: 8 }],
+      bufferViews: [{ ...view, extensions: { EXT_meshopt_compression: ext } }],
+    };
+    const diagnostics = checkGlbCompression(glbFromJson(json)).diagnostics;
+    assert.ok(
+      !codes(diagnostics).includes("asset.compression.meshopt.bufferView.invalid"),
+      `unexpected diagnostic for ${JSON.stringify(ext)}: ${JSON.stringify(diagnostics)}`,
+    );
+  }
+});
+
+test("base64 data URI image size excludes '=' padding", () => {
+  // 4 PNG signature bytes + 1 byte = 5 bytes -> "iVBORwA=" (one pad char).
+  // 4 bytes -> "iVBORw==" (two pad chars).
+  const five = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00]).toString("base64");
+  const four = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64");
+  assert.ok(five.endsWith("=") && !five.endsWith("=="));
+  assert.ok(four.endsWith("=="));
+  const report = inspectGlbCompression(
+    glbFromJson({
+      asset,
+      images: [
+        { uri: `data:image/png;base64,${five}` },
+        { uri: `data:image/png;base64,${four}` },
+      ],
+    }),
+  );
+  assert.equal(report.embeddedImageBytes.png, 9);
+});
+
+test("accessors without a bufferView do not count as stored geometry; sparse payload does", () => {
+  const report = inspectGlbCompression(
+    glbFromJson({
+      asset,
+      buffers: [{ byteLength: 1024 }],
+      bufferViews: [
+        { buffer: 0, byteLength: 36 },
+        { buffer: 0, byteLength: 4 },
+        { buffer: 0, byteLength: 24 },
+      ],
+      accessors: [
+        { bufferView: 0, componentType: 5126, count: 3, type: "VEC3" },
+        // Morph target delta stored only as two sparse entries: base is all zeros.
+        {
+          componentType: 5126,
+          count: 1000,
+          type: "VEC3",
+          sparse: {
+            count: 2,
+            indices: { bufferView: 1, componentType: 5121 },
+            values: { bufferView: 2 },
+          },
+        },
+        // Fully implicit (no bufferView, no sparse): zero bytes in the file.
+        { componentType: 5126, count: 1000, type: "VEC3" },
+      ],
+      meshes: [{ primitives: [{ attributes: { POSITION: 0 }, targets: [{ POSITION: 1 }, { NORMAL: 2 }] }] }],
+    }),
+  );
+  // 36 (dense POSITION) + 2 * 1 (sparse indices) + 2 * 12 (sparse values) = 62.
+  assert.equal(report.uncompressedGeometryBytes, 62);
 });
