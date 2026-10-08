@@ -139,8 +139,9 @@ docs/
   principles/
   research/
 
-examples/
-  reference-game/     future complete-game proof
+examples/             one workspace package per sample game
+  reference-game/     Kinetra Arena, the complete-game proof
+  orb-run/            Orb Run, a small dogfood game authored over MCP
 ```
 
 ## License
