@@ -17,8 +17,62 @@ import type {
 let readyPromise: Promise<void> | undefined;
 
 export async function initNavigation(): Promise<void> {
-  readyPromise ??= init();
+  readyPromise ??= init().catch((error: unknown) => {
+    // Do not cache a rejected init forever: a transient WASM load failure must be retryable.
+    readyPromise = undefined;
+    throw error;
+  });
   await readyPromise;
+}
+
+/**
+ * Horizontal (XZ) distance in world units under which the last path waypoint counts as
+ * reaching the goal. Height is ignored on purpose: Detour reports the polygon-query point
+ * with detail-mesh height while straight-path endpoints keep the requested height.
+ */
+const PATH_END_TOLERANCE = 1e-2;
+
+function assertPositiveFinite(name: string, value: number | undefined): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`NavMesh bake parameter "${name}" must be a finite number > 0, got ${String(value)}`);
+  }
+}
+
+function assertNonNegativeFinite(name: string, value: number | undefined): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new RangeError(`NavMesh bake parameter "${name}" must be a finite number >= 0, got ${String(value)}`);
+  }
+}
+
+function validateBakeInput(input: NavMeshBakeInput, positions: number[], indices: number[]): void {
+  assertPositiveFinite("cellSize", input.cellSize);
+  assertPositiveFinite("cellHeight", input.cellHeight);
+  assertPositiveFinite("agentHeight", input.agentHeight);
+  assertNonNegativeFinite("agentRadius", input.agentRadius);
+  assertNonNegativeFinite("agentMaxClimb", input.agentMaxClimb);
+  if (input.agentMaxSlope !== undefined) {
+    const slope = input.agentMaxSlope;
+    if (typeof slope !== "number" || !Number.isFinite(slope) || slope < 0 || slope >= 90) {
+      throw new RangeError(`NavMesh bake parameter "agentMaxSlope" must be a finite angle in degrees within [0, 90), got ${String(slope)}`);
+    }
+  }
+  if (positions.length === 0 || positions.length % 3 !== 0) {
+    throw new RangeError(`NavMesh bake input "positions" length must be a positive multiple of 3, got ${positions.length}`);
+  }
+  if (!positions.every((value) => Number.isFinite(value))) {
+    throw new RangeError('NavMesh bake input "positions" must contain only finite numbers');
+  }
+  if (indices.length === 0 || indices.length % 3 !== 0) {
+    throw new RangeError(`NavMesh bake input "indices" length must be a positive multiple of 3, got ${indices.length}`);
+  }
+  const vertexCount = positions.length / 3;
+  for (const index of indices) {
+    if (!Number.isInteger(index) || index < 0 || index >= vertexCount) {
+      throw new RangeError(`NavMesh bake input "indices" contains out-of-range vertex index ${String(index)} (vertex count ${vertexCount})`);
+    }
+  }
 }
 
 export const DEFAULT_QUERY_HALF_EXTENTS: Vec3 = { x: 2, y: 4, z: 2 };
@@ -42,6 +96,7 @@ export class RecastNavMesh {
     const indices = Array.isArray(input.indices)
       ? input.indices
       : Array.from(input.indices);
+    validateBakeInput(input, positions, indices);
 
     const config: Record<string, unknown> = {};
     if (input.cellSize !== undefined) config.cs = input.cellSize;
@@ -116,6 +171,19 @@ export class RecastNavMesh {
       y: pt.y,
       z: pt.z,
     }));
+
+    // Detour returns success with a path to the closest reachable polygon when the goal
+    // lies on a disconnected region. Report that truthfully as a partial path: the
+    // waypoints are walkable, but they do not reach the requested goal.
+    const goal = this.#query.findClosestPoint(end, { halfExtents });
+    const last = points[points.length - 1]!;
+    if (goal.success) {
+      const dx = last.x - goal.point.x;
+      const dz = last.z - goal.point.z;
+      if (Math.hypot(dx, dz) > PATH_END_TOLERANCE) {
+        return { points, success: false, status: "partial" };
+      }
+    }
 
     return {
       points,

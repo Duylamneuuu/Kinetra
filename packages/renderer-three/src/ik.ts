@@ -4,8 +4,12 @@
  *
  * Targets are engine-owned state stored here (never read back from Three.js).
  * `apply()` runs after `mixer.update()` each frame so IK corrections sit on top
- * of the animated pose. Chains whose bones are missing from the instance are
- * rejected up front with structured diagnostics; nothing here throws on
+ * of the animated pose. The controller remembers the local rotations it read
+ * and wrote last frame: a bone the mixer did not rewrite since (a static model,
+ * a bone no clip animates) is restored to its input rotation before solving
+ * again, so partial weights never compound across frames and clearing a target
+ * returns the bones to their un-IK'd pose. Chains apply in chain-id order.
+ * Chains whose bones are missing from the instance are rejected up front with structured diagnostics; nothing here throws on
  * malformed input.
  */
 import {
@@ -37,6 +41,16 @@ export interface IkChainObservation {
   error: number;
 }
 
+interface AppliedRotation {
+  bone: THREE.Object3D;
+  input: THREE.Quaternion;
+  output: THREE.Quaternion;
+}
+
+function compareIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 interface ActiveTarget {
   target: IkVec3;
   options: IkTargetOptions;
@@ -59,6 +73,8 @@ export class IkController {
   readonly #chains = new Map<string, { definition: IkChainDefinition; bones: THREE.Object3D[] }>();
   readonly #targets = new Map<string, ActiveTarget>();
   readonly #diagnostics: IkDiagnostic[] = [];
+  /** Rotations written by the last apply(), in write order. */
+  #applied: AppliedRotation[] = [];
 
   /** Registers every valid chain whose bones all exist under `root`; others yield diagnostics. */
   constructor(root: THREE.Object3D, definitions: readonly IkChainDefinition[]) {
@@ -136,6 +152,20 @@ export class IkController {
   clearTarget(chainId?: string): void {
     if (chainId === undefined) this.#targets.clear();
     else this.#targets.delete(chainId);
+    // Undo this controller's last corrections now; remaining targets are re-solved on the next apply().
+    this.#restoreInputPose();
+  }
+
+  /** Puts back the input rotation of every bone the mixer has not rewritten since the last apply(). */
+  #restoreInputPose(): void {
+    for (let i = this.#applied.length - 1; i >= 0; i--) {
+      const { bone, input, output } = this.#applied[i]!;
+      if (bone.quaternion.equals(output)) {
+        bone.quaternion.copy(input);
+        bone.updateWorldMatrix(false, true);
+      }
+    }
+    this.#applied = [];
   }
 
   observe(): IkChainObservation[] {
@@ -146,7 +176,9 @@ export class IkController {
 
   /** Call after `mixer.update()`. Mutates bone local rotations only. */
   apply(): void {
-    for (const [chainId, active] of this.#targets) {
+    this.#restoreInputPose();
+    const ordered = [...this.#targets].sort(([a], [b]) => compareIds(a, b));
+    for (const [chainId, active] of ordered) {
       const chain = this.#chains.get(chainId);
       if (!chain) continue;
       const { bones, definition } = chain;
@@ -179,7 +211,9 @@ export class IkController {
         const parentQuat = bone.parent
           ? bone.parent.getWorldQuaternion(new THREE.Quaternion())
           : new THREE.Quaternion();
+        const input = bone.quaternion.clone();
         bone.quaternion.copy(parentQuat.invert().multiply(aim.multiply(worldQuat)));
+        this.#applied.push({ bone, input, output: bone.quaternion.clone() });
         bone.updateWorldMatrix(false, true);
       }
     }
