@@ -174,6 +174,10 @@ export class ScriptHost {
     if (this.#entries.has(input.id)) {
       throw new Error(`Script "${input.id}" already registered`);
     }
+    if (input.order !== undefined && !Number.isFinite(input.order)) {
+      // NaN makes the sort comparator inconsistent, so execution order would become engine-defined.
+      throw new RangeError(`Script "${input.id}" order must be a finite number`);
+    }
     this.#entries.set(input.id, {
       id: input.id,
       ...(input.scriptId ? { scriptId: input.scriptId } : {}),
@@ -470,7 +474,10 @@ export class ScriptHost {
   }
 
   #ordered(): ScriptEntry[] {
-    return [...this.#entries.values()].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    // Code-unit comparison, not localeCompare: execution order must not depend on the host ICU/locale.
+    return [...this.#entries.values()].sort(
+      (a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
   }
 }
 

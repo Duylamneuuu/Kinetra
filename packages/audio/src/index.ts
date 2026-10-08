@@ -39,7 +39,11 @@ export class AudioMixerModel {
 
   constructor(buses: AudioBusDefinition[]) {
     for (const bus of buses) {
+      if (typeof bus.id !== "string" || bus.id.length === 0) throw new Error("Audio bus id must be a non-empty string");
       if (this.#buses.has(bus.id)) throw new Error(`Duplicate audio bus "${bus.id}"`);
+      if (!Number.isFinite(bus.gain) || bus.gain < 0) {
+        throw new RangeError(`Audio bus "${bus.id}" gain must be finite and >= 0`);
+      }
       this.#buses.set(bus.id, structuredClone(bus));
     }
     for (const bus of this.#buses.values()) {
@@ -128,6 +132,15 @@ export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Arra
   const sampleRate = options.sampleRate ?? 44100;
   const durationSeconds = options.durationSeconds ?? 0.25;
   const frequency = options.frequency ?? 440;
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 0xffffffff / 2) {
+    throw new RangeError("sampleRate must be a positive integer");
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 0) {
+    throw new RangeError("durationSeconds must be finite and >= 0");
+  }
+  if (!Number.isFinite(frequency) || frequency < 0) {
+    throw new RangeError("frequency must be finite and >= 0");
+  }
 
   const numChannels = 1;
   const bitsPerSample = 16;
