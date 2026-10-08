@@ -18,7 +18,8 @@
   "dependencies": {
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/core": "workspace:*",
-    "@kinetra/project-model": "workspace:*"
+    "@kinetra/project-model": "workspace:*",
+    "@kinetra/verification": "workspace:*"
   },
   "devDependencies": {
     "@kinetra/mcp-server": "workspace:*",

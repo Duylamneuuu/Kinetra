@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.save-load",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+    { "type": "save.capture", "slotId": "after-first-orb" },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 2 },
+
+    { "type": "save.load", "slotId": "after-first-orb" },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+    { "type": "assert.equal", "path": "state.game.step", "expected": 60 },
+    { "type": "assert.equal", "path": "state.entities.OrbB.script.collected", "expected": false },
+    { "type": "assert.near", "path": "state.entities.Player.position.0", "expected": 4, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.entities.Player.position.2", "expected": -4, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.game.elapsedSeconds", "expected": 2, "tolerance": 0.05 },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "wait", "milliseconds": 100 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "won" },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 3 },
+    { "type": "assert.logAbsent", "minimumLevel": "warning" },
+    { "type": "runtime.stop" }
+  ]
+}

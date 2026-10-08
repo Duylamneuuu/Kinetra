@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.win",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "playing" },
+    { "type": "assert.equal", "path": "state.game.totalOrbs", "expected": 3 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 0 },
+    { "type": "assert.equal", "path": "state.game.exitUnlocked", "expected": false },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.near", "path": "state.entities.Player.position.0", "expected": 4, "tolerance": 0.01 },
+    { "type": "assert.equal", "path": "state.entities.OrbA.script.collected", "expected": true },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 2 },
+    { "type": "assert.equal", "path": "state.game.exitUnlocked", "expected": false },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "wait", "milliseconds": 100 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 3 },
+    { "type": "assert.equal", "path": "state.game.exitUnlocked", "expected": true },
+    { "type": "assert.equal", "path": "state.events.exitUnlocked", "expected": 1 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "playing" },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "wait", "milliseconds": 100 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "won" },
+    { "type": "assert.equal", "path": "state.events.won", "expected": 1 },
+    { "type": "assert.equal", "path": "state.events.lost", "expected": 0 },
+    { "type": "assert.equal", "path": "state.events.orbCollected", "expected": 3 },
+    { "type": "assert.metricMax", "metric": "game.elapsedSeconds", "max": 8.2 },
+
+    { "type": "assert.near", "path": "state.entities.Player.position.0", "expected": 3.0667, "tolerance": 0.001 },
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "wait", "milliseconds": 30000 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "won" },
+    { "type": "assert.near", "path": "state.entities.Player.position.0", "expected": 3.0667, "tolerance": 0.001 },
+    { "type": "assert.equal", "path": "state.events.lost", "expected": 0 },
+    { "type": "assert.logAbsent", "minimumLevel": "warning" },
+    { "type": "runtime.stop" }
+  ]
+}
