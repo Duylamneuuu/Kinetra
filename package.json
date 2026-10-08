@@ -10,10 +10,11 @@
   },
   "scripts": {
     "check:foundation": "node scripts/check-foundation.mjs",
+    "check:test-scripts": "node scripts/check-test-scripts.mjs && node --test scripts/test/*.test.mjs",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "check": "pnpm check:foundation && pnpm check:licenses && pnpm build && pnpm typecheck && pnpm test",
+    "check": "pnpm check:foundation && pnpm check:test-scripts && pnpm check:licenses && pnpm build && pnpm typecheck && pnpm test",
     "check:licenses": "node scripts/check-licenses.mjs"
   },
   "devDependencies": {
