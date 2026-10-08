@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.timeout",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+    { "type": "wait", "milliseconds": 17900 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "playing" },
+    { "type": "wait", "milliseconds": 200 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "lost" },
+    { "type": "assert.equal", "path": "state.game.remainingSeconds", "expected": 0 },
+    { "type": "assert.equal", "path": "state.events.lost", "expected": 1 },
+    { "type": "assert.equal", "path": "state.events.won", "expected": 0 },
+    { "type": "wait", "milliseconds": 5000 },
+    { "type": "assert.equal", "path": "state.events.lost", "expected": 1 },
+    { "type": "assert.near", "path": "state.game.elapsedSeconds", "expected": 20, "tolerance": 0.05 },
+    { "type": "assert.logAbsent", "minimumLevel": "error" },
+    { "type": "runtime.stop" }
+  ]
+}

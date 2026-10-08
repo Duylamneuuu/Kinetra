@@ -337,7 +337,8 @@ Convention: each sample game is its own workspace package under `examples/<name>
 What has meaningful proof (Slice 1, Node only):
 - the whole project is authored from an empty project through the real MCP server (`scene.create`, `entity.create`, `entity.patch` over the in-memory transport, one revision per call with `expectedProjectRevision`); the file `FileProjectStore` writes equals the checked-in `orb-run.kinetra.json`, and replaying the same plan through `CommandBus` gives the same bytes;
 - gameplay scripts on the `@kinetra/core` `GameScript` contract run in a headless `ScriptHost` harness (`HeadlessSceneSimulation`, example-local) at a fixed 1/30 s step: a semantic-input playtest bot wins; exit-before-orbs, timeout loss, arena clamp, determinism, mid-run save/restore into a fresh simulation, corrupt-save rejection, and a rules change made through the command bus are asserted;
-- proof: `pnpm --filter @kinetra/example-orb-run test` (17 tests).
+- Slice 2: the gameplay contracts are checked-in `AcceptanceManifest` JSON (`examples/orb-run/acceptance/`: win, timeout, save-load) executed by the engine's own `AcceptanceRunner` through an example-local headless `RuntimeProbe` (`OrbRunHeadlessProbe`, virtual fixed-step time); negative cases (missing path diagnostic, screenshot step without a renderer, corrupt save, rules rebalanced through the command bus, typo'd script id) fail at the expected step;
+- proof: `pnpm --filter @kinetra/example-orb-run test` (29 tests).
 
 Not yet proven: rendering, the Electron player, packaged builds. The player cannot load a sample's scripts yet (it hard-codes the Arena registrations), and there is no engine-owned headless world; see `examples/orb-run/README.md`.
 

@@ -34,15 +34,25 @@ export interface AudioRuntimeState {
   activePlaybacks: AudioPlaybackState[];
 }
 
+function assertValidGain(gain: unknown, context: string): asserts gain is number {
+  if (typeof gain !== "number" || !Number.isFinite(gain) || gain < 0) {
+    throw new RangeError(`${context}: gain must be finite and >= 0, got ${String(gain)}`);
+  }
+}
+
 export class AudioMixerModel {
   #buses = new Map<string, AudioBusDefinition>();
 
   constructor(buses: AudioBusDefinition[]) {
     for (const bus of buses) {
-      if (typeof bus.id !== "string" || bus.id.length === 0) throw new Error("Audio bus id must be a non-empty string");
+      if (typeof bus.id !== "string" || bus.id.length === 0) {
+        throw new Error(`Audio bus id must be a non-empty string, got ${JSON.stringify(bus.id)}`);
+      }
       if (this.#buses.has(bus.id)) throw new Error(`Duplicate audio bus "${bus.id}"`);
-      if (!Number.isFinite(bus.gain) || bus.gain < 0) {
-        throw new RangeError(`Audio bus "${bus.id}" gain must be finite and >= 0`);
+      // Same contract as setGain: a NaN/negative/infinite gain would poison effectiveGain for the whole subtree.
+      assertValidGain(bus.gain, `Audio bus "${bus.id}"`);
+      if (bus.parentId !== undefined && (typeof bus.parentId !== "string" || bus.parentId.length === 0)) {
+        throw new Error(`Audio bus "${bus.id}" parentId must be a non-empty string when present`);
       }
       this.#buses.set(bus.id, structuredClone(bus));
     }
@@ -82,8 +92,9 @@ export class AudioMixerModel {
   }
 
   setGain(id: string, gain: number): void {
-    if (!Number.isFinite(gain) || gain < 0) throw new RangeError("gain must be finite and >= 0");
-    this.#require(id).gain = gain;
+    const bus = this.#require(id);
+    assertValidGain(gain, `Audio bus "${id}"`);
+    bus.gain = gain;
   }
 
   setMuted(id: string, muted: boolean): void {
@@ -132,14 +143,16 @@ export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Arra
   const sampleRate = options.sampleRate ?? 44100;
   const durationSeconds = options.durationSeconds ?? 0.25;
   const frequency = options.frequency ?? 440;
+  // The header stores sampleRate as an integer while samples are generated from the
+  // option value, so a fractional rate would produce a self-inconsistent file.
   if (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 0xffffffff / 2) {
-    throw new RangeError("sampleRate must be a positive integer");
+    throw new RangeError(`createSyntheticWav: sampleRate must be a positive integer, got ${String(sampleRate)}`);
   }
-  if (!Number.isFinite(durationSeconds) || durationSeconds < 0) {
-    throw new RangeError("durationSeconds must be finite and >= 0");
+  if (typeof durationSeconds !== "number" || !Number.isFinite(durationSeconds) || durationSeconds < 0) {
+    throw new RangeError(`createSyntheticWav: durationSeconds must be finite and >= 0, got ${String(durationSeconds)}`);
   }
-  if (!Number.isFinite(frequency) || frequency < 0) {
-    throw new RangeError("frequency must be finite and >= 0");
+  if (typeof frequency !== "number" || !Number.isFinite(frequency) || frequency < 0) {
+    throw new RangeError(`createSyntheticWav: frequency must be finite and >= 0, got ${String(frequency)}`);
   }
 
   const numChannels = 1;
