@@ -56,6 +56,8 @@ The source of truth is text data. A future visual node editor is only another fr
 
 Parameters, states, transitions, blend durations and events should be directly editable and queryable by agents.
 
+`validateAnimationGraph` rejects, with structured `anim.*` diagnostics: unknown parameter types, defaults that do not match the parameter type (`anim.parameter.default.type`), non-finite state speeds and transition priorities, unknown condition operators, and condition values that cannot match their parameter (`anim.condition.value.type`: a non-finite number for a number parameter, a non-boolean or an ordering operator on a bool). Parameter names resolve as own properties only, so `toString`/`constructor` are never parameters. `AnimationGraphMachine.set` rejects non-finite numbers so NaN cannot reach comparisons or blend spaces. Equal-priority transitions are ordered by transition id in code-point order, independent of host locale.
+
 ## Locomotion blend spaces
 
 `@kinetra/animation` owns a pure, schema-versioned blend-space contract (`packages/animation/src/blend-space.ts`):
