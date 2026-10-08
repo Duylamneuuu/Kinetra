@@ -76,11 +76,24 @@ The module does not touch Three.js.
 - Every sample clip runs as a looping action; weights come from `evaluateBlendSpace`.
 - Phase sync: all clips share one normalized phase. The cycle length is the weight-averaged clip duration, each action's time scale is `speed * clipDuration / cycle`, and action times are re-anchored to `phase * clipDuration` before every mixer update, so clips of different lengths keep their footfalls aligned without drift.
 - Validation (definition, clip resolution incl. `_retargeted` variants, zero-length clips, speed, input axes) happens before anything playing is stopped; failures return structured `anim.blendSpace.*` codes. `setBlendSpaceInput` is atomic.
-- Direct playback (`playAnimation`, `crossfadeAnimation`, a graph transition) or `stopAnimation` stops the blend space. Live asset reload restores it with its input and speed.
-- Observation: `model.animation.blendSpace = { id, kind, parameters, input, weights, phase, cycleDuration, speed, dominantClip }`, `actions[].role = "blend"`, `activeClip` = dominant clip.
+- `playAnimation`, `stopAnimation` and a new `playBlendSpace` stop the blend space immediately; `crossfadeAnimation` / a graph transition to another clip fades it out (see below). Live asset reload restores it with its input and speed.
+- Observation: `model.animation.blendSpace = { id, kind, parameters, input, weights, phase, cycleDuration, speed, groupWeight, dominantClip }`, `actions[].role = "blend"`, `activeClip` = dominant clip.
 - Bridge commands: `animation.blendSpace.play`, `animation.blendSpace.setInput` (logs `animation.blendSpace.played` / `playFailed` / `inputFailed`).
 
-Not yet supported: root motion while a blend space plays (refused with `anim.blendSpace.rootMotionUnsupported`), graph states that reference a blend space, and smooth crossfades into/out of a blend space.
+### Graph states that play a blend space
+
+An `AnimationGraphDefinition` may declare `blendSpaces: BlendSpaceDefinition[]`, and a state then sets `blendSpaceId` instead of `clipId` (exactly one of the two). Each blend-space axis is the graph number parameter of the same name, so `speed` drives the weights without any extra wiring.
+
+- Validation (`validateAnimationGraph`, diagnostics carry `remediation`): `anim.state.blendSpace.unknown`, `anim.state.blendSpace.empty`, `anim.state.clipAndBlendSpace`, `anim.state.blendSpace.parameter` (axis is missing or not a number parameter), `anim.graph.blendSpaces.type`, `anim.blendSpace.duplicate`, plus every `anim.blendSpace.*` diagnostic of the space itself. `AnimationGraphMachine.getBlendSpace(state)` / `getBlendSpaceInput(state)` expose the space and the current axis values.
+- `ThreeSceneRuntime.initAnimationGraph` also resolves every sample clip up front (`anim.blendSpace.clip.*`) and refuses graphs with blend-space states while root motion is on, so a transition cannot fail after the state machine has moved.
+- Graph parameters are pushed into the playing blend space on every `setAnimationGraphParameter` and every `updateAnimation` step. While a blend space is graph-owned, `setBlendSpaceInput` returns `anim.blendSpace.graphDriven`; a manual `playBlendSpace` takes it over.
+- Crossfades: a blend space fades as one group. `BlendSpacePlayback.groupWeight` (0..1) scales every sample action (`weights[i] * groupWeight`), so clip -> space, space -> clip and space -> space transitions reuse the graph's `blendSeconds` and publish `graph.transitioning` / `blendProgress` with `actions[]` roles `outgoing` / `incoming`. A transition interrupted mid-fade keeps the current weights as the new outgoing side. The outgoing space keeps following its own state's parameters while it fades.
+- A clip played by both the outgoing and the incoming side would be driven by one mixer action with two weights, so such a transition is cut instead of crossfaded (`graph.transitioning` false immediately). `crossfadeAnimation` to a clip that is a sample of the playing blend space is cut the same way.
+- Live asset reload re-initialises the graph (back to its entry state) instead of restoring the blend space standalone.
+
+Proof: `@kinetra/animation` `graph-blend-space.test.ts`, `@kinetra/renderer-three` `graph-blend-space.test.ts` (12 tests: fade-in/out weights, space-to-space, interruption, shared-clip cut, reload, root-motion refusal, release on stop/dispose) and real Electron `real-graph-blend-space.test.ts`.
+
+Not yet supported: root motion while a blend space plays (refused with `anim.blendSpace.rootMotionUnsupported`), an authored (command-bus) representation of graph blend spaces, and restoring a graph's current (non-entry) state across live reload.
 
 ## Morph targets
 
