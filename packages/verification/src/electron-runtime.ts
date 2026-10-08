@@ -61,8 +61,19 @@ export interface RuntimeEntityState {
       actions?: Array<{
         clip: string;
         weight: number;
-        role: "active" | "outgoing" | "incoming";
+        role: "active" | "outgoing" | "incoming" | "blend";
       }>;
+      blendSpace?: {
+        id: string;
+        kind: "1d" | "2d";
+        parameters: string[];
+        input: Record<string, number>;
+        weights: Array<{ clip: string; weight: number }>;
+        phase: number;
+        cycleDuration: number;
+        speed: number;
+        dominantClip: string;
+      };
       rootMotion?: {
         enabled: boolean;
         mode: string;
@@ -436,6 +447,34 @@ export class ElectronRuntimeHost implements RuntimeHost {
         ...(options?.loop !== undefined ? { loop: options.loop } : {}),
         ...(options?.speed !== undefined ? { speed: options.speed } : {}),
       },
+    );
+  }
+
+  async playBlendSpace(
+    entityId: string,
+    blendSpace: unknown,
+    options?: { input?: Record<string, number>; speed?: number },
+  ): Promise<RuntimeQueryResult & { success: boolean; code?: string; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; code?: string; error?: string }>(
+      "animation.blendSpace.play",
+      {
+        entityId,
+        blendSpace,
+        ...(options?.input !== undefined ? { input: options.input } : {}),
+        ...(options?.speed !== undefined ? { speed: options.speed } : {}),
+      },
+    );
+  }
+
+  async setBlendSpaceInput(
+    entityId: string,
+    input: Record<string, number>,
+  ): Promise<RuntimeQueryResult & { success: boolean; code?: string; error?: string }> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult & { success: boolean; code?: string; error?: string }>(
+      "animation.blendSpace.setInput",
+      { entityId, input },
     );
   }
 

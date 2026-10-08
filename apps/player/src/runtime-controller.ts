@@ -7,7 +7,12 @@ import {
   RapierPhysicsWorld,
 } from "@kinetra/physics-rapier";
 import { RecastNavMesh } from "@kinetra/navigation-recast";
-import { ThreeSceneRuntime, type AssetResolver } from "@kinetra/renderer-three";
+import {
+  ThreeSceneRuntime,
+  type AssetResolver,
+  type BlendSpaceRuntimeResult,
+} from "@kinetra/renderer-three";
+import type { BlendSpaceDefinition } from "@kinetra/animation/blend-space.js";
 import type {
   AnimationGraphDefinition,
   AnimationGraphDiagnostic,
@@ -77,7 +82,19 @@ export interface PlayerRuntimeQuery {
 export interface PlayerRuntimeModelAnimationActionState {
   clip: string;
   weight: number;
-  role: "incoming" | "outgoing" | "active";
+  role: "incoming" | "outgoing" | "active" | "blend";
+}
+
+export interface PlayerRuntimeModelBlendSpaceState {
+  id: string;
+  kind: "1d" | "2d";
+  parameters: string[];
+  input: Record<string, number>;
+  weights: Array<{ clip: string; weight: number }>;
+  phase: number;
+  cycleDuration: number;
+  speed: number;
+  dominantClip: string;
 }
 
 export interface PlayerRuntimeModelAnimationGraphState {
@@ -101,6 +118,7 @@ export interface PlayerRuntimeModelAnimationState {
   graph?: PlayerRuntimeModelAnimationGraphState | undefined;
   actions?: PlayerRuntimeModelAnimationActionState[] | undefined;
   rootMotion?: PlayerRuntimeRootMotionState | undefined;
+  blendSpace?: PlayerRuntimeModelBlendSpaceState | undefined;
 }
 
 export interface PlayerRuntimeRootMotionState {
@@ -1182,6 +1200,53 @@ export class PlayerRuntimeController {
       ...(options.transitionId ? { transitionId: options.transitionId } : {}),
     });
     return { success: true };
+  }
+
+  playBlendSpace(
+    entityId: string,
+    space: BlendSpaceDefinition,
+    options: { input?: Record<string, number> | undefined; speed?: number | undefined } = {},
+  ): BlendSpaceRuntimeResult {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.blendSpace.playFailed", { entityId, code: "runtime.notRunning", error });
+      return { success: false, code: "runtime.notRunning", error };
+    }
+    if (!this.#runtime.getObject(entityId)) {
+      const error = `Entity "${entityId}" does not exist in runtime`;
+      this.#log("error", "animation.blendSpace.playFailed", { entityId, code: "entity.notFound", error });
+      return { success: false, code: "entity.notFound", error };
+    }
+    const result = this.#runtime.playBlendSpace(entityId, space, options);
+    if (!result.success) {
+      this.#log("error", "animation.blendSpace.playFailed", {
+        entityId,
+        code: result.code,
+        error: result.error,
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+      });
+      return result;
+    }
+    this.#log("info", "animation.blendSpace.played", {
+      entityId,
+      blendSpaceId: result.state?.id,
+      kind: result.state?.kind,
+      weights: result.state?.weights,
+    });
+    return result;
+  }
+
+  setBlendSpaceInput(entityId: string, input: Record<string, number>): BlendSpaceRuntimeResult {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.blendSpace.inputFailed", { entityId, code: "runtime.notRunning", error });
+      return { success: false, code: "runtime.notRunning", error };
+    }
+    const result = this.#runtime.setBlendSpaceInput(entityId, input);
+    if (!result.success) {
+      this.#log("error", "animation.blendSpace.inputFailed", { entityId, code: result.code, error: result.error });
+    }
+    return result;
   }
 
   initAnimationGraph(

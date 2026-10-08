@@ -24,7 +24,19 @@ export interface ClipMetadata {
 export interface ModelAnimationActionState {
   clip: string;
   weight: number;
-  role: "incoming" | "outgoing" | "active";
+  role: "incoming" | "outgoing" | "active" | "blend";
+}
+
+export interface ModelBlendSpaceState {
+  id: string;
+  kind: "1d" | "2d";
+  parameters: string[];
+  input: Record<string, number>;
+  weights: Array<{ clip: string; weight: number }>;
+  phase: number;
+  cycleDuration: number;
+  speed: number;
+  dominantClip: string;
 }
 
 export interface ModelAnimationGraphState {
@@ -64,6 +76,7 @@ export interface ModelAnimationState {
   graph?: ModelAnimationGraphState | undefined;
   actions?: ModelAnimationActionState[] | undefined;
   rootMotion?: ModelRootMotionState | undefined;
+  blendSpace?: ModelBlendSpaceState | undefined;
 }
 
 export interface ModelNodeState {

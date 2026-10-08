@@ -6,6 +6,7 @@ import {
 } from "@kinetra/reference-game";
 
 import { SettingsStore } from "@kinetra/save-state";
+import type { BlendSpaceDefinition } from "@kinetra/animation/blend-space.js";
 import { PlayerRuntimeController } from "./runtime-controller.js";
 import { GameShellController } from "./shell.js";
 import "./style.css";
@@ -36,6 +37,11 @@ function requireRecord(value: unknown, label: string): Record<string, unknown> {
     throw new TypeError(`${label} must be an object`);
   }
   return value;
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every((entry) => typeof entry === "number" && Number.isFinite(entry));
 }
 
 function requireString(value: unknown, label: string): string {
@@ -176,6 +182,40 @@ async function handleRuntimeCommand(request: {
         ...(loop !== undefined ? { loop } : {}),
         ...(speed !== undefined ? { speed } : {}),
       });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.blendSpace.play": {
+      const entityId = requireString(params.entityId, "entityId");
+      const space = params.blendSpace as BlendSpaceDefinition;
+      const input = isNumberRecord(params.input) ? params.input : undefined;
+      const speed = typeof params.speed === "number" ? params.speed : undefined;
+      if (params.input !== undefined && !input) {
+        return {
+          success: false,
+          code: "anim.blendSpace.input.invalid",
+          error: "input must be an object of finite axis values",
+          ...runtime.query(),
+        };
+      }
+      const result = runtime.playBlendSpace(entityId, space, {
+        ...(input ? { input } : {}),
+        ...(speed !== undefined ? { speed } : {}),
+      });
+      return { ...result, ...runtime.query() };
+    }
+
+    case "animation.blendSpace.setInput": {
+      const entityId = requireString(params.entityId, "entityId");
+      if (!isNumberRecord(params.input)) {
+        return {
+          success: false,
+          code: "anim.blendSpace.input.invalid",
+          error: "input must be an object of finite axis values",
+          ...runtime.query(),
+        };
+      }
+      const result = runtime.setBlendSpaceInput(entityId, params.input);
       return { ...result, ...runtime.query() };
     }
 

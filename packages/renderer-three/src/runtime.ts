@@ -18,8 +18,16 @@ import {
   type ExtractedClipRootMotion,
   type RootMotionDiagnostics,
 } from "@kinetra/animation/root-motion.js";
+import type {
+  BlendSpaceDefinition,
+  BlendSpaceDiagnostic,
+} from "@kinetra/animation/blend-space.js";
 import * as THREE from "three";
 
+import {
+  BlendSpacePlayback,
+  type BlendSpacePlaybackState,
+} from "./blend-space-player.js";
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 import {
@@ -72,6 +80,16 @@ export interface EntityAnimatorSession {
   retargetSource?: string | undefined;
   retargetCacheKey?: string | undefined;
   rootMotion?: EntityRootMotionSession | undefined;
+  /** Active locomotion blend space; mutually exclusive with active/outgoing actions. */
+  blendSpace?: BlendSpacePlayback | undefined;
+}
+
+export interface BlendSpaceRuntimeResult {
+  success: boolean;
+  code?: string | undefined;
+  error?: string | undefined;
+  diagnostics?: BlendSpaceDiagnostic[] | undefined;
+  state?: BlendSpacePlaybackState | undefined;
 }
 
 export interface ThreeSceneMetrics {
@@ -441,6 +459,7 @@ export class ThreeSceneRuntime {
     if (session) {
       if (session.outgoingAction) session.outgoingAction.stop();
       if (session.activeAction) session.activeAction.stop();
+      session.blendSpace?.stop();
       session.mixer.stopAllAction();
       const modelScene = this.#modelScenes.get(entityId);
       if (modelScene) {
@@ -514,6 +533,13 @@ export class ThreeSceneRuntime {
       const oldModelScene = this.#modelScenes.get(entityId);
       const oldSession = this.#animatorSessions.get(entityId);
       const oldGraphDef = oldSession?.graphDefinition;
+      const oldBlendSpace = oldSession?.blendSpace?.stopped === false
+        ? {
+            definition: oldSession.blendSpace.definition,
+            input: oldSession.blendSpace.state().input,
+            speed: oldSession.blendSpace.speed,
+          }
+        : undefined;
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
@@ -522,6 +548,7 @@ export class ThreeSceneRuntime {
       if (oldSession) {
         if (oldSession.outgoingAction) oldSession.outgoingAction.stop();
         if (oldSession.activeAction) oldSession.activeAction.stop();
+        oldSession.blendSpace?.stop();
         oldSession.mixer.stopAllAction();
         if (oldModelScene) {
           oldSession.mixer.uncacheRoot(oldModelScene);
@@ -556,6 +583,17 @@ export class ThreeSceneRuntime {
       // 6. If entity had an animation graph before, re-initialize it cleanly with the new clips/mixer
       if (oldGraphDef) {
         this.initAnimationGraph(entityId, oldGraphDef);
+      }
+      // 7. Restore an active blend space against the reloaded clips (best effort:
+      // a clip removed by the reimport surfaces as a structured failure in metadata).
+      if (oldBlendSpace) {
+        const restored = this.playBlendSpace(entityId, oldBlendSpace.definition, {
+          input: oldBlendSpace.input,
+          speed: oldBlendSpace.speed,
+        });
+        if (!restored.success && metadata.animation) {
+          metadata.animation.blendSpace = undefined;
+        }
       }
     }
 
@@ -848,6 +886,9 @@ export class ThreeSceneRuntime {
       this.#animatorSessions.set(entityId, session);
     }
 
+    // Direct clip playback (or a graph transition) takes over from a blend space.
+    this.#stopBlendSpace(session, metadata);
+
     if (options.retargetSource !== undefined) {
       session.retargetSource = options.retargetSource;
     }
@@ -1069,6 +1110,146 @@ export class ThreeSceneRuntime {
     return true;
   }
 
+  /**
+   * Play a locomotion blend space on an entity: every sample clip runs in phase,
+   * weighted by `evaluateBlendSpace`. Replaces any direct clip playback or
+   * crossfade in progress. Validation happens before anything playing is
+   * stopped, so a rejected request leaves the current animation untouched.
+   */
+  playBlendSpace(
+    entityId: string,
+    space: BlendSpaceDefinition,
+    options: { input?: Readonly<Record<string, number>> | undefined; speed?: number | undefined } = {},
+  ): BlendSpaceRuntimeResult {
+    if (this.#disposed) {
+      return { success: false, code: "runtime.disposed", error: "Runtime is disposed" };
+    }
+    const metadata = this.#models.get(entityId);
+    const mixer = this.#mixers.get(entityId);
+    const clips = this.#clips.get(entityId);
+    if (!metadata || !metadata.loaded || !mixer || !clips) {
+      return {
+        success: false,
+        code: "anim.blendSpace.entity.noModel",
+        error: `Entity "${entityId}" has no loaded animated model`,
+      };
+    }
+
+    let session = this.#animatorSessions.get(entityId);
+    if (session?.rootMotion?.enabled) {
+      return {
+        success: false,
+        code: "anim.blendSpace.rootMotionUnsupported",
+        error: `Entity "${entityId}" has root motion enabled; blend-space root motion is not supported yet`,
+      };
+    }
+
+    const created = BlendSpacePlayback.create(space, mixer, clips, options);
+    if (!created.success) {
+      return {
+        success: false,
+        code: created.code,
+        error: created.error,
+        ...(created.diagnostics ? { diagnostics: created.diagnostics } : {}),
+      };
+    }
+
+    if (!session) {
+      session = { entityId, mixer };
+      this.#animatorSessions.set(entityId, session);
+    }
+
+    // Stop whatever was playing: previous blend space, crossfade, single clip.
+    this.#stopBlendSpace(session, metadata);
+    if (session.outgoingAction) {
+      session.outgoingAction.stop();
+      session.outgoingAction.setEffectiveWeight(0);
+    }
+    if (session.activeAction) {
+      session.activeAction.stop();
+      session.activeAction.setEffectiveWeight(0);
+    }
+    session.outgoingAction = undefined;
+    session.outgoingClipName = undefined;
+    session.activeAction = undefined;
+    session.activeClipName = undefined;
+    session.blend = undefined;
+    this.#activeActions.delete(entityId);
+
+    const playback = created.playback;
+    playback.begin();
+    session.blendSpace = playback;
+
+    if (!metadata.animation) {
+      metadata.animation = {
+        clips: clips.map((c) => ({ name: c.name, duration: c.duration })),
+        playing: true,
+        time: 0,
+      };
+    }
+    delete metadata.animation.graph;
+    this.#publishBlendSpaceState(playback, metadata);
+
+    return { success: true, state: playback.state() };
+  }
+
+  /** Update one or both blend-space axes. Atomic on failure. */
+  setBlendSpaceInput(
+    entityId: string,
+    input: Readonly<Record<string, number>>,
+  ): BlendSpaceRuntimeResult {
+    if (this.#disposed) {
+      return { success: false, code: "runtime.disposed", error: "Runtime is disposed" };
+    }
+    const session = this.#animatorSessions.get(entityId);
+    const playback = session?.blendSpace;
+    if (!playback || playback.stopped) {
+      return {
+        success: false,
+        code: "anim.blendSpace.notPlaying",
+        error: `Entity "${entityId}" is not playing a blend space`,
+      };
+    }
+    const result = playback.setInput(input);
+    if (!result.success) {
+      return { success: false, code: result.code, error: result.error };
+    }
+    const metadata = this.#models.get(entityId);
+    if (metadata?.animation) this.#publishBlendSpaceState(playback, metadata);
+    return { success: true, state: result.state };
+  }
+
+  getBlendSpaceState(entityId: string): BlendSpacePlaybackState | undefined {
+    const playback = this.#animatorSessions.get(entityId)?.blendSpace;
+    return playback && !playback.stopped ? playback.state() : undefined;
+  }
+
+  #stopBlendSpace(session: EntityAnimatorSession, metadata: ModelMetadata | undefined): void {
+    if (!session.blendSpace) return;
+    session.blendSpace.stop();
+    session.blendSpace = undefined;
+    if (metadata?.animation) {
+      delete metadata.animation.blendSpace;
+      delete metadata.animation.actions;
+    }
+  }
+
+  #publishBlendSpaceState(playback: BlendSpacePlayback, metadata: ModelMetadata): void {
+    if (!metadata.animation) return;
+    const state = playback.state();
+    const dominant = playback.getAction(state.dominantClip);
+    metadata.animation.blendSpace = state;
+    metadata.animation.activeClip = state.dominantClip;
+    metadata.animation.playing = true;
+    metadata.animation.time = dominant ? dominant.time : 0;
+    metadata.animation.duration = dominant ? dominant.getClip().duration : undefined;
+    metadata.animation.actions = state.weights.map((w) => ({
+      clip: w.clip,
+      weight: w.weight,
+      role: "blend" as const,
+    }));
+  }
+
   playAnimation(
     entityId: string,
     clipName: string,
@@ -1097,6 +1278,7 @@ export class ThreeSceneRuntime {
         session.activeClipName = undefined;
       }
       session.blend = undefined;
+      this.#stopBlendSpace(session, this.#models.get(entityId));
       if (session.graphMachine) {
         session.graphMachine.reset();
       }
@@ -1435,7 +1617,11 @@ export class ThreeSceneRuntime {
         }
       }
 
+      session.blendSpace?.prepareStep(deltaSeconds);
       session.mixer.update(deltaSeconds);
+      if (session.blendSpace && metadata?.animation) {
+        this.#publishBlendSpaceState(session.blendSpace, metadata);
+      }
 
       const modelScene = this.#modelScenes.get(entityId);
       if (metadata && modelScene) {
@@ -1550,6 +1736,7 @@ export class ThreeSceneRuntime {
     for (const session of this.#animatorSessions.values()) {
       if (session.outgoingAction) session.outgoingAction.stop();
       if (session.activeAction) session.activeAction.stop();
+      session.blendSpace?.stop();
     }
     this.#animatorSessions.clear();
 
