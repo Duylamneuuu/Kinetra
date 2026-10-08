@@ -1,4 +1,4 @@
-# Kinetra handoff — 2026-09-19
+# Kinetra handoff — 2026-09-19 (updated 2026-10-09 through PR #75)
 
 This document exists so the next coding agent can continue without reconstructing the entire development history.
 
@@ -67,7 +67,7 @@ These are foundations, not proof that the whole engine is finished.
 
 ## Important WIP branches / PRs
 
-Treat the following only as implementation references until re-proven:
+Treat the following only as implementation references until re-proven. Since this list was written, the real Electron runtime bridge (#31), Rapier physics (#33) and Recast navigation (#34) landed on `main` through separate PRs, so #29 and #26 are now historical references rather than the path to those features. #22 is closed.
 
 - **PR #29** — Electron runtime bridge / real frame capture.
   - useful design/reference;
@@ -292,6 +292,35 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Post-Sampling Visual Continuity**: Demonstrates that sampling does not poison rendering; a subsequent visual frame can be captured and verified as a valid PNG;
 - **MCP Server Acceptance Tool Integration**: `test.runAcceptance` runs performance sample and budget gate steps over in-memory transport;
 - **Packaged Windows Verification**: Packaged executable smoke test (`smoke:win` on `KinetraGame.exe`) executes `real-performance.test.js` verifying budget enforcement and clean teardown with zero orphan processes.
+
+### 16. Locomotion Blend Spaces (P5, PR #69 contract + PR #70 runtime)
+
+- **Pure contract** (`@kinetra/animation/blend-space`): schema-versioned `BlendSpace1DDefinition` / `BlendSpace2DDefinition`, `validateBlendSpace` returning `anim.blendSpace.*` diagnostics with remediation, deterministic `evaluateBlendSpace1D/2D` (1D linear with end clamping; 2D cartesian gradient-band interpolation; weights normalised to 1, locale-independent ordering, nearest-sample fallback) and `evaluateBlendSpace` reading `AnimationGraphMachine.getParameters()`;
+- **Runtime** (`@kinetra/renderer-three`): `BlendSpacePlayback` driven by `ThreeSceneRuntime.playBlendSpace(entityId, space, { input, speed })` / `setBlendSpaceInput(entityId, input)`; clips of different lengths are phase-synced, errors are atomic and structured, direct clip playback takes over cleanly, and `reloadAsset` restores the blend space. Player bridge: `animation.blendSpace.play` / `animation.blendSpace.setInput`;
+- **Proof**: `packages/animation/test/blend-space.test.ts`, `packages/renderer-three/test/blend-space.test.ts`, real Electron `packages/verification/test/real-blend-space.test.ts` (in the verification `test` script);
+- **Not done**: graph states that reference a blend space, crossfade into/out of a blend space, blend-space root motion, packaged-binary run.
+
+### 17. Morph Targets by Semantic Name (P5, PR #72)
+
+- **Pure contract** (`@kinetra/animation/morph-targets`): name catalog over all meshes (a name shared by several meshes is one value), all-or-nothing `validateMorphWeightRequest` with `anim.morph.*` diagnostics (unknown target with case-sensitivity hint, non-finite, out of `[0, 1]`);
+- **Runtime**: engine-owned `MorphTargetController` per model instance; overrides are re-applied after the mixer so they win over clip tracks, clearing restores authored defaults, overrides survive `reloadAsset` (dropped names reported as `animation.morphOverridesDropped`). Observable as `model.morphTargets`. Bridge: `animation.setMorphWeights` / `animation.clearMorphWeights`; game scripts get the same calls;
+- **Proof**: `packages/animation/test/morph-targets.test.ts`, `packages/renderer-three/test/morph.test.ts`, real Electron `real-morph-targets.test.ts` (in the verification `test` script), fixture `createSyntheticMorphGlb`;
+- **Not done**: game-script path test, packaged run, Blender shape-key export, morph crossfade inside graphs.
+
+### 18. Inverse Kinematics (P5, PR #71 solver + PR #74 runtime adapter + PR #75 bridge)
+
+- **Pure solver** (`@kinetra/animation/ik`): `IkChainDefinition` (schemaVersion 1, `two-bone` | `fabrik`), `validateIkChainDefinition` (`ik.*` diagnostics with severity), analytic `solveTwoBoneIk` with pole vector and exact bone-length preservation, `solveFabrikIk` with bounded iterations (`IK_MAX_ITERATIONS_LIMIT`), `solveIkChain`, `computeBoneAimRotations`;
+- **Runtime adapter**: `IkController` (renderer-three) applies solved chains to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains` / `setIkTarget` / `clearIkTarget`;
+- **Bridge**: `animation.ik.setChains` / `animation.ik.setTarget` / `animation.ik.clearTarget` in the player;
+- **Proof**: `packages/animation/test/ik.test.ts`, `packages/renderer-three/test/ik.test.ts`. real Electron `packages/verification/test/real-ik-bridge.test.ts` covers structured error paths only, on a model without bones (registered in the verification `test` script since #118);
+- **Not done**: IK on a real skinned model through the bridge, command-bus/MCP exposure, foot-planting helpers. (Follow-up fixes on main make IK run for models without animation clips too.)
+
+### 19. GLB Compression Policy + Meshopt Runtime Decoding (P4, PR #73)
+
+- `@kinetra/asset-pipeline`: `inspectGlbCompression`, `evaluateCompressionPolicy`, `checkGlbCompression` read only the GLB JSON chunk, never throw, and report Meshopt/Draco/KTX2 usage, unknown required extensions, undeclared compression, and large uncompressed geometry;
+- `@kinetra/renderer-three`: `createRuntimeGltfLoader` decodes `EXT_meshopt_compression`; `RUNTIME_DECODER_CAPABILITIES` and `RUNTIME_GLTF_DECODERS` are kept equal by a test;
+- **Proof**: `packages/asset-pipeline/test/compression.test.ts`, `packages/renderer-three/test/compressed-gltf.test.ts` (Node);
+- **Not done**: an offline Meshopt encode step in the pipeline, Draco/KTX2 decoders, Meshopt assets inside the packaged player.
 
 ## Completion definition
 
