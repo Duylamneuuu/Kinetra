@@ -935,3 +935,171 @@ export async function createSyntheticRootMotionGlb(
 
 
 
+
+export interface SyntheticMorphGlbOptions {
+  name?: string;
+  /** Default weights of the "Face" mesh, in target order [smile, blink]. */
+  faceWeights?: [number, number];
+  /** Default weights of the "Brow" mesh, in target order [blink, raise]. */
+  browWeights?: [number, number];
+  /** Duration of the "Blink" clip, which animates the Face mesh weights. */
+  blinkDuration?: number;
+}
+
+function createMorphBoxPrimitive(
+  doc: Document,
+  buffer: import("@gltf-transform/core").Buffer,
+  label: string,
+  center: [number, number, number],
+  half: [number, number, number],
+  material: import("@gltf-transform/core").Material,
+  targets: Array<{ name: string; delta: [number, number, number] }>,
+): import("@gltf-transform/core").Primitive {
+  const [cx, cy, cz] = center;
+  const [hx, hy, hz] = half;
+  const positions = new Float32Array([
+    cx - hx, cy - hy, cz + hz,
+    cx + hx, cy - hy, cz + hz,
+    cx + hx, cy + hy, cz + hz,
+    cx - hx, cy + hy, cz + hz,
+    cx - hx, cy - hy, cz - hz,
+    cx + hx, cy - hy, cz - hz,
+    cx + hx, cy + hy, cz - hz,
+    cx - hx, cy + hy, cz - hz,
+  ]);
+  const indices = new Uint16Array([
+    0, 1, 2, 0, 2, 3,
+    1, 5, 6, 1, 6, 2,
+    5, 4, 7, 5, 7, 6,
+    4, 0, 3, 4, 3, 7,
+    3, 2, 6, 3, 6, 7,
+    4, 5, 1, 4, 1, 0,
+  ]);
+  const primitive = doc
+    .createPrimitive()
+    .setAttribute(
+      "POSITION",
+      doc.createAccessor(`${label}_positions`).setType("VEC3").setArray(positions).setBuffer(buffer),
+    )
+    .setIndices(
+      doc.createAccessor(`${label}_indices`).setType("SCALAR").setArray(indices).setBuffer(buffer),
+    )
+    .setMaterial(material);
+
+  // Each target displaces only the top four vertices (indices 2, 3, 6, 7) so the
+  // effect of a weight is directly observable through the deformed bounds.
+  for (const target of targets) {
+    const deltas = new Float32Array(8 * 3);
+    for (const vertex of [2, 3, 6, 7]) {
+      deltas.set(target.delta, vertex * 3);
+    }
+    const accessor = doc
+      .createAccessor(`${label}_${target.name}_delta`)
+      .setType("VEC3")
+      .setArray(deltas)
+      .setBuffer(buffer);
+    primitive.addTarget(doc.createPrimitiveTarget(target.name).setAttribute("POSITION", accessor));
+  }
+  return primitive;
+}
+
+/**
+ * Creates a deterministic glTF 2.0 binary (GLB) exercising morph targets (blend shapes).
+ *
+ * - Node "Face" / mesh "Face": targets ["smile", "blink"] (names in mesh.extras.targetNames)
+ * - Node "Brow" / mesh "Brow": targets ["blink", "raise"] — "blink" is intentionally shared
+ *   across meshes so a single semantic weight must drive both.
+ * - Clip "Blink": animates the Face mesh weights (blink 0 -> 1 -> 0) over `blinkDuration`.
+ *
+ * Every target lifts the top vertices of its box, so weights are observable as bounds.
+ */
+export async function createSyntheticMorphGlb(
+  options: SyntheticMorphGlbOptions = {},
+): Promise<Uint8Array> {
+  const name = options.name ?? "MorphHead";
+  const faceWeights = options.faceWeights ?? [0, 0];
+  const browWeights = options.browWeights ?? [0, 0];
+  const blinkDuration = options.blinkDuration ?? 1.0;
+  if (!(blinkDuration > 0) || !Number.isFinite(blinkDuration)) {
+    throw new Error(`createSyntheticMorphGlb: blinkDuration must be a positive finite number`);
+  }
+
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene("Scene");
+  const material = doc
+    .createMaterial(`${name}_Material`)
+    .setBaseColorFactor([0.9, 0.7, 0.55, 1])
+    .setRoughnessFactor(0.6);
+
+  const facePrimitive = createMorphBoxPrimitive(
+    doc,
+    buffer,
+    "Face",
+    [0, 0.5, 0],
+    [0.5, 0.5, 0.5],
+    material,
+    [
+      { name: "smile", delta: [0, 0.5, 0] },
+      { name: "blink", delta: [0, 0.25, 0] },
+    ],
+  );
+  const faceMesh = doc
+    .createMesh("Face")
+    .addPrimitive(facePrimitive)
+    .setWeights([...faceWeights])
+    .setExtras({ targetNames: ["smile", "blink"] });
+
+  const browPrimitive = createMorphBoxPrimitive(
+    doc,
+    buffer,
+    "Brow",
+    [0, 1.2, 0],
+    [0.4, 0.1, 0.1],
+    material,
+    [
+      { name: "blink", delta: [0, -0.1, 0] },
+      { name: "raise", delta: [0, 0.3, 0] },
+    ],
+  );
+  const browMesh = doc
+    .createMesh("Brow")
+    .addPrimitive(browPrimitive)
+    .setWeights([...browWeights])
+    .setExtras({ targetNames: ["blink", "raise"] });
+
+  const root = doc.createNode(`${name}_Root`);
+  const faceNode = doc.createNode("Face").setMesh(faceMesh);
+  const browNode = doc.createNode("Brow").setMesh(browMesh);
+  root.addChild(faceNode);
+  root.addChild(browNode);
+  scene.addChild(root);
+
+  const half = blinkDuration / 2;
+  const sampler = doc
+    .createAnimationSampler()
+    .setInput(
+      doc
+        .createAccessor("Blink_times")
+        .setType("SCALAR")
+        .setArray(new Float32Array([0, half, blinkDuration]))
+        .setBuffer(buffer),
+    )
+    .setOutput(
+      doc
+        .createAccessor("Blink_weights")
+        .setType("SCALAR")
+        // keyframe-major: [smile, blink] per keyframe
+        .setArray(new Float32Array([faceWeights[0], 0, faceWeights[0], 1, faceWeights[0], 0]))
+        .setBuffer(buffer),
+    )
+    .setInterpolation("LINEAR");
+  const channel = doc
+    .createAnimationChannel()
+    .setTargetNode(faceNode)
+    .setTargetPath("weights")
+    .setSampler(sampler);
+  doc.createAnimation("Blink").addSampler(sampler).addChannel(channel);
+
+  return new NodeIO().writeBinary(doc);
+}

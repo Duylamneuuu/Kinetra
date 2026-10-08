@@ -91,6 +91,10 @@ export interface RuntimeEntityState {
       rotation?: [number, number, number, number];
       scale?: [number, number, number];
     }>;
+    morphTargets?: {
+      targets: Array<{ name: string; weight: number; meshes: string[]; overridden: boolean }>;
+      overrides: Record<string, number>;
+    };
     instance?: {
       assetId: string;
       instanceId: string;
@@ -542,6 +546,38 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return this.#request<RuntimeQueryResult>("animation.registerClip", {
       entityId,
       clip,
+    });
+  }
+
+  async setMorphWeights(
+    entityId: string,
+    weights: Record<string, number>,
+  ): Promise<
+    RuntimeQueryResult & {
+      success: boolean;
+      error?: string;
+      diagnostics?: Array<{ code: string; message: string; remediation: string }>;
+    }
+  > {
+    await this.#ensureProcess();
+    return this.#request("animation.setMorphWeights", { entityId, weights });
+  }
+
+  async clearMorphWeights(
+    entityId: string,
+    names?: string[],
+  ): Promise<
+    RuntimeQueryResult & {
+      success: boolean;
+      cleared?: string[];
+      error?: string;
+      diagnostics?: Array<{ code: string; message: string; remediation: string }>;
+    }
+  > {
+    await this.#ensureProcess();
+    return this.#request("animation.clearMorphWeights", {
+      entityId,
+      ...(names !== undefined ? { names } : {}),
     });
   }
 

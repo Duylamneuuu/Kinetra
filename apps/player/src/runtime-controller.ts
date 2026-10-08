@@ -11,6 +11,8 @@ import {
   ThreeSceneRuntime,
   type AssetResolver,
   type BlendSpaceRuntimeResult,
+  type ModelMorphTargetsState,
+  type MorphTargetDiagnostic,
 } from "@kinetra/renderer-three";
 import type { BlendSpaceDefinition } from "@kinetra/animation/blend-space.js";
 import type {
@@ -170,6 +172,7 @@ export interface PlayerRuntimeModelState {
   } | undefined;
   animation?: PlayerRuntimeModelAnimationState | undefined;
   nodes?: PlayerRuntimeModelNodeState[] | undefined;
+  morphTargets?: ModelMorphTargetsState | undefined;
   instance?: PlayerRuntimeModelInstanceMetadata | undefined;
   resourceSharing?: PlayerRuntimeModelResourceSharingMetadata | undefined;
   assetFingerprint?: string | undefined;
@@ -809,6 +812,12 @@ export class PlayerRuntimeController {
                 stop: (): void => {
                   this.stopAnimation(entityId);
                 },
+                setMorphWeights: (weights: Record<string, number>): boolean => {
+                  return this.setMorphWeights(entityId, weights).success;
+                },
+                clearMorphWeights: (names?: string[]): boolean => {
+                  return this.clearMorphWeights(entityId, names).success;
+                },
                 get activeClip(): string | undefined {
                   const meta = self.#runtime?.getModelMetadata(entityId);
                   return meta?.animation?.activeClip;
@@ -1102,6 +1111,61 @@ export class PlayerRuntimeController {
       this.#log("error", "animation.registerClipFailed", { entityId, error });
       return { success: false, error };
     }
+  }
+
+  setMorphWeights(
+    entityId: string,
+    weights: unknown,
+  ): { success: boolean; error?: string; diagnostics?: MorphTargetDiagnostic[] } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.morphFailed", { entityId, error });
+      return { success: false, error };
+    }
+    const result = this.#runtime.setMorphWeights(entityId, weights);
+    if (!result.success) {
+      this.#log("error", "animation.morphFailed", {
+        entityId,
+        error: result.error,
+        codes: (result.diagnostics ?? []).map((d) => d.code),
+      });
+      return {
+        success: false,
+        ...(result.error ? { error: result.error } : {}),
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+      };
+    }
+    this.#log("info", "animation.morphWeightsSet", {
+      entityId,
+      weights: Object.fromEntries((result.applied ?? []).map((u) => [u.name, u.weight])),
+    });
+    return { success: true };
+  }
+
+  clearMorphWeights(
+    entityId: string,
+    names?: unknown,
+  ): { success: boolean; error?: string; diagnostics?: MorphTargetDiagnostic[]; cleared?: string[] } {
+    if (!this.#runtime) {
+      const error = "Runtime is not running";
+      this.#log("error", "animation.morphFailed", { entityId, error });
+      return { success: false, error };
+    }
+    const result = this.#runtime.clearMorphWeights(entityId, names);
+    if (!result.success) {
+      this.#log("error", "animation.morphFailed", {
+        entityId,
+        error: result.error,
+        codes: (result.diagnostics ?? []).map((d) => d.code),
+      });
+      return {
+        success: false,
+        ...(result.error ? { error: result.error } : {}),
+        ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+      };
+    }
+    this.#log("info", "animation.morphWeightsCleared", { entityId, cleared: result.cleared ?? [] });
+    return { success: true, cleared: result.cleared ?? [] };
   }
 
   playAnimation(
@@ -1498,6 +1562,12 @@ export class PlayerRuntimeController {
 
     if (result.success) {
       this.#assetStatuses.set(assetId, "imported");
+      if (result.droppedMorphOverrides) {
+        this.#log("warning", "animation.morphOverridesDropped", {
+          assetId,
+          entities: result.droppedMorphOverrides,
+        });
+      }
       this.#log("info", "asset.runtimeReloadSucceeded", {
         assetId,
         affectedEntities: result.affectedEntities,
@@ -2050,6 +2120,7 @@ export class PlayerRuntimeController {
                 ...(modelMeta.bounds ? { bounds: modelMeta.bounds } : {}),
                 ...(modelMeta.animation ? { animation: modelMeta.animation } : {}),
                 ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),
+                ...(modelMeta.morphTargets ? { morphTargets: modelMeta.morphTargets } : {}),
                 ...(modelMeta.instance ? { instance: modelMeta.instance } : {}),
                 ...(modelMeta.resourceSharing ? { resourceSharing: modelMeta.resourceSharing } : {}),
                 ...(modelMeta.assetFingerprint ? { assetFingerprint: modelMeta.assetFingerprint } : {}),

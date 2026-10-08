@@ -79,3 +79,35 @@ The module does not touch Three.js.
 - Bridge commands: `animation.blendSpace.play`, `animation.blendSpace.setInput` (logs `animation.blendSpace.played` / `playFailed` / `inputFailed`).
 
 Not yet supported: root motion while a blend space plays (refused with `anim.blendSpace.rootMotionUnsupported`), graph states that reference a blend space, and smooth crossfades into/out of a blend space.
+
+## Morph targets
+
+Morph targets (glTF blend shapes / Blender shape keys) are addressed by their
+semantic name, never by mesh or slot index. Names come from
+`mesh.extras.targetNames`, which three.js turns into `morphTargetDictionary`.
+
+- `@kinetra/animation/morph-targets` is the pure contract: it builds a
+  catalog of unique names (sorted by code point), binds a name to every
+  `(mesh, slot)` that carries it, and validates requests. A weight request is
+  all-or-nothing: an unknown name (with a case-sensitivity hint), a
+  non-finite weight, or a weight outside `[0, 1]` rejects the whole request
+  with `anim.morph.*` diagnostics, so callers never see a half-applied
+  expression.
+- `MorphTargetController` in `@kinetra/renderer-three` is created per model
+  instance at attach time. The engine owns the overrides; three.js influence
+  arrays are only written, never read back as the source of truth.
+  Overrides are re-applied after `AnimationMixer.update`, so a runtime
+  override wins over a clip that animates the same target; clearing an
+  override hands the target back to the clip or to the authored default.
+- `reloadAsset` carries overrides onto the new instance. Targets the new asset
+  no longer has are dropped and reported (`droppedMorphOverrides`, logged as
+  `animation.morphOverridesDropped`) instead of failing the reload.
+- Bridge commands: `animation.setMorphWeights { entityId, weights }` and
+  `animation.clearMorphWeights { entityId, names? }`. Game scripts reach the
+  same path through `animation.setMorphWeights` / `clearMorphWeights`.
+  Observation: `model.morphTargets = { targets: [{ name, weight, meshes,
+  overridden }], overrides }`.
+
+Not covered yet: morph weights as animation-graph parameters, crossfading
+between override values, and packaged-binary proof.
+

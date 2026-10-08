@@ -4,3 +4,4 @@ export * from "./assets.js";
 export * from "./template.js";
 
 export * from "./blend-space-player.js";
+export * from "./morph.js";
