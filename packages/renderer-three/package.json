@@ -11,8 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/runtime-three.test.js dist/test/multi-instance.test.js dist/test/reload.test.js dist/test/blend-space.test.js dist/test/morph.test.js"
-
+    "test": "node --test dist/test/runtime-three.test.js dist/test/multi-instance.test.js dist/test/reload.test.js dist/test/blend-space.test.js dist/test/morph.test.js dist/test/compressed-gltf.test.js"
   },
   "dependencies": {
     "@kinetra/animation": "workspace:*",
@@ -21,6 +20,7 @@
   },
   "devDependencies": {
     "@kinetra/asset-pipeline": "workspace:*",
-    "@types/three": "^0.180.0"
+    "@types/three": "^0.180.0",
+    "meshoptimizer": "0.22.0"
   }
 }

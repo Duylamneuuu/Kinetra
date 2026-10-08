@@ -1,8 +1,31 @@
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { clone as skeletonClone } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import type { AssetResolver } from "./assets.js";
+
+/**
+ * Compression codecs the runtime glTF loader can decode.
+ *
+ * Meshopt is self-contained (a WASM module shipped inside three.js), so it
+ * works unchanged in the packaged player. Draco and KTX2/Basis need external
+ * decoder/transcoder files that the player does not carry, so they are
+ * deliberately not enabled. `@kinetra/asset-pipeline` mirrors this as
+ * `RUNTIME_DECODER_CAPABILITIES`; a test keeps the two in sync.
+ */
+export const RUNTIME_GLTF_DECODERS = Object.freeze({
+  meshopt: true,
+  draco: false,
+  ktx2: false,
+} as const);
+
+/** The loader every model asset uses unless the caller injects its own. */
+export function createRuntimeGltfLoader(): GLTFLoader {
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  return loader;
+}
 
 export class ModelAssetTemplate {
   readonly assetId: string;
@@ -273,7 +296,7 @@ export class ModelTemplateCache {
   async resolveNewTemplate(
     assetId: string,
     resolver: AssetResolver,
-    loader: GLTFLoader = new GLTFLoader(),
+    loader: GLTFLoader = createRuntimeGltfLoader(),
   ): Promise<ModelAssetTemplate> {
     this.invalidate(assetId);
     return this.resolveTemplate(assetId, resolver, loader);
@@ -282,7 +305,7 @@ export class ModelTemplateCache {
   async resolveTemplate(
     assetId: string,
     resolver: AssetResolver,
-    loader: GLTFLoader = new GLTFLoader(),
+    loader: GLTFLoader = createRuntimeGltfLoader(),
   ): Promise<ModelAssetTemplate> {
     const existing = this.get(assetId);
     if (existing) {

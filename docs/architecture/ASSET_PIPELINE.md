@@ -65,6 +65,18 @@ Import should produce structured diagnostics, including:
 - unreasonable bounds;
 - missing collision representation.
 
+## Compression policy
+
+`@kinetra/asset-pipeline` inspects compression without decoding anything (`inspectGlbCompression` reads the GLB JSON chunk; `evaluateCompressionPolicy` judges it against a `CompressionPolicy`).
+
+| Codec | Runtime decodes it today | Why |
+| --- | --- | --- |
+| Meshopt (`EXT_meshopt_compression`) | yes | self-contained WASM shipped in three.js; wired by `createRuntimeGltfLoader` |
+| Draco (`KHR_draco_mesh_compression`) | no | needs external decoder files the player does not carry |
+| KTX2/Basis (`KHR_texture_basisu`) | no | needs external transcoder files the player does not carry |
+
+A required codec the runtime cannot decode is an `error` (loading would fail); an optional one is a `warning`. `RUNTIME_DECODER_CAPABILITIES` is the single table; flip an entry only after the loader and the packaged player can really decode that codec, and a test in `@kinetra/renderer-three` fails if the two tables disagree. The pipeline does not yet run an encoder: applying Meshopt is still an offline step.
+
 ## Resource lifetime
 
 Runtime scripts acquire asset handles rather than directly owning arbitrary Three.js resources. Scene unload and hot reload must have explicit disposal behavior.
