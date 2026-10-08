@@ -4,7 +4,7 @@ All notable changes merged to `main`, newest first. Kinetra has no tagged releas
 Entries are derived from squash-merge commit titles; the PR number links to the full description and verification evidence.
 What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](docs/STATUS.md), not here.
 
-Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title.
+Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
 ## 2026-10-09
 
@@ -17,6 +17,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 - **animation**: drive glTF morph targets by name in the runtime ([#72](https://github.com/Duylamneuuu/Kinetra/pull/72))
 - **animation**: play 1D/2D locomotion blend spaces in the runtime with phase sync ([#70](https://github.com/Duylamneuuu/Kinetra/pull/70))
 - **animation**: add pure 1D/2D locomotion blend-space contract ([#69](https://github.com/Duylamneuuu/Kinetra/pull/69))
+
+### Maintenance
+
+- **ci**: cache pnpm store, enforce frozen lockfile, cancel superseded PR runs ([#76](https://github.com/Duylamneuuu/Kinetra/pull/76))
 
 ## 2026-09-28
 
