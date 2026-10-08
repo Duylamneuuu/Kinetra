@@ -1,5 +1,6 @@
 import packager from "@electron/packager";
 import { access, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +8,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = join(here, "..");
 const sourceDir = join(appRoot, "dist", "package");
 const outDir = join(appRoot, "release");
+
+/**
+ * The packaged Electron runtime must match the Electron the tests ran
+ * against, so read the version from the installed package instead of
+ * hard-coding it next to package.json.
+ */
+export function resolveElectronVersion() {
+  const require = createRequire(join(appRoot, "package.json"));
+  const { version } = require("electron/package.json");
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`Unexpected installed electron version: ${String(version)}`);
+  }
+  return version;
+}
 
 /**
  * Package the assembled player as a portable desktop folder.
@@ -38,7 +53,7 @@ export async function packageDesktop(platform) {
     executableName: "KinetraGame",
     platform,
     arch,
-    electronVersion: "38.0.0",
+    electronVersion: resolveElectronVersion(),
     overwrite: true,
     asar: true,
     prune: false,
