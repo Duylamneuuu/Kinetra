@@ -86,10 +86,19 @@ export interface PerformanceReport {
 /**
  * Deterministic percentile calculation using linear rank interpolation.
  * Invariant: p50Ms <= p95Ms <= p99Ms <= maxMs
+ * Any non-finite sample (NaN/Infinity) makes the whole result NaN instead of an arbitrary finite value.
  */
 export function calculatePercentiles(samples: number[]): TimingPercentiles {
   if (samples.length === 0) {
     return { p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 };
+  }
+
+  // A NaN sample makes `a - b` an inconsistent comparator, so the sort order (and therefore every
+  // percentile except by luck) becomes arbitrary and can still look like a healthy finite number.
+  // An unmeasurable sample means the measurement is unreliable: report NaN so budgets fail loudly
+  // (getPerformanceMetricValue treats non-finite metrics as missing).
+  if (samples.some((sample) => typeof sample !== "number" || !Number.isFinite(sample))) {
+    return { p50Ms: Number.NaN, p95Ms: Number.NaN, p99Ms: Number.NaN, maxMs: Number.NaN };
   }
 
   const sorted = [...samples].sort((a, b) => a - b);
