@@ -346,9 +346,10 @@ What has meaningful proof (Slice 1, Node only):
 - Slice 2: the gameplay contracts are checked-in `AcceptanceManifest` JSON (`examples/orb-run/acceptance/`: win, timeout, save-load) executed by the engine's own `AcceptanceRunner` through an example-local headless `RuntimeProbe` (`OrbRunHeadlessProbe`, virtual fixed-step time); negative cases (missing path diagnostic, screenshot step without a renderer, corrupt save, rules rebalanced through the command bus, typo'd script id) fail at the expected step;
 - Slices 3-5: pure animation contracts (speed-driven locomotion blend space, two-bone foot placement with `solveTwoBoneIk`) and audio cues through an example-local `HeadlessAudioService` (exact cue order, bus gains, mute, restore, refusing service), all asserted without a renderer;
 - Slice 6: a HUD contract (`computeOrbRunHud`: objective, orb counter, `m:ss` timer with warning/critical/expired urgency, nearest-target compass marker, win/loss banner) as a pure function of gameplay state; exposed to acceptance as `state.hud.*` and asserted by `hud` and `hud-timeout` manifests, identical after a save/restore;
-- proof: `pnpm --filter @kinetra/example-orb-run test` (70 tests).
+- Slice 7: Orb Run's content goes through the asset pipeline: three deterministic GLB models and six WAV cues registered as `AssetRecord`s (synthetic provenance) and imported by the engine's `AssetReimportService` on an in-memory file system with example-local GLB/WAV importers; asserted: clean validation, byte-identical rebuilds, no-op re-import, an edit reimports only that asset, a corrupt source keeps the last good artifact, provenance policing;
+- proof: `pnpm --filter @kinetra/example-orb-run test` (82 tests).
 
-Not yet proven: rendering (the HUD is a model, nothing draws it), the Electron player, packaged builds. The player cannot load a sample's scripts yet (it hard-codes the Arena registrations), and there is no engine-owned headless world; see `examples/orb-run/README.md`.
+Not yet proven: rendering (the HUD is a model, nothing draws it; the imported assets are never loaded by a renderer), the Electron player, packaged builds. The player cannot load a sample's scripts yet (it hard-codes the Arena registrations), and there is no engine-owned headless world; see `examples/orb-run/README.md`.
 
 ## Open implementation references
 
