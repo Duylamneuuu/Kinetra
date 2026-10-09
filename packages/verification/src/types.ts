@@ -466,7 +466,8 @@ export const assertVisualSimilarityStepSchema = z.object({
   maxChangedPixelRatio: z.number().min(0).max(1).optional(),
   maxPerceptualHashDistance: z.number().int().min(0).max(64).optional(),
   maxMeanAbsoluteDifference: z.number().min(0).max(1).optional(),
-  pixelDiffThreshold: z.number().int().nonnegative().optional(),
+  // RGB absolute-sum difference per pixel: 3 channels x 255 = 765 is the maximum.
+  pixelDiffThreshold: z.number().int().min(0).max(765).optional(),
 }).strict();
 
 export const assertVisualDifferenceStepSchema = z.object({
@@ -575,6 +576,16 @@ export interface MissingPathDiagnostic {
   availableKeys: string[];
 }
 
+/**
+ * A visual helper rejected its input (undecodable PNG, invalid threshold,
+ * malformed image). `code` is the `VisualError.code` so agents can branch on
+ * it; `details` carries the structured context the helper attached.
+ */
+export interface VisualErrorInfo {
+  code: string;
+  details: Record<string, unknown>;
+}
+
 export interface StepResult {
   index: number;
   type: AcceptanceStep["type"];
@@ -585,6 +596,7 @@ export interface StepResult {
   expected?: unknown | undefined;
   actual?: unknown | undefined;
   diagnostics?: MissingPathDiagnostic | undefined;
+  visualError?: VisualErrorInfo | undefined;
   visualEvidence?: VisualFrameEvidence | undefined;
   visualComparison?: VisualComparison | undefined;
   critiqueReport?: VisualCritiqueReport | undefined;
