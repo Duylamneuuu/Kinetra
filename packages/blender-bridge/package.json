@@ -9,7 +9,7 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/blender-bridge.test.js dist/test/importer.test.js dist/test/hardening.test.js"
+    "test":"node --test dist/test/blender-bridge.test.js dist/test/importer.test.js dist/test/hardening.test.js dist/test/staging-cleanup.test.js"
   },
   "dependencies": {
     "@kinetra/asset-pipeline": "workspace:*"
