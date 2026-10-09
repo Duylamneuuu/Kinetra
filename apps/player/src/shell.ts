@@ -12,6 +12,7 @@ import type {
   PlayerRuntimeController,
   GameShellMode,
 } from "./runtime-controller.js";
+import { singleFlight } from "./single-flight.js";
 
 export class GameShellController {
   #runtime: PlayerRuntimeController;
@@ -153,7 +154,21 @@ export class GameShellController {
     return hasSave;
   }
 
-  async startArenaGame(fromSave = false): Promise<void> {
+  /**
+   * Starts (or restarts) the arena. A call made while a previous start is still
+   * pending (double-click on Start, Continue then New Game) joins that start
+   * instead of stopping and re-creating the runtime a second time. Once it
+   * settles, restart buttons start a fresh run as before.
+   */
+  startArenaGame(fromSave = false): Promise<void> {
+    return this.#guardedStart(fromSave);
+  }
+
+  readonly #guardedStart = singleFlight((fromSave: boolean) =>
+    this.#startArenaGameUnguarded(fromSave),
+  );
+
+  async #startArenaGameUnguarded(fromSave: boolean): Promise<void> {
     await this.#runtime.stop();
     const defaultArenaProject = createArenaProject();
     await this.#runtime.start(defaultArenaProject, ARENA_SCENE_ID, 0, {
