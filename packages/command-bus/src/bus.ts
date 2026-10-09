@@ -316,6 +316,12 @@ export class CommandBus {
   }
 
   executeTransaction(commands: EngineCommand[], options: ExecuteOptions = {}): CommandResult {
+    // An empty transaction changes nothing, so it must not bump the revision, push an
+    // undo entry (a full project clone) or log an event that claims something happened.
+    if (!Array.isArray(commands) || commands.length === 0) {
+      throw new CommandError("INVALID_COMMAND", "A transaction needs at least one command");
+    }
+
     assertRevision(options.expectedProjectRevision, this.#revision);
 
     for (const command of commands) {
