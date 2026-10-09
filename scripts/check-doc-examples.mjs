@@ -23,13 +23,13 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractExamples } from "./doc-examples.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const keep = process.argv.includes("--keep");
 const tscBin = createRequire(join(root, "package.json")).resolve("typescript/bin/tsc");
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".doc-examples", ".pnpm-store", "release", "out"]);
-const FENCE = /^(```|~~~)\s*(ts|typescript)\s+doc-check(?:=([a-z0-9-]+))?\s*$/;
 
 async function* markdownFiles(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -41,34 +41,9 @@ async function* markdownFiles(dir) {
   }
 }
 
-function extractExamples(file, text) {
-  const lines = text.split(/\r?\n/);
-  const examples = [];
-  for (let i = 0; i < lines.length; i++) {
-    const match = FENCE.exec(lines[i]);
-    if (!match) continue;
-    const fence = match[1];
-    const start = i + 1;
-    let end = start;
-    while (end < lines.length && lines[end].trim() !== fence) end++;
-    if (end >= lines.length) throw new Error(`${relative(root, file)}:${i + 1}: unterminated doc-check fence`);
-    let pkg = match[3];
-    if (!pkg) {
-      const parts = relative(root, file).split(sep);
-      if (parts[0] === "packages" && parts.length > 2) pkg = parts[1];
-    }
-    if (!pkg) {
-      throw new Error(`${relative(root, file)}:${i + 1}: doc-check outside packages/ must name a package (\`\`\`ts doc-check=<package>)`);
-    }
-    examples.push({ file, line: i + 1, pkg, code: lines.slice(start, end).join("\n") + "\n" });
-    i = end;
-  }
-  return examples;
-}
-
 const examples = [];
 for await (const file of markdownFiles(root)) {
-  examples.push(...extractExamples(file, await readFile(file, "utf8")));
+  examples.push(...extractExamples(file, await readFile(file, "utf8"), root));
 }
 
 if (examples.length === 0) {
