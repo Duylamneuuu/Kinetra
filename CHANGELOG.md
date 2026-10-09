@@ -72,6 +72,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **scripts**: extract doc-check parser and test it; malformed doc-check fences now fail instead of being skipped ([#194](https://github.com/Duylamneuuu/Kinetra/pull/194))
 - **physics-rapier**: determinism/fuzz replay, advance() slicing, step(dt) restore, dynamic material validation, controller release on remove ([#190](https://github.com/Duylamneuuu/Kinetra/pull/190))
 - **asset-pipeline**: edge cases for validateAssetRecord, inspectGlb and normalizeGlb (+17 tests) ([#181](https://github.com/Duylamneuuu/Kinetra/pull/181))
 - **scripts**: unit + fixture tests for the license gate (extract license-policy.mjs) ([#176](https://github.com/Duylamneuuu/Kinetra/pull/176))
