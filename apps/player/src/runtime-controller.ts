@@ -96,6 +96,7 @@ export interface PlayerRuntimeModelBlendSpaceState {
   phase: number;
   cycleDuration: number;
   speed: number;
+  groupWeight: number;
   dominantClip: string;
 }
 

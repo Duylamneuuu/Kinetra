@@ -36,6 +36,7 @@ export interface ModelBlendSpaceState {
   phase: number;
   cycleDuration: number;
   speed: number;
+  groupWeight: number;
   dominantClip: string;
 }
 
