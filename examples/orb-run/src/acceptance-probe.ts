@@ -22,6 +22,9 @@ import {
 import { ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_SCENE_ID } from "./ids.js";
 import type { HeadlessSceneSimulation } from "./simulation.js";
 
+/** Upper bound for one `step`/`wait`/`hold` (matches the player's `runtime.step`: ~10 minutes at 60 Hz). */
+export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
+
 /**
  * `RuntimeProbe` for Orb Run over the headless simulation, so the engine's own
  * `AcceptanceRunner` can execute an `AcceptanceManifest` against the game in
@@ -96,6 +99,9 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     if (Array.isArray(event.value)) {
       throw new Error(`Orb Run actions are scalar; "${event.action}" got a vector value`);
     }
+    // The Electron player drops every input while paused (`runtime.inputBlockedWhilePaused`),
+    // so a press queued during a pause must not leak into the first step after resume.
+    if (this.#paused) return;
     const value = event.value ?? 1;
     switch (event.phase) {
       case "press":
@@ -104,11 +110,17 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       case "release":
         simulation.setAction(event.action, 0);
         return;
-      case "hold":
+      case "hold": {
+        // Validate the duration before pressing: a rejected hold must not leave the action stuck down.
+        const steps = this.#stepsFor(event.durationMs ?? 0);
         simulation.setAction(event.action, value);
-        this.#advance(this.#stepsFor(event.durationMs ?? 0));
-        simulation.setAction(event.action, 0);
+        try {
+          this.#advance(steps);
+        } finally {
+          simulation.setAction(event.action, 0);
+        }
         return;
+      }
     }
   }
 
@@ -141,6 +153,15 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
 
   async step(steps = 1, deltaSeconds?: number): Promise<void> {
     const simulation = this.#require();
+    // Same bounds as the Electron player's `runtime.step`, so a manifest that
+    // the player rejects is rejected here too (a NaN/negative count would
+    // otherwise be a silent no-op and a huge one would hang the run).
+    if (!Number.isInteger(steps) || steps < 0 || steps > ORB_RUN_MAX_STEPS_PER_CALL) {
+      throw new TypeError(`steps must be an integer from 0 to ${ORB_RUN_MAX_STEPS_PER_CALL}, got ${String(steps)}`);
+    }
+    if (deltaSeconds !== undefined && (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0)) {
+      throw new TypeError(`deltaSeconds must be a finite number > 0, got ${String(deltaSeconds)}`);
+    }
     if (deltaSeconds !== undefined && Math.abs(deltaSeconds - simulation.fixedDeltaSeconds) > 1e-9) {
       throw new Error(
         `Orb Run runs at a fixed step of ${simulation.fixedDeltaSeconds}s; runtime.step asked for ${deltaSeconds}s`,
@@ -283,7 +304,18 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     if (!Number.isFinite(milliseconds) || milliseconds < 0) {
       throw new RangeError(`Duration must be finite and >= 0, got ${milliseconds}`);
     }
-    return Math.round(milliseconds / 1000 / simulation.fixedDeltaSeconds);
+    const steps = Math.round(milliseconds / 1000 / simulation.fixedDeltaSeconds);
+    if (steps > ORB_RUN_MAX_STEPS_PER_CALL) {
+      throw new RangeError(
+        `Duration ${milliseconds}ms is ${steps} fixed steps; the limit is ${ORB_RUN_MAX_STEPS_PER_CALL} per call`,
+      );
+    }
+    if (steps === 0 && milliseconds > 0) {
+      throw new RangeError(
+        `Duration ${milliseconds}ms is shorter than half a fixed step (${simulation.fixedDeltaSeconds * 1000}ms) and would advance nothing`,
+      );
+    }
+    return steps;
   }
 
   #advance(steps: number): void {
