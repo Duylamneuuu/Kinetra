@@ -269,6 +269,8 @@ export class ThreeSceneRuntime {
   #instances = new Map<string, ModelInstance>();
   #morphControllers = new Map<string, MorphTargetController>();
   #ikControllers = new Map<string, IkController>();
+  /** Bumped by every attach/detach so an async load can tell it was superseded. */
+  #modelLoadTokens = new Map<string, number>();
   #disposed = false;
 
 
@@ -393,6 +395,16 @@ export class ThreeSceneRuntime {
     return this.#templateCache;
   }
 
+  #beginModelLoad(entityId: string): number {
+    const token = (this.#modelLoadTokens.get(entityId) ?? 0) + 1;
+    this.#modelLoadTokens.set(entityId, token);
+    return token;
+  }
+
+  #isModelLoadCurrent(entityId: string, token: number): boolean {
+    return !this.#disposed && this.#modelLoadTokens.get(entityId) === token;
+  }
+
   async loadModels(resolver: AssetResolver): Promise<Map<string, ModelMetadata>> {
     if (this.#disposed) {
       throw new Error("Cannot load models into a disposed ThreeSceneRuntime");
@@ -406,19 +418,24 @@ export class ThreeSceneRuntime {
           return;
         }
 
+        const token = this.#beginModelLoad(entityId);
         try {
           const template = await this.#templateCache.resolveTemplate(metadata.assetId, resolver);
+          // Disposed, detached or re-attached while the asset resolved: do not
+          // install an instance nobody owns any more.
+          if (!this.#isModelLoadCurrent(entityId, token)) return;
           const instance = template.createInstance(entityId);
           this.#instances.set(entityId, instance);
           this.#attachInstance(entityId, object, instance, metadata);
         } catch (error) {
+          if (!this.#isModelLoadCurrent(entityId, token)) return;
           metadata.loaded = false;
           metadata.error = error instanceof Error ? error.message : String(error);
         }
       }),
     );
 
-    this.#updateResourceSharingMetadata();
+    if (!this.#disposed) this.#updateResourceSharingMetadata();
     return this.#models;
   }
 
@@ -453,24 +470,39 @@ export class ThreeSceneRuntime {
       metadata.assetId = assetId;
     }
 
+    const token = this.#beginModelLoad(entityId);
     try {
       const template = await this.#templateCache.resolveTemplate(assetId, resolver);
+      if (!this.#isModelLoadCurrent(entityId, token)) {
+        return { success: false, error: this.#supersededLoadMessage(entityId, assetId) };
+      }
       const instance = template.createInstance(entityId);
       this.#instances.set(entityId, instance);
       this.#attachInstance(entityId, object, instance, metadata);
       this.#updateResourceSharingMetadata();
       return { success: true, metadata };
     } catch (error) {
+      if (!this.#isModelLoadCurrent(entityId, token)) {
+        return { success: false, error: this.#supersededLoadMessage(entityId, assetId) };
+      }
       metadata.loaded = false;
       metadata.error = error instanceof Error ? error.message : String(error);
       return { success: false, error: metadata.error };
     }
   }
 
+  #supersededLoadMessage(entityId: string, assetId: string): string {
+    return this.#disposed
+      ? "Cannot attach model to a disposed ThreeSceneRuntime"
+      : `Attaching "${assetId}" to entity "${entityId}" was superseded by a newer attach or detach`;
+  }
+
   detachModel(entityId: string): { success: boolean; error?: string } {
     if (this.#disposed) {
       return { success: false, error: "Runtime is disposed" };
     }
+    // Cancels any attach/load still waiting on its asset.
+    this.#beginModelLoad(entityId);
 
     const session = this.#animatorSessions.get(entityId);
     if (session) {
@@ -552,6 +584,9 @@ export class ThreeSceneRuntime {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       return { success: false, affectedEntities, error: errorMsg };
+    }
+    if (this.#disposed) {
+      return { success: false, affectedEntities: [], error: "Runtime is disposed" };
     }
 
     for (const entityId of affectedEntities) {
