@@ -48,6 +48,14 @@
     "./ik": {
       "types": "./dist/src/ik.d.ts",
       "default": "./dist/src/ik.js"
+    },
+    "./events.js": {
+      "types": "./dist/src/events.d.ts",
+      "default": "./dist/src/events.js"
+    },
+    "./events": {
+      "types": "./dist/src/events.d.ts",
+      "default": "./dist/src/events.js"
     }
   },
   "types": "./dist/src/index.d.ts",
