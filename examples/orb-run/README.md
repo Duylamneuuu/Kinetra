@@ -22,6 +22,7 @@ the game with one `entity.patch` and no code change.
 | `src/game.ts` | Run summary, a semantic-input playtest bot (`walkTo`), the winning route, save capture/restore. |
 | `src/acceptance-probe.ts` | `OrbRunHeadlessProbe`: a `@kinetra/verification` `RuntimeProbe` over the headless simulation, so the engine's `AcceptanceRunner` runs Orb Run manifests in plain Node (virtual fixed-step time; frames/vector input/other scenes fail loudly). |
 | `acceptance/*.acceptance.json` | Gameplay contracts as engine `AcceptanceManifest`s: `win`, `timeout`, `save-load`. |
+| `src/locomotion.ts`, `src/foot-ik.ts` | Pure animation contracts: speed-driven locomotion blend space and two-bone foot placement (`planFootPlacement`). |
 | `test/` | `authoring.test.ts` (MCP + command bus), `gameplay.test.ts` (win/lose/clamp/determinism/save), `acceptance.test.ts` (manifests on `AcceptanceRunner`, negative cases). |
 
 ## Slices
@@ -37,8 +38,9 @@ the game with one `entity.patch` and no code change.
    Not proven yet: rendering, the Electron player, packaged builds.
 2. **Slice 2: acceptance as engine manifests.** `acceptance/{win,timeout,save-load}.acceptance.json` run on `AcceptanceRunner` through `OrbRunHeadlessProbe`. Proof: every step of every manifest passes; a missing path gives a structured `missing_path` diagnostic; screenshot steps fail (no renderer) instead of passing; corrupt saves fail `save.load` without touching the running game; a 5 s clock patched through the command bus makes the *same* win manifest fail at the third-orb check; a typo'd script id fails `assert.logAbsent`.
    Snapshot paths: `state.game.<status|collectedCount|totalOrbs|exitUnlocked|elapsedSeconds|remainingSeconds|step>`, `state.entities.<Name>.position.<i>` / `.script.*`, `state.events.<orbCollected|exitUnlocked|won|lost>`, `state.paused`.
-3. Next: the same manifests in the real Electron player (blocked on #79), or an animated character (blend space driven by speed, IK foot placement).
-4. Later: an animated character (blend space driven by speed, IK foot placement), audio, assets via the asset pipeline, HUD, packaged smoke.
+3. **Slice 3: locomotion blend space.** `src/locomotion.ts`: a pure 1D blend space (idle/walk/run at 0 / 1.5 / 4 m/s) on `@kinetra/animation`, driven by horizontal speed. Proof: valid definition, exact weights at sample speeds, blended weights sum to 1, negative speed clamps to idle.
+4. **Slice 4 (this PR): foot placement with the engine's two-bone IK.** `src/foot-ik.ts` (`planFootPlacement`): lowers the pelvis to the lowest foot's ground, then solves both legs with `solveTwoBoneIk`, knees forward. Proof (pure contract, no renderer): flat ground plants both ankles with exact bone lengths; a step plants only that foot higher; a drop-off lowers the pelvis by exactly the drop; a ledge out of reach reports `reachable:false`/`converged:false` and the leg stretches toward it; deterministic; non-finite input throws. Not proven: applying the solved pose to a real skinned model in the player (needs #79).
+5. Next: the same manifests in the real Electron player (blocked on #79), audio, assets via the asset pipeline, HUD, packaged smoke.
 
 ## Engine requests found while building this
 

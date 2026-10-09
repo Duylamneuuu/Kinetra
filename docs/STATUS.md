@@ -270,10 +270,12 @@ What has meaningful proof:
 - kinematic character controller driven by semantic input (`player.moveRight`) with obstacle collision clipping (`actual displacement < requested displacement`);
 - real-time transform synchronization from physics world into Three.js scene graph;
 - deterministic stepping command (`runtime.step`) exposed over the runtime bridge;
-- full acceptance verification (`real-physics.test.ts`) driving live Electron runtime with real PNG capture and clean teardown.
+- full acceptance verification (`real-physics.test.ts`) driving live Electron runtime with real PNG capture and clean teardown;
+- engine-level spatial queries on `RapierPhysicsWorld`: `raycast` and `shapeCast` (sphere / box / capsule, optional rotation) return Kinetra-owned `PhysicsHit` structs (`entityId`, `point`, `normal`, `distance`, `startedInside`) with no Rapier handles, filter by query layer (`Collider.layer`, 0..31, default 0) and `excludeEntityIds`, never advance the simulation (stale broad phase refreshed with a zero-timestep step; a test proves an interleaved-query run is bit-identical to a query-free run), and reject malformed input with `RangeError`. Proven by 16 unit tests in `packages/physics-rapier/test/queries.test.ts` (29 physics tests total). Sphere-cast contact points are exact (closest point on the hit collider at impact); box/capsule contact points come from Rapier's iterative time-of-impact solver and are only accurate to ~1e-2; `distance` is accurate to ~1e-4. `startedInside` also covers a ray that starts exactly on a surface, whatever its direction.
 
 Still missing:
-- raycasting / shape casting query API;
+- exposing `raycast` / `shapeCast` to game scripts (`context.physics`) and the runtime bridge, plus a real-Electron test (the query API is currently proven at the `@kinetra/physics-rapier` level only);
+- collision layers that change *simulation* collisions (`Collider.layer` is a query filter only, #94);
 - physics materials / dynamic friction/restitution overrides;
 - compound colliders and trimeshes.
 

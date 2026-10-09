@@ -16,6 +16,7 @@
     "snapshot": "node dist/src/write-snapshot.js"
   },
   "dependencies": {
+    "@kinetra/animation": "workspace:*",
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/core": "workspace:*",
     "@kinetra/project-model": "workspace:*",
