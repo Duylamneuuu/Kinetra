@@ -110,7 +110,7 @@ export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string 
       sourceBone: p.sourceBone,
       targetBone: p.targetBone,
     }))
-    .sort((a, b) => a.semantic.localeCompare(b.semantic));
+    .sort((a, b) => compareCodePoints(a.semantic, b.semantic));
 
   const payload: Record<string, unknown> = {
     sourceAssetHash: input.sourceAssetHash ?? "",

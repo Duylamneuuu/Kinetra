@@ -18,11 +18,21 @@ export function validateClipMetadata(clip:AnimationClipMetadata):string[]{
   const issues:string[]=[];
   if(!clip.id) issues.push("clip id is required");
   if(!clip.name) issues.push("clip name is required");
-  if(!(clip.duration>0)) issues.push("clip duration must be positive");
+  const durationOk=typeof clip.duration==="number"&&Number.isFinite(clip.duration)&&clip.duration>0;
+  if(!durationOk) issues.push("clip duration must be a finite positive number");
+
+  if(!Array.isArray(clip.events)){
+    issues.push("clip events must be an array");
+    return issues;
+  }
 
   let previous=-Infinity;
   for(const event of clip.events){
-    if(event.time<0||event.time>clip.duration){
+    if(typeof event?.time!=="number"||!Number.isFinite(event.time)){
+      issues.push(`event "${event?.name}" has a non-finite time`);
+      continue;
+    }
+    if(event.time<0||(durationOk&&event.time>clip.duration)){
       issues.push(`event "${event.name}" is outside clip duration`);
     }
     if(event.time<previous){

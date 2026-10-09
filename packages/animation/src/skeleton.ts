@@ -19,6 +19,18 @@ export interface SkeletonProfileDiagnostic {
   semanticBone?:HumanoidBone;
 }
 
+function compareCodePoints(a:string,b:string):number{
+  return a<b?-1:a>b?1:0;
+}
+
+/** Bone map entries that actually name a bone (JSON/MCP input may carry null/undefined). */
+function boneEntries(profile:SkeletonProfile):Array<[HumanoidBone,string]>{
+  const bones=(profile&&typeof profile.bones==="object"&&profile.bones!==null?profile.bones:{}) as Record<string,unknown>;
+  return Object.entries(bones).filter(
+    (entry):entry is [HumanoidBone,string]=>typeof entry[1]==="string",
+  );
+}
+
 const REQUIRED: HumanoidBone[]=[
   "hips","spine","head",
   "leftUpperArm","leftLowerArm","leftHand",
@@ -31,8 +43,9 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
   const diagnostics:SkeletonProfileDiagnostic[]=[];
   const physical=new Map<string,HumanoidBone>();
 
-  for(const [semantic,name] of Object.entries(profile.bones) as Array<[HumanoidBone,string]>){
-    if(!name.trim()){
+  const rawBones=(profile&&typeof profile.bones==="object"&&profile.bones!==null?profile.bones:{}) as Record<string,unknown>;
+  for(const [semantic,name] of Object.entries(rawBones) as Array<[HumanoidBone,unknown]>){
+    if(typeof name!=="string"||!name.trim()){
       diagnostics.push({
         severity:"error",code:"skeleton.bone.empty",
         message:`Bone mapping for ${semantic} is empty`,semanticBone:semantic,
@@ -65,8 +78,8 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
 }
 
 export function skeletonSignature(profile:SkeletonProfile):string{
-  const canonical=Object.entries(profile.bones)
-    .sort(([a],[b])=>a.localeCompare(b))
+  const canonical=boneEntries(profile)
+    .sort(([a],[b])=>compareCodePoints(a,b))
     .map(([semantic,name])=>`${semantic}=${name}`)
     .join("\n");
   return createHash("sha256").update(canonical).digest("hex");
@@ -92,17 +105,17 @@ export function buildRetargetPlan(
   const pairs:RetargetBonePair[]=[];
   const missingOnTarget:HumanoidBone[]=[];
 
-  for(const [semantic,sourceBone] of Object.entries(source.bones) as Array<[HumanoidBone,string]>){
+  for(const [semantic,sourceBone] of boneEntries(source)){
     const targetBone=target.bones[semantic];
-    if(targetBone){
+    if(typeof targetBone==="string"&&targetBone!==""){
       pairs.push({semantic,sourceBone,targetBone});
     }else{
       missingOnTarget.push(semantic);
     }
   }
 
-  pairs.sort((a,b)=>a.semantic.localeCompare(b.semantic));
-  missingOnTarget.sort();
+  pairs.sort((a,b)=>compareCodePoints(a.semantic,b.semantic));
+  missingOnTarget.sort(compareCodePoints);
 
   return{
     sourceSignature:skeletonSignature(source),
