@@ -1,3 +1,4 @@
+import { validateBuiltInComponent } from "./components.js";
 import type {
   EntityDefinition,
   JsonValue,
@@ -9,6 +10,8 @@ export interface ValidationIssue {
   path: string;
   code: string;
   message: string;
+  /** How to fix it. Present on built-in component issues. */
+  remediation?: string;
 }
 
 export class ProjectValidationError extends Error {
@@ -130,6 +133,15 @@ function validateEntity(
           code: "component.value.not-json",
           message: "Component data must be valid JSON data",
         });
+      } else {
+        for (const problem of validateBuiltInComponent(componentName, componentValue)) {
+          issues.push({
+            path: `${path}.components.${componentName}${problem.field ? `.${problem.field}` : ""}`,
+            code: problem.code,
+            message: problem.message,
+            remediation: problem.remediation,
+          });
+        }
       }
     }
   }

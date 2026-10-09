@@ -61,11 +61,11 @@ export function formatToolError(error: unknown): string {
 
 function structuredIssues(
   value: unknown,
-): Array<{ path: string; code: string; message: string }> | undefined {
+): Array<{ path: string; code: string; message: string; remediation?: string }> | undefined {
   if (!Array.isArray(value) || value.length === 0) {
     return undefined;
   }
-  const issues: Array<{ path: string; code: string; message: string }> = [];
+  const issues: Array<{ path: string; code: string; message: string; remediation?: string }> = [];
   for (const item of value) {
     if (
       typeof item !== "object" ||
@@ -79,7 +79,13 @@ function structuredIssues(
     ) {
       return undefined;
     }
-    issues.push({ path: item.path, code: item.code, message: item.message });
+    const remediation = (item as { remediation?: unknown }).remediation;
+    issues.push({
+      path: item.path,
+      code: item.code,
+      message: item.message,
+      ...(typeof remediation === "string" ? { remediation } : {}),
+    });
   }
   return issues;
 }

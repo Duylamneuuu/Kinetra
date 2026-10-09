@@ -120,6 +120,64 @@ test("MCP acceptance rejects an invalid project with structured validation issue
   }
 });
 
+test("MCP rejects invalid built-in component payloads at the authoring boundary and leaves the revision unchanged", async () => {
+  const client = createClient(new KinetraAgentService(fixture()));
+  const entityId = stableId("entity", "bad-primitive");
+  type ErrorBody = {
+    message: string;
+    issues: Array<{ path: string; code: string; message: string; remediation?: string }>;
+  };
+
+  try {
+    const bad = await client.callTool("entity.create", {
+      sceneId,
+      id: entityId,
+      name: "Cylinder",
+      components: { Primitive: { kind: "cylinder" }, Transform: { position: [0, 1] } },
+      expectedProjectRevision: 0,
+    });
+    assert.equal(bad.isError, true);
+    const body = JSON.parse(bad.content[0]?.text ?? "") as ErrorBody;
+    assert.match(body.message, /validation failed/i);
+    const kind = body.issues.find((issue) => issue.code === "component.Primitive.kind.invalid");
+    assert.ok(kind, "expected a Primitive.kind issue");
+    assert.match(kind.path, /components\.Primitive\.kind$/);
+    assert.match(kind.remediation ?? "", /box, sphere, plane/);
+    assert.ok(body.issues.some((issue) => issue.code === "component.Transform.position.invalid"));
+
+    const afterCreate = JSON.parse(
+      (await client.callTool("project.inspect", {})).content[0]?.text ?? "",
+    ) as { revision: number };
+    assert.equal(afterCreate.revision, 0);
+
+    const good = await client.callTool("entity.create", {
+      sceneId,
+      id: entityId,
+      name: "Box",
+      components: { Primitive: { kind: "box" }, Transform: { position: [0, 1, 0] } },
+      expectedProjectRevision: 0,
+    });
+    assert.notEqual(good.isError, true);
+
+    const badPatch = await client.callTool("entity.patch", {
+      entityId,
+      component: "Primitive",
+      patch: { kind: "cylinder" },
+      expectedProjectRevision: 1,
+    });
+    assert.equal(badPatch.isError, true);
+    const patchBody = JSON.parse(badPatch.content[0]?.text ?? "") as ErrorBody;
+    assert.ok(patchBody.issues.some((issue) => issue.code === "component.Primitive.kind.invalid"));
+
+    const final = JSON.parse(
+      (await client.callTool("project.inspect", {})).content[0]?.text ?? "",
+    ) as { revision: number };
+    assert.equal(final.revision, 1);
+  } finally {
+    await client.close();
+  }
+});
+
 interface CallResult {
   content: Array<{ type: string; text?: string }>;
   isError?: boolean;
