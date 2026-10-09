@@ -757,6 +757,17 @@ export class ArenaEnemyController implements GameScript {
         };
       }
     }
+    // A defeated enemy is exactly an enemy with no health: any other pairing is
+    // an unreachable state (inert enemy that never reported enemy.defeated, or
+    // a "defeated" enemy that is still alive in the manager's totals).
+    if (typeof state.health === "number" && typeof state.state === "string") {
+      if ((state.health === 0) !== (state.state === "defeated")) {
+        return {
+          valid: false,
+          error: 'state "defeated" and health 0 must go together',
+        };
+      }
+    }
     if ("damageCooldown" in state) {
       if (
         typeof state.damageCooldown !== "number" ||
@@ -1097,6 +1108,12 @@ export class ArenaGameManager implements GameScript {
   }
 
   onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
+    // The run summary was logged when the run ended. Late events (the enemy still
+    // swinging at a dead player, a kill landing after extraction) must not keep
+    // mutating the stats and health that summary reported.
+    if (this.status !== "playing") {
+      return;
+    }
     if (event === "gameplay.playerHealthChanged") {
       const health = readArenaHealth(payload);
       if (health !== undefined) {
@@ -1232,6 +1249,11 @@ export class ArenaGameManager implements GameScript {
         return { valid: false, error: "enemyHealth must be a finite number in [0, 3]" };
       }
     }
+    if ("enemyState" in sessionData && sessionData.enemyState !== undefined) {
+      if (typeof sessionData.enemyState !== "string") {
+        return { valid: false, error: "enemyState must be a string" };
+      }
+    }
     if ("goalReached" in sessionData) {
       if (typeof sessionData.goalReached !== "boolean") {
         return { valid: false, error: "goalReached must be a boolean" };
@@ -1287,6 +1309,22 @@ export class ArenaGameManager implements GameScript {
           valid: false,
           error: 'challenge.status must be "idle", "active", "completed", or "failed"',
         };
+      }
+      // JSON.parse("1e999") is Infinity and NaN can arrive from in-process callers:
+      // either would restore fine, then serialise as null on the next save.
+      if (
+        ch.enemySpeedMultiplier !== undefined &&
+        (typeof ch.enemySpeedMultiplier !== "number" ||
+          !Number.isFinite(ch.enemySpeedMultiplier) ||
+          ch.enemySpeedMultiplier <= 0)
+      ) {
+        return {
+          valid: false,
+          error: "challenge.enemySpeedMultiplier must be a positive finite number",
+        };
+      }
+      if (ch.alertTriggered !== undefined && typeof ch.alertTriggered !== "boolean") {
+        return { valid: false, error: "challenge.alertTriggered must be a boolean" };
       }
     }
     if ("encounter" in sessionData && sessionData.encounter !== undefined) {
