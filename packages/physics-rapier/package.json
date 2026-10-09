@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/physics.test.js dist/test/queries.test.js dist/test/validation.test.js"
+    "test": "node --test dist/test/physics.test.js dist/test/queries.test.js dist/test/validation.test.js dist/test/determinism.test.js"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.20.0",
