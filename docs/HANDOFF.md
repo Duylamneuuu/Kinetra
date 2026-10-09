@@ -332,8 +332,26 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 ### 21. Executable Documentation (docs)
 
 - `pnpm check:docs` (`scripts/check-doc-examples.mjs`, part of `pnpm check`) compiles every ```` ```ts doc-check ```` fence in the READMEs and guides with the owning package's tsconfig and runs it with Node, so a README example that no longer typechecks or asserts wrongly fails CI;
-- Package READMEs with checked examples: animation, asset-pipeline, audio, command-bus, core, input, navigation-recast, physics-rapier, project-model, renderer-three, save-state, verification, plus `docs/guides/AI_AGENT_MCP.md` (tool table from `packages/mcp-server/src/server.ts`);
-- **Not done**: READMEs for blender-bridge (short), desktop-build, mcp-server (no checked example yet), apps/player and apps/editor; TSDoc on every public export.
+- Package READMEs with checked examples: animation, asset-pipeline, audio, command-bus, core, input, navigation-recast, physics-rapier, project-model, renderer-three, save-state, verification, blender-bridge, plus `docs/guides/AI_AGENT_MCP.md` (tool table from `packages/mcp-server/src/server.ts`);
+- **Not done**: READMEs for desktop-build (the package has no source yet), apps/player and apps/editor; the mcp-server README links the executed example in the agent guide instead of carrying its own; TSDoc on every public export.
+
+### 22. Bounded Histories (P0/P2, PRs #226 and #224)
+
+- **Contract**: `CommandBus` keeps at most `maxUndoDepth` undo entries (default 100, `Infinity` disables the bound) and `maxEventLogLength` event-log entries; an undo token that was evicted (or already consumed) fails with the structured `UNDO_EXPIRED` error whose remediation says to re-apply with new commands or raise `maxUndoDepth`. `LocalRuntimeHost` (`@kinetra/mcp-server`) keeps at most `MAX_LOCAL_RUNTIME_LOG_ENTRIES` (5000) log entries and drops the oldest first;
+- **Proof**: `packages/command-bus/test/bounded-history.test.ts` and `packages/mcp-server/test/local-runtime-logs.test.ts` (Node; both are in the packages' `test` scripts);
+- **Not done**: the player runtime log and the editor have their own buffers that this change does not touch.
+
+### 23. Player Bridge Malformed Requests (P2, PR #223, issue #208)
+
+- **Contract**: a bridge line that is not a valid request (bad JSON, non-object, missing or non-string `id`/`method`) gets a structured failure response with `code` `BRIDGE_INVALID_JSON`, `BRIDGE_INVALID_REQUEST`, `BRIDGE_INVALID_ID` or `BRIDGE_INVALID_METHOD` (the `id` is echoed when it was a string, else `null`) instead of being dropped; parsing lives in the pure `apps/player/electron/bridge-protocol.ts`;
+- **Proof**: `apps/player/test/bridge-protocol.test.ts` (plain Node, run by `pnpm --filter @kinetra/player test`);
+- **Not done**: no real-Electron test sends a malformed line through the pipe or stdio transport.
+
+### 24. Dogfood Sample: Orb Run (P10, slices 1-7)
+
+- **Where**: `examples/orb-run` is its own workspace package authored over the real MCP server and played headless (project, gameplay scripts, acceptance manifests, locomotion blend space, two-bone foot IK, audio cues, HUD contract, asset-pipeline content); the per-slice proof and the 82-test count are in `docs/STATUS.md` ("Dogfood sample: Orb Run") and `examples/orb-run/README.md`;
+- **Proof**: `examples/orb-run/test/*.test.ts` (authoring, gameplay, acceptance, locomotion, foot-ik, audio, hud, assets), run by `pnpm --filter @kinetra/example-orb-run test`;
+- **Not done**: rendering (nothing draws the HUD, imported assets are never loaded by a renderer), the Electron player and packaged builds.
 
 ## Completion definition
 
