@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: foot placement with two-bone IK (slice 4) ([#160](https://github.com/Duylamneuuu/Kinetra/pull/160))
 - **physics**: raycast and shapeCast queries with layer filtering ([#155](https://github.com/Duylamneuuu/Kinetra/pull/155))
 - **orb-run**: locomotion blend space driven by speed (slice 3) ([#143](https://github.com/Duylamneuuu/Kinetra/pull/143))
 - **animation**: graph states that play a blend space, with crossfades into and out of it ([#146](https://github.com/Duylamneuuu/Kinetra/pull/146))
@@ -25,6 +26,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **mcp-server**: locale-independent scene/entity ordering + service/runtime contract tests ([#156](https://github.com/Duylamneuuu/Kinetra/pull/156))
 - **project-model**: keep JSON "__proto__" keys when serializing; add contract + round-trip fuzz tests ([#158](https://github.com/Duylamneuuu/Kinetra/pull/158))
 - **asset-pipeline**: canonical JSON hashing no longer collides on __proto__/NaN/Date; reject cycles ([#157](https://github.com/Duylamneuuu/Kinetra/pull/157))
 - **save-state**: remove temp file when write/sync fails ([#144](https://github.com/Duylamneuuu/Kinetra/pull/144))
