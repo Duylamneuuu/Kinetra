@@ -587,3 +587,46 @@ test("a query right after adding a body sees it without any step", async () => {
     physics.dispose();
   }
 });
+
+test("shapeCast sphere resting flush on a surface keeps an exact contact point", async () => {
+  const physics = await arenaWorld();
+  try {
+    const hit = physics.shapeCast({
+      shape: { type: "sphere", radius: 0.5 },
+      origin: { x: 3.25, y: 0.5, z: -1.5 },
+      direction: { x: 0, y: -1, z: 0 },
+    });
+    assert.ok(hit);
+    assert.equal(hit.entityId, "floor");
+    approx(hit.distance, 0, "flush distance", 1e-3);
+    approx(hit.point.x, 3.25, "flush point.x", 1e-3);
+    approx(hit.point.y, 0, "flush point.y", 1e-3);
+    approx(hit.point.z, -1.5, "flush point.z", 1e-3);
+    approx(hit.normal.y, 1, "flush normal.y", 1e-3);
+  } finally {
+    physics.dispose();
+  }
+});
+
+test("a ray that starts exactly on a surface counts as touching in any direction", async () => {
+  const physics = await arenaWorld();
+  try {
+    const hit = physics.raycast({
+      origin: { x: 1, y: 0, z: 1 },
+      direction: { x: 0, y: -1, z: 0 },
+    });
+    assert.ok(hit);
+    assert.equal(hit.entityId, "floor");
+    assert.equal(hit.startedInside, true);
+    assert.equal(hit.distance, 0);
+    // Solid-ray semantics: touching counts regardless of the direction.
+    const away = physics.raycast({
+      origin: { x: 1, y: 0, z: 1 },
+      direction: { x: 0, y: 1, z: 0 },
+    });
+    assert.equal(away?.startedInside, true);
+    assert.equal(away?.distance, 0);
+  } finally {
+    physics.dispose();
+  }
+});

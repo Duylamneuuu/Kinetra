@@ -511,9 +511,10 @@ export class RapierPhysicsWorld {
 
   /**
    * Sweeps a sphere, box or capsule along `direction` and returns the first contact. Same
-   * read-only / deterministic guarantees as `raycast`. `distance` is accurate to ~1e-4; the
-   * contact `point` comes from Rapier's iterative time-of-impact solver and is accurate to
-   * roughly 3e-3 world units.
+   * read-only / deterministic guarantees as `raycast`. `distance` is accurate to ~1e-4. The
+   * contact `point` of a sphere cast is the exact closest point on the hit collider; for box and
+   * capsule casts it comes from Rapier's iterative time-of-impact solver and is only accurate
+   * to roughly 1e-2 world units (flush contacts included).
    */
   shapeCast(query: ShapeCastQuery): PhysicsHit | null {
     assertFiniteVec3(query.origin, "shapeCast origin");
@@ -557,7 +558,25 @@ export class RapierPhysicsWorld {
     const distance = Math.max(0, hit.time_of_impact);
     const startedInside = distance <= 1e-9;
     // Rapier reports the contact point and outward normal of the hit collider in world space.
-    const witness = hit.witness1;
+    let witness: Vec3 = hit.witness1;
+    if (query.shape.type === "sphere") {
+      // Rapier's iterative TOI witness can be off by ~1e-2 for flush contacts; for a sphere the
+      // contact point is exactly the closest point of the hit collider to the centre at impact.
+      const centre = {
+        x: query.origin.x + direction.x * distance,
+        y: query.origin.y + direction.y * distance,
+        z: query.origin.z + direction.z * distance,
+      };
+      const projected = hit.collider.projectPoint(centre, true)?.point;
+      if (
+        projected &&
+        Number.isFinite(projected.x) &&
+        Number.isFinite(projected.y) &&
+        Number.isFinite(projected.z)
+      ) {
+        witness = projected;
+      }
+    }
     const worldNormal = hit.normal1;
     const normalLength = Math.hypot(worldNormal.x, worldNormal.y, worldNormal.z);
     const normal =

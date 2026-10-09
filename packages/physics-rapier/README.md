@@ -47,6 +47,7 @@ Rules:
   change `stats().fixedSteps`.
 - Bad input (zero or non-finite direction, non-positive `maxDistance`, invalid layer, bad shape
   or rotation) throws `RangeError`.
-- `startedInside` is true when the origin already overlaps a collider; `distance` is then 0 and
+- `startedInside` is true when the origin already touches or overlaps a collider (a ray starting exactly on a surface reports it whatever its direction); `distance` is then 0 and
   `normal` is the reverse of the cast direction.
+- Sphere-cast contact points are exact; box/capsule contact points come from Rapier's iterative solver (~1e-2). `distance` is accurate to ~1e-4.
 - Not proven yet: script/bridge exposure and a real-Electron test.
