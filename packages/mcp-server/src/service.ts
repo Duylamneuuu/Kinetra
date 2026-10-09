@@ -29,6 +29,7 @@ import {
   type RuntimeInputEvent,
   type RuntimeQuery,
 } from "./runtime.js";
+import { compareCodeUnits } from "./order.js";
 import { FileProjectStore, type ProjectStore } from "./store.js";
 
 export interface RunAcceptanceInput {
@@ -130,7 +131,7 @@ export class KinetraAgentService {
           name: scene.name,
           entityCount: scene.entities.length,
         }))
-        .sort((left, right) => left.id.localeCompare(right.id)),
+        .sort((left, right) => compareCodeUnits(left.id, right.id)),
     };
   }
 
@@ -160,7 +161,7 @@ export class KinetraAgentService {
         name: scene.name,
         entityCount: scene.entities.length,
       }))
-      .sort((left, right) => left.id.localeCompare(right.id));
+      .sort((left, right) => compareCodeUnits(left.id, right.id));
   }
 
   queryEntities(query: EntityQuery = {}) {
