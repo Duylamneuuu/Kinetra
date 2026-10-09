@@ -10,11 +10,8 @@ import {
   type ProjectDocument,
 } from "@kinetra/project-model";
 
-import {
-  KinetraAgentService,
-  LocalRuntimeHost,
-  compareCodeUnits,
-} from "../src/index.js";
+import { KinetraAgentService, LocalRuntimeHost } from "../src/index.js";
+import { compareCodeUnits } from "../src/order.js";
 
 const transform = {
   position: [0, 0, 0],
@@ -90,7 +87,7 @@ test("diffSince only reports events after the given revision", async () => {
   assert.deepEqual(service.diffSince(99).events, []);
 });
 
-test("every authoring command persists; undo persists the reverted project", async () => {
+test("create/patch/reparent/delete/undo each persist to disk", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kinetra-svc-contract-"));
   try {
     const path = join(dir, "game.kinetra.json");
@@ -105,6 +102,13 @@ test("every authoring command persists; undo persists the reverted project", asy
     const reparented = await service.reparentEntity({ entityId: "child" });
     assert.equal(reparented.ok, true);
     assert.equal((await load()).scenes[0]?.entities.find((entity) => entity.id === "child")?.parentId, undefined);
+
+    const patched = await service.patchComponent({ entityId: "parent", component: "Transform", patch: { position: [4, 5, 6] } });
+    assert.equal(patched.ok, true);
+    assert.deepEqual(
+      (await load()).scenes[0]?.entities.find((entity) => entity.id === "parent")?.components.Transform,
+      { ...transform, position: [4, 5, 6] },
+    );
 
     const created = await service.createScene({ id: "scene-extra", name: "Extra" });
     assert.deepEqual((await load()).scenes.map((scene) => scene.id).sort(), ["scene-extra", "scene-main"]);
@@ -145,7 +149,7 @@ test("a rejected command does not touch disk or the revision", async () => {
   }
 });
 
-test("runAcceptance rejects malformed input with coded infrastructure errors before launching anything", async () => {
+test("runAcceptance rejects malformed input with coded infrastructure errors", async () => {
   const service = new KinetraAgentService(project(["scene-main"]));
   const manifest = { schemaVersion: 1, id: "m", name: "m", scene: "scene-main", steps: [] };
   const code = (expected: string) => (error: Error & { code?: string }) => {
