@@ -367,7 +367,19 @@ export class RetargetBakeCache {
       clip: bakeResult.clip.toJSON(),
     };
 
-    await this.put(cacheKey, record);
+    // The cache is an optimisation: a failed write (disk full, read-only directory)
+    // must not discard a clip that was baked successfully.
+    const diagnostics = [...bakeResult.diagnostics];
+    try {
+      await this.put(cacheKey, record);
+    } catch (err: unknown) {
+      diagnostics.push({
+        severity: "warning",
+        code: "retarget.cache.writeFailed",
+        message: `Baked clip could not be written to the retarget cache: ${err instanceof Error ? err.message : String(err)}`,
+        hint: "The clip is returned uncached and will be baked again on the next request; check cache directory permissions and free space.",
+      });
+    }
 
     return {
       success: true,
@@ -380,7 +392,7 @@ export class RetargetBakeCache {
       duration: bakeResult.duration,
       clip: bakeResult.clip,
       record,
-      diagnostics: bakeResult.diagnostics,
+      diagnostics,
       regenerationReason,
     };
   }

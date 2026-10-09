@@ -263,6 +263,24 @@ export interface BakeRetargetResult {
   error?: string | undefined;
 }
 
+/**
+ * The bone map of a profile; `{}` when JSON/MCP input has no usable `bones` object
+ * (missing, null or an array), mirroring skeleton.ts so every entry point agrees.
+ */
+function boneMapOf(profile: SkeletonProfile): Record<string, unknown> {
+  const bones: unknown = profile?.bones;
+  return typeof bones === "object" && bones !== null && !Array.isArray(bones)
+    ? (bones as Record<string, unknown>)
+    : {};
+}
+
+/** The physical bone a semantic bone maps to, or undefined when unmapped/empty. */
+function mappedBone(profile: SkeletonProfile, semantic: HumanoidBone): string | undefined {
+  const map = boneMapOf(profile);
+  const name = Object.hasOwn(map, semantic) ? map[semantic] : undefined;
+  return typeof name === "string" && name !== "" ? name : undefined;
+}
+
 function getRestPose(
   map: RestPoseMap | undefined,
   boneName: string,
@@ -313,7 +331,7 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
   });
 
   // Verify essential bone mapping: hips is required for humanoid retargeting
-  if (!options.targetProfile.bones.hips) {
+  if (!mappedBone(options.targetProfile, "hips")) {
     const errorMsg = "Required humanoid bone 'hips' is not mapped on target skeleton profile";
     diagnostics.push({
       severity: "error",
@@ -333,7 +351,7 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
     };
   }
 
-  if (!options.sourceProfile.bones.hips) {
+  if (!mappedBone(options.sourceProfile, "hips")) {
     const errorMsg = "Required humanoid bone 'hips' is not mapped on source skeleton profile";
     diagnostics.push({
       severity: "error",
@@ -553,7 +571,11 @@ export function inspectRetargetedClip(
   targetProfile: SkeletonProfile,
 ): BakedClipInspectionResult {
   const diagnostics: RetargetDiagnostic[] = [];
-  const targetBoneSet = new Set(Object.values(targetProfile.bones).filter(Boolean) as string[]);
+  const targetBoneSet = new Set(
+    Object.values(boneMapOf(targetProfile)).filter(
+      (name): name is string => typeof name === "string" && name !== "",
+    ),
+  );
   const targetBonesAnimated = new Set<string>();
   const unmappedTracks: string[] = [];
 
