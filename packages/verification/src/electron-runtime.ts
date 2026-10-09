@@ -312,6 +312,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
   #pending = new Map<string, PendingRequest>();
   #nextRequestId = 1;
   #readyPromise: Promise<void> | undefined;
+  #starting: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
   #rejectReady: ((error: Error) => void) | undefined;
 
@@ -955,12 +956,23 @@ export class ElectronRuntimeHost implements RuntimeHost {
       return;
     }
 
-    if (this.transport === "stdio") {
-      await this.#ensureStdioProcess();
-      return;
+    // The pipe transport awaits `server.listen` before it spawns the child, so a second caller
+    // arriving in that window would start a second server and process, orphaning the first.
+    // All concurrent first callers share one in-flight startup instead.
+    if (!this.#starting) {
+      const starting = (
+        this.transport === "stdio"
+          ? this.#ensureStdioProcess()
+          : this.#ensurePipeProcess()
+      ).finally(() => {
+        if (this.#starting === starting) {
+          this.#starting = undefined;
+        }
+      });
+      this.#starting = starting;
     }
 
-    await this.#ensurePipeProcess();
+    await this.#starting;
   }
 
   async #ensurePipeProcess(): Promise<void> {
