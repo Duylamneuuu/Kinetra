@@ -110,25 +110,49 @@ export interface GameplaySaveData {
 
 export const CURRENT_SAVE_SCHEMA_VERSION = 2;
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export function createGameplaySaveMigrator(): SaveMigrator {
   return new SaveMigrator(CURRENT_SAVE_SCHEMA_VERSION)
     .register(1, (data: unknown) => {
+      // Saves are untrusted JSON from disk: fail with a descriptive error instead of a TypeError.
+      if (!isPlainRecord(data)) {
+        throw new Error("Save migration v1→v2 received invalid data: expected an object");
+      }
       const v1 = data as {
         sceneId: string;
-        entities?: Record<string, {
+        entities?: unknown;
+      };
+      if (v1.entities !== undefined && !isPlainRecord(v1.entities)) {
+        throw new Error("Save migration v1→v2 received invalid data: entities must be an object");
+      }
+
+      const entities: Record<string, EntitySaveState> = {};
+      for (const [entityId, rawEntry] of Object.entries(v1.entities ?? {})) {
+        if (!isPlainRecord(rawEntry)) {
+          throw new Error(
+            `Save migration v1→v2 received invalid data: entities["${entityId}"] must be an object`,
+          );
+        }
+        const entry = rawEntry as {
           position?: [number, number, number];
           rotation?: [number, number, number];
           state?: Record<string, unknown>;
-        }>;
-      };
-
-      const entities: Record<string, EntitySaveState> = {};
-      for (const [entityId, entry] of Object.entries(v1.entities ?? {})) {
-        entities[entityId] = {
-          ...(entry.position !== undefined ? { position: entry.position } : {}),
-          ...(entry.rotation !== undefined ? { rotation: entry.rotation } : {}),
-          ...(entry.state !== undefined ? { gameplay: entry.state } : {}),
         };
+        // defineProperty keeps an entity id such as "__proto__" as plain data;
+        // plain assignment would swap the prototype and silently drop the entity.
+        Object.defineProperty(entities, entityId, {
+          value: {
+            ...(entry.position !== undefined ? { position: entry.position } : {}),
+            ...(entry.rotation !== undefined ? { rotation: entry.rotation } : {}),
+            ...(entry.state !== undefined ? { gameplay: entry.state } : {}),
+          } satisfies EntitySaveState,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
 
       return {
