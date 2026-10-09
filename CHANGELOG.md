@@ -86,6 +86,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 - **repo**: real READMEs for input, audio and save-state with doc-checked examples ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 - **docs**: READMEs for command-bus, project-model, core (executable examples); CHANGELOG through #160 ([#165](https://github.com/Duylamneuuu/Kinetra/pull/165))
 - **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
+- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
+- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 
 ### Maintenance
 
