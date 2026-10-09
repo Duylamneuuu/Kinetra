@@ -189,3 +189,40 @@ test("performance: calculatePercentiles refuses to invent finite numbers from Na
   assert.equal(evaluation.passed, false);
   assert.equal(evaluation.violations[0]?.metric, "frame.p95Ms");
 });
+
+test("performance: a budget that checks nothing does not pass", () => {
+  for (const spec of [undefined, null, {}, { budgets: {} }, { budget: {} }, { windows: { "frame.p95Ms": 1 } }]) {
+    const result = evaluatePerformanceBudget(mockEvidence, spec, { platform: "linux" });
+    assert.equal(result.thresholdCount, 0, JSON.stringify(spec));
+    assert.equal(result.passed, false, `empty budget ${JSON.stringify(spec)} must not pass`);
+    assert.match(result.error ?? "", /performance\.budgetEmpty/);
+  }
+});
+
+test("performance: unusable threshold values are reported instead of silently dropped", () => {
+  const result = evaluatePerformanceBudget(
+    mockEvidence,
+    { "frame.p95Ms": "16", "renderer.drawCalls": { max: 100 }, "scene.objectCount": {}, "frame.maxMs": Number.NaN },
+    { platform: "linux" },
+  );
+  assert.equal(result.passed, false);
+  assert.match(result.error ?? "", /performance\.budgetInvalid/);
+  assert.match(result.error ?? "", /frame\.p95Ms/);
+  assert.match(result.error ?? "", /scene\.objectCount/);
+  assert.match(result.error ?? "", /frame\.maxMs/);
+
+  const override = evaluatePerformanceBudget(
+    mockEvidence,
+    { budgets: { "frame.p95Ms": 30 }, linux: { "frame.p95Ms": "bad" } },
+    { platform: "linux" },
+  );
+  assert.equal(override.passed, false);
+  assert.match(override.error ?? "", /linux:frame\.p95Ms/);
+});
+
+test("performance: a valid budget still passes and reports its threshold count", () => {
+  const result = evaluatePerformanceBudget(mockEvidence, { "frame.p95Ms": { max: 30 }, "renderer.drawCalls": 100 });
+  assert.equal(result.passed, true);
+  assert.equal(result.thresholdCount, 2);
+  assert.equal(result.error, undefined);
+});

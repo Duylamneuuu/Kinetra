@@ -70,6 +70,10 @@ export interface PerformanceBudgetEvaluation {
   violations: PerformanceBudgetViolation[];
   profile?: string;
   platform: string;
+  /** Number of usable thresholds that were checked on this platform. */
+  thresholdCount: number;
+  /** Why the budget could not be evaluated (no usable thresholds, or unusable threshold entries). */
+  error?: string;
 }
 
 export interface PerformanceReport {
@@ -140,9 +144,14 @@ export function getPerformanceMetricValue(
 export function resolveBudgetForPlatform(
   budgetSpec: unknown,
   platform: string = process.platform,
-): { profile?: string; thresholds: Record<string, { max?: number; min?: number }> } {
+): {
+  profile?: string;
+  thresholds: Record<string, { max?: number; min?: number }>;
+  /** Metric paths whose threshold value was present but unusable (not a finite number / empty object). */
+  invalid: string[];
+} {
   if (budgetSpec == null || typeof budgetSpec !== "object") {
-    return { thresholds: {} };
+    return { thresholds: {}, invalid: [] };
   }
 
   const raw = budgetSpec as Record<string, unknown>;
@@ -166,6 +175,7 @@ export function resolveBudgetForPlatform(
         : undefined;
 
   const thresholds: Record<string, { max?: number; min?: number }> = {};
+  const invalid: string[] = [];
 
   const normalizeThreshold = (val: unknown): { max?: number; min?: number } | undefined => {
     if (typeof val === "number" && Number.isFinite(val)) {
@@ -196,6 +206,9 @@ export function resolveBudgetForPlatform(
     const norm = normalizeThreshold(value);
     if (norm) {
       thresholds[key] = norm;
+    } else if (key.includes(".")) {
+      // Metric paths are dotted ("frame.p95Ms"); dropping one silently would make the budget pass.
+      invalid.push(key);
     }
   }
 
@@ -218,11 +231,13 @@ export function resolveBudgetForPlatform(
           ...thresholds[key],
           ...norm,
         };
+      } else {
+        invalid.push(`${platform}:${key}`);
       }
     }
   }
 
-  return { ...(profile !== undefined ? { profile } : {}), thresholds };
+  return { ...(profile !== undefined ? { profile } : {}), thresholds, invalid };
 }
 
 export function evaluatePerformanceBudget(
@@ -231,8 +246,18 @@ export function evaluatePerformanceBudget(
   options: { platform?: string } = {},
 ): PerformanceBudgetEvaluation {
   const platform = options.platform ?? process.platform;
-  const { profile, thresholds } = resolveBudgetForPlatform(budgetSpec, platform);
+  const { profile, thresholds, invalid } = resolveBudgetForPlatform(budgetSpec, platform);
   const violations: PerformanceBudgetViolation[] = [];
+  const thresholdCount = Object.keys(thresholds).length;
+
+  // A budget that checks nothing must not pass: an empty/missing budget or unusable threshold values
+  // would otherwise report "Performance budget passed" without comparing a single metric.
+  let error: string | undefined;
+  if (invalid.length > 0) {
+    error = `performance.budgetInvalid: unusable threshold for ${invalid.join(", ")} (expected a finite number or { max?, min? } with at least one finite bound)`;
+  } else if (thresholdCount === 0) {
+    error = `performance.budgetEmpty: no thresholds apply on ${platform}, so nothing was checked`;
+  }
 
   for (const [metric, threshold] of Object.entries(thresholds)) {
     const actual = getPerformanceMetricValue(evidence, metric);
@@ -266,10 +291,12 @@ export function evaluatePerformanceBudget(
   }
 
   return {
-    passed: violations.length === 0,
+    passed: violations.length === 0 && error === undefined,
     violations,
     ...(profile ? { profile } : {}),
     platform,
+    thresholdCount,
+    ...(error !== undefined ? { error } : {}),
   };
 }
 
