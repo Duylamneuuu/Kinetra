@@ -375,7 +375,22 @@ export class KinetraAgentService {
   async #execute(command: EngineCommand): Promise<CommandResult> {
     const before = this.bus.revision;
     const result = this.bus.execute(command);
-    await this.#persistIfMutated(before, result);
+    try {
+      await this.#persistIfMutated(before, result);
+    } catch (error) {
+      // The save failed, so memory is ahead of disk: roll the command back so the caller's
+      // error matches reality and the same command can be retried. When another command has
+      // already been applied meanwhile, undo is refused (it is last-in-first-out); that later
+      // command's save writes the whole project, so memory and disk converge anyway.
+      if (result.undoToken !== undefined && this.bus.revision === result.revision) {
+        try {
+          this.bus.undo(result.undoToken, result.revision);
+        } catch {
+          // Keep the original persistence error as the one reported.
+        }
+      }
+      throw error;
+    }
     return result;
   }
 
