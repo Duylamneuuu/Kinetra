@@ -38,6 +38,8 @@ export interface RunAcceptanceInput {
   project?: ProjectDocument;
   timeoutMs?: number;
   testScriptPreset?: string;
+  /** Game module id the player should run, e.g. "orb-run". Omitted runs the default game (Arena). */
+  game?: string;
   assets?: Record<string, string>;
 }
 
@@ -338,6 +340,7 @@ export class KinetraAgentService {
       initialRevision: this.bus.revision,
       closeOnStop: false,
       ...(input.testScriptPreset ? { testScriptPreset: input.testScriptPreset } : {}),
+      ...(input.game !== undefined ? { game: input.game } : {}),
       ...(input.assets ? { assets: input.assets } : {}),
     });
 

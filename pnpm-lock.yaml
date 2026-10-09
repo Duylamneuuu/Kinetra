@@ -42,6 +42,9 @@ importers:
       '@kinetra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@kinetra/example-orb-run':
+        specifier: workspace:*
+        version: link:../../examples/orb-run
       '@kinetra/input':
         specifier: workspace:*
         version: link:../../packages/input

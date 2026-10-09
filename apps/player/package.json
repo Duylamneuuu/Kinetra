@@ -22,6 +22,7 @@
     "@kinetra/animation": "workspace:*",
     "@kinetra/audio": "workspace:*",
     "@kinetra/core": "workspace:*",
+    "@kinetra/example-orb-run": "workspace:*",
     "@kinetra/input": "workspace:*",
     "@kinetra/navigation-recast": "workspace:*",
     "@kinetra/physics-rapier": "workspace:*",

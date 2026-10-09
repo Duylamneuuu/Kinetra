@@ -27,6 +27,8 @@ export interface KinetraRuntimeProbeOptions {
         | Record<string, { fingerprint?: string; sourceHash?: string }>
         | Promise<Record<string, { fingerprint?: string; sourceHash?: string }>>);
   testScriptPreset?: string;
+  /** Game module id the runtime should run (e.g. "orb-run"); the player's default game when omitted. */
+  game?: string;
 }
 
 export class KinetraRuntimeProbe implements RuntimeProbe {
@@ -47,6 +49,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         | Promise<Record<string, { fingerprint?: string; sourceHash?: string }>>)
     | undefined;
   readonly #testScriptPreset: string | undefined;
+  readonly #game: string | undefined;
   #currentSceneId: string | undefined;
 
   constructor(options: KinetraRuntimeProbeOptions) {
@@ -57,6 +60,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     this.#assets = options.assets;
     this.#assetMetadata = options.assetMetadata;
     this.#testScriptPreset = options.testScriptPreset;
+    this.#game = options.game;
   }
 
   async start(sceneId: string, _seed: number): Promise<void> {
@@ -91,6 +95,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         : undefined,
       {
         ...(assetMetadata !== undefined ? { assetMetadata } : {}),
+        ...(this.#game !== undefined ? { game: this.#game } : {}),
       },
     );
   }
