@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.assets",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    {
+      "type": "runtime.start",
+      "sceneId": "scene_12q1bczg4xp8m"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.count",
+      "expected": 9
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.modelCount",
+      "expected": 3
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.audioCount",
+      "expected": 6
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.importedCount",
+      "expected": 9
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.failedCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.errorCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.warningCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.reimportCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.unregisteredCues",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.revision",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.polycount",
+      "expected": 12
+    },
+    {
+      "type": "assert.near",
+      "path": "state.assets.byId.asset_orbrun_model_orb.dimensions.0",
+      "expected": 0.6,
+      "tolerance": 0.000001
+    },
+    {
+      "type": "assert.near",
+      "path": "state.assets.byId.asset_orbrun_model_exit_pad.dimensions.0",
+      "expected": 2,
+      "tolerance": 0.000001
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_sfx_win.sampleRateHz",
+      "expected": 22050
+    },
+    {
+      "type": "assert.near",
+      "path": "state.assets.byId.asset_orbrun_sfx_win.durationSeconds",
+      "expected": 0.6,
+      "tolerance": 0.000001
+    },
+    {
+      "type": "input",
+      "action": "player.moveRight",
+      "phase": "hold",
+      "durationMs": 2000
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.collectedCount",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.audio.played.asset_orbrun_sfx_pickup_1",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.unregisteredCues",
+      "expected": 0
+    },
+    {
+      "type": "asset.register",
+      "assetId": "asset_orbrun_model_orb",
+      "dataBase64": "Z2xURgIAAABoBAAApAMAAEpTT057ImFzc2V0Ijp7ImdlbmVyYXRvciI6ImdsVEYtVHJhbnNmb3JtIHY0LjUuMCIsInZlcnNpb24iOiIyLjAifSwiYWNjZXNzb3JzIjpbeyJuYW1lIjoiT3JiTWVzaF9wb3NpdGlvbnMiLCJ0eXBlIjoiVkVDMyIsImNvbXBvbmVudFR5cGUiOjUxMjYsImNvdW50Ijo4LCJtYXgiOlswLjMwMDAwMDAxMTkyMDkyODk2LDAuMzAwMDAwMDExOTIwOTI4OTYsMC4zMDAwMDAwMTE5MjA5Mjg5Nl0sIm1pbiI6Wy0wLjMwMDAwMDAxMTkyMDkyODk2LC0wLjMwMDAwMDAxMTkyMDkyODk2LC0wLjMwMDAwMDAxMTkyMDkyODk2XSwiYnVmZmVyVmlldyI6MCwiYnl0ZU9mZnNldCI6MH0seyJuYW1lIjoiT3JiTWVzaF9pbmRpY2VzIiwidHlwZSI6IlNDQUxBUiIsImNvbXBvbmVudFR5cGUiOjUxMjMsImNvdW50IjozNiwiYnVmZmVyVmlldyI6MSwiYnl0ZU9mZnNldCI6MH1dLCJidWZmZXJWaWV3cyI6W3siYnVmZmVyIjowLCJieXRlT2Zmc2V0IjowLCJieXRlTGVuZ3RoIjo5NiwiYnl0ZVN0cmlkZSI6MTIsInRhcmdldCI6MzQ5NjJ9LHsiYnVmZmVyIjowLCJieXRlT2Zmc2V0Ijo5NiwiYnl0ZUxlbmd0aCI6NzIsInRhcmdldCI6MzQ5NjN9XSwiYnVmZmVycyI6W3siYnl0ZUxlbmd0aCI6MTY4fV0sIm1hdGVyaWFscyI6W3sibmFtZSI6Ik9yYk1hdGVyaWFsIiwicGJyTWV0YWxsaWNSb3VnaG5lc3MiOnsiYmFzZUNvbG9yRmFjdG9yIjpbMC45LDAuMSwwLjEsMV0sInJvdWdobmVzc0ZhY3RvciI6MC40LCJtZXRhbGxpY0ZhY3RvciI6MC4xfX1dLCJtZXNoZXMiOlt7Im5hbWUiOiJPcmJNZXNoIiwicHJpbWl0aXZlcyI6W3siYXR0cmlidXRlcyI6eyJQT1NJVElPTiI6MH0sIm1vZGUiOjQsIm1hdGVyaWFsIjowLCJpbmRpY2VzIjoxfV19XSwibm9kZXMiOlt7Im5hbWUiOiJPcmIiLCJtZXNoIjowfV0sInNjZW5lcyI6W3sibmFtZSI6IlNjZW5lIiwibm9kZXMiOlswXX1dfSAgIKgAAABCSU4AmpmZvpqZmb6amZk+mpmZPpqZmb6amZk+mpmZPpqZmT6amZk+mpmZvpqZmT6amZk+mpmZvpqZmb6amZm+mpmZPpqZmb6amZm+mpmZPpqZmT6amZm+mpmZvpqZmT6amZm+AAABAAIAAAACAAMAAQAFAAYAAQAGAAIABQAEAAcABQAHAAYABAAAAAMABAADAAcAAwACAAYAAwAGAAcABAAFAAEABAABAAAA"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.importStatus",
+      "expected": "imported"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.revision",
+      "expected": 2
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.sourceHash",
+      "expected": "81154c59b83658a7a5414e8fb72886c4f5dfecbf7dff22bf4f0aafce404f8dd6"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_orb.fingerprint",
+      "expected": "f71900f24053092f506463313dd0f09a0ca7c44cc9e4802721e3e9edc7f20165"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.reimportCount",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.revision",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.collectedCount",
+      "expected": 1
+    },
+    {
+      "type": "asset.register",
+      "assetId": "asset_orbrun_model_player",
+      "dataBase64": "Z2xURgIAAAB0BAAAsAMAAEpTT04="
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.importStatus",
+      "expected": "failed"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.revision",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.fingerprint",
+      "expected": "31097ce78262ada124eb9298ad55979a5bae992bdc1a69a71d4dab33f8699492"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.failedCount",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.errorCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.importedCount",
+      "expected": 8
+    },
+    {
+      "type": "asset.register",
+      "assetId": "asset_orbrun_model_player",
+      "dataBase64": "Z2xURgIAAAB0BAAAsAMAAEpTT057ImFzc2V0Ijp7ImdlbmVyYXRvciI6ImdsVEYtVHJhbnNmb3JtIHY0LjUuMCIsInZlcnNpb24iOiIyLjAifSwiYWNjZXNzb3JzIjpbeyJuYW1lIjoiUnVubmVyTWVzaF9wb3NpdGlvbnMiLCJ0eXBlIjoiVkVDMyIsImNvbXBvbmVudFR5cGUiOjUxMjYsImNvdW50Ijo4LCJtYXgiOlswLjMwMDAwMDAxMTkyMDkyODk2LDAuODUwMDAwMDIzODQxODU3OSwwLjMwMDAwMDAxMTkyMDkyODk2XSwibWluIjpbLTAuMzAwMDAwMDExOTIwOTI4OTYsLTAuODUwMDAwMDIzODQxODU3OSwtMC4zMDAwMDAwMTE5MjA5Mjg5Nl0sImJ1ZmZlclZpZXciOjAsImJ5dGVPZmZzZXQiOjB9LHsibmFtZSI6IlJ1bm5lck1lc2hfaW5kaWNlcyIsInR5cGUiOiJTQ0FMQVIiLCJjb21wb25lbnRUeXBlIjo1MTIzLCJjb3VudCI6MzYsImJ1ZmZlclZpZXciOjEsImJ5dGVPZmZzZXQiOjB9XSwiYnVmZmVyVmlld3MiOlt7ImJ1ZmZlciI6MCwiYnl0ZU9mZnNldCI6MCwiYnl0ZUxlbmd0aCI6OTYsImJ5dGVTdHJpZGUiOjEyLCJ0YXJnZXQiOjM0OTYyfSx7ImJ1ZmZlciI6MCwiYnl0ZU9mZnNldCI6OTYsImJ5dGVMZW5ndGgiOjcyLCJ0YXJnZXQiOjM0OTYzfV0sImJ1ZmZlcnMiOlt7ImJ5dGVMZW5ndGgiOjE2OH1dLCJtYXRlcmlhbHMiOlt7Im5hbWUiOiJSdW5uZXJNYXRlcmlhbCIsInBick1ldGFsbGljUm91Z2huZXNzIjp7ImJhc2VDb2xvckZhY3RvciI6WzAuMiwwLjQ1LDAuOTUsMV0sInJvdWdobmVzc0ZhY3RvciI6MC40LCJtZXRhbGxpY0ZhY3RvciI6MC4xfX1dLCJtZXNoZXMiOlt7Im5hbWUiOiJSdW5uZXJNZXNoIiwicHJpbWl0aXZlcyI6W3siYXR0cmlidXRlcyI6eyJQT1NJVElPTiI6MH0sIm1vZGUiOjQsIm1hdGVyaWFsIjowLCJpbmRpY2VzIjoxfV19XSwibm9kZXMiOlt7Im5hbWUiOiJSdW5uZXIiLCJtZXNoIjowfV0sInNjZW5lcyI6W3sibmFtZSI6IlNjZW5lIiwibm9kZXMiOlswXX1dfagAAABCSU4AmpmZvpqZWb+amZk+mpmZPpqZWb+amZk+mpmZPpqZWT+amZk+mpmZvpqZWT+amZk+mpmZvpqZWb+amZm+mpmZPpqZWb+amZm+mpmZPpqZWT+amZm+mpmZvpqZWT+amZm+AAABAAIAAAACAAMAAQAFAAYAAQAGAAIABQAEAAcABQAHAAYABAAAAAMABAADAAcAAwACAAYAAwAGAAcABAAFAAEABAABAAAA"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.importStatus",
+      "expected": "imported"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.byId.asset_orbrun_model_player.revision",
+      "expected": 1
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.failedCount",
+      "expected": 0
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "hold",
+      "durationMs": 1000
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "hold",
+      "durationMs": 1000
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "hold",
+      "durationMs": 1000
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "hold",
+      "durationMs": 1000
+    },
+    {
+      "type": "wait",
+      "milliseconds": 100
+    },
+    {
+      "type": "input",
+      "action": "player.moveRight",
+      "phase": "hold",
+      "durationMs": 2000
+    },
+    {
+      "type": "wait",
+      "milliseconds": 100
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.status",
+      "expected": "won"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.audio.playedCount",
+      "expected": 5
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.unregisteredCues",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.assets.errorCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.metricMin",
+      "metric": "assets.count",
+      "min": 9
+    },
+    {
+      "type": "assert.metricMax",
+      "metric": "assets.failures",
+      "max": 1
+    },
+    {
+      "type": "assert.logAbsent",
+      "minimumLevel": "error"
+    },
+    {
+      "type": "runtime.stop"
+    }
+  ]
+}

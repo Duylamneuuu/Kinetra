@@ -9,6 +9,7 @@ import type {
 
 import { createOrbRunProject } from "./authoring.js";
 import type { OrbRunAnimatorOptions } from "./animator.js";
+import { OrbRunAssetCatalog } from "./assets.js";
 import { buildOrbRunHud } from "./hud.js";
 import {
   captureOrbRunSave,
@@ -48,6 +49,12 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  *   `maxBoneLengthError`, `legsValid`, `failedCount`; a pose that could not be computed is also an `animation.failed` warning log
  * - `audio.play` / `audio.stop` / `audio.setBusGain` / `audio.setBusMuted` steps drive the same headless mixer;
  *   a refused `audio.play` (unknown bus/asset) throws so the manifest fails instead of passing silently
+ * - `state.assets.*`: the content as the asset pipeline sees it (`OrbRunAssetCatalog`): `count`, `modelCount`, `audioCount`, `importedCount`,
+ *   `failedCount`, `errorCount`, `warningCount`, `reimportCount`, `unregisteredCues` (played cues with no registered asset) and
+ *   `byId.<assetId>.{kind|importStatus|revision|fingerprint|sourceHash|importedPath|bytes|polycount|dimensions.<n>|sampleRateHz|durationSeconds|error}`
+ * - `asset.register` (also `runtime.start.assets`) hands the probe new source bytes for an existing asset: the pipeline reimports it
+ *   (revision + fingerprint change; a corrupt file fails the import, keeps the last good artifact and logs an `asset.reimportFailed` warning);
+ *   an unknown asset id throws. The catalog lives as long as the probe (until `close()`), across runtime restarts.
  * - logs: every started cue also appears as an `audio.played` info log (same message the Electron player logs)
  */
 export class OrbRunHeadlessProbe implements RuntimeProbe {
@@ -57,6 +64,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   #paused = false;
   #slots = new Map<string, OrbRunSaveData>();
   #previousLogs: RuntimeLog[] = [];
+  #catalog: OrbRunAssetCatalog | undefined;
 
   constructor(options: { project?: ProjectDocument; animation?: OrbRunAnimatorOptions } = {}) {
     this.#project = options.project ?? createOrbRunProject();
@@ -73,8 +81,22 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       throw new Error(`Orb Run probe can only start scene "${ORB_RUN_SCENE_ID}", got "${sceneId}"`);
     }
     await this.stop();
+    await this.#assets();
     this.#simulation = await startOrbRunSimulation(this.#project, this.#animation);
     this.#paused = false;
+  }
+
+  /** The asset catalog (built on first use), for tests that want to cross-check the probe. */
+  async assets(): Promise<OrbRunAssetCatalog> {
+    return this.#assets();
+  }
+
+  async registerAsset(assetId: string, dataBase64: string): Promise<void> {
+    if (typeof dataBase64 !== "string" || dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) {
+      throw new TypeError(`Asset "${assetId}": dataBase64 is not valid base64`);
+    }
+    const catalog = await this.#assets();
+    await catalog.replaceSource(assetId, new Uint8Array(Buffer.from(dataBase64, "base64")));
   }
 
   async stop(): Promise<void> {
@@ -197,6 +219,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       lost: simulation.events(ORB_RUN_EVENT.lost).length,
     };
     const { player: _player, ...game } = summarizeOrbRun(simulation);
+    const catalog = await this.#assets();
     const audio = orbRunAudio(simulation);
     const audioState = audio.state();
     const cues = audio.cues();
@@ -211,6 +234,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
         events,
         hud: buildOrbRunHud(simulation),
         animation: orbRunAnimator(simulation).state(),
+        assets: catalog.state(cues.map((cue) => cue.assetId)),
         audio: {
           initialized: audioState.initialized,
           buses: Object.fromEntries(audioState.buses.map((bus) => [bus.id, bus])),
@@ -227,7 +251,12 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
 
   async logs(): Promise<RuntimeLog[]> {
     const current = this.#simulation ? this.#mapLogs(this.#simulation) : [];
-    return [...this.#previousLogs, ...current];
+    const assetLogs: RuntimeLog[] = (this.#catalog?.failures() ?? []).map((failure) => ({
+      level: "warning",
+      message: "asset.reimportFailed",
+      data: { ...failure },
+    }));
+    return [...this.#previousLogs, ...current, ...assetLogs];
   }
 
   async captureFrame(): Promise<Uint8Array> {
@@ -244,6 +273,12 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       "game.elapsedSeconds": summary.elapsedSeconds,
       "game.remainingSeconds": summary.remainingSeconds,
       "game.collectedCount": summary.collectedCount,
+      ...(this.#catalog
+        ? {
+            "assets.count": this.#catalog.pipeline.database.list().length,
+            "assets.failures": this.#catalog.failures().length,
+          }
+        : {}),
     };
   }
 
@@ -292,6 +327,12 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
 
   async close(): Promise<void> {
     await this.stop();
+    this.#catalog = undefined;
+  }
+
+  async #assets(): Promise<OrbRunAssetCatalog> {
+    this.#catalog ??= await OrbRunAssetCatalog.create();
+    return this.#catalog;
   }
 
   #require(): HeadlessSceneSimulation {

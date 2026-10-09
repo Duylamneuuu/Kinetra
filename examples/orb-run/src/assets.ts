@@ -292,3 +292,165 @@ export function orbRunAssetReport(pipeline: Pick<OrbRunAssetPipeline, "database"
     bytes: pipeline.fileSystem.files.get(record.importedPath)?.byteLength ?? 0,
   }));
 }
+
+export type OrbRunAssetImportStatus = "imported" | "failed" | "pending";
+
+export interface OrbRunAssetState {
+  kind: AssetRecord["kind"];
+  importStatus: OrbRunAssetImportStatus;
+  /** How many real (non-noop) imports succeeded; 1 after the first import. */
+  revision: number;
+  fingerprint: string;
+  sourceHash: string;
+  importedPath: string;
+  bytes: number;
+  polycount?: number;
+  dimensions?: [number, number, number];
+  sampleRateHz?: number;
+  durationSeconds?: number;
+  /** Why the last import failed; the artifact above is still the last good one. */
+  error?: string;
+}
+
+export interface OrbRunAssetsState {
+  count: number;
+  modelCount: number;
+  audioCount: number;
+  importedCount: number;
+  failedCount: number;
+  /** Validator errors (and missing artifacts) across the whole database. */
+  errorCount: number;
+  /** Validator warnings plus importer diagnostics warnings across the whole database. */
+  warningCount: number;
+  /** Real reimports after the first import (artist edits that went through). */
+  reimportCount: number;
+  /** Cues the game played whose asset is not in the database (content the game cannot ship). */
+  unregisteredCues: number;
+  byId: Record<string, OrbRunAssetState>;
+}
+
+export interface OrbRunAssetFailure {
+  assetId: string;
+  error: string;
+}
+
+/**
+ * The content the running game ships, as the asset pipeline sees it: every
+ * Orb Run asset imported once, plus hot-reimport of an edited source with the
+ * pipeline's last-known-good guarantee. The acceptance probe exposes it as
+ * `state.assets.*`.
+ */
+export class OrbRunAssetCatalog {
+  readonly #pipeline: OrbRunAssetPipeline;
+  readonly #revisions = new Map<string, number>();
+  readonly #pendingErrors = new Map<string, string>();
+  readonly #failureLog: OrbRunAssetFailure[] = [];
+
+  private constructor(pipeline: OrbRunAssetPipeline) {
+    this.#pipeline = pipeline;
+  }
+
+  /** Builds the pipeline and imports every asset (a failure here is a bug in the sample content, so it throws). */
+  static async create(): Promise<OrbRunAssetCatalog> {
+    const pipeline = await createOrbRunAssetPipeline();
+    const catalog = new OrbRunAssetCatalog(pipeline);
+    for (const result of await importOrbRunAssets(pipeline)) {
+      if (result.status === "failed") {
+        throw new Error(`Orb Run asset "${result.assetId}" failed its first import: ${result.error ?? "unknown error"}`);
+      }
+      catalog.#record(result);
+    }
+    return catalog;
+  }
+
+  get pipeline(): OrbRunAssetPipeline {
+    return this.#pipeline;
+  }
+
+  has(assetId: string): boolean {
+    return this.#pipeline.database.get(assetId) !== undefined;
+  }
+
+  /**
+   * An artist saved new source bytes for `assetId`: write them and reimport.
+   * Unknown ids throw (a manifest that names a typo must not pass). A bad file
+   * does not throw: the import fails, the last good artifact stays, and the
+   * failure shows up in `state.assets.byId.<id>` and `failures()`.
+   */
+  async replaceSource(assetId: string, bytes: Uint8Array): Promise<ReimportResult> {
+    const record = this.#pipeline.database.get(assetId);
+    if (!record) throw new RangeError(`Unknown Orb Run asset "${assetId}"`);
+    await this.#pipeline.fileSystem.writeFile(record.source.path, bytes);
+    const result = await this.#pipeline.service.reimport(assetId);
+    this.#record(result);
+    return result;
+  }
+
+  failures(): OrbRunAssetFailure[] {
+    return this.#failureLog.map((entry) => ({ ...entry }));
+  }
+
+  state(playedAssetIds: readonly string[] = []): OrbRunAssetsState {
+    const { database, fileSystem } = this.#pipeline;
+    const records = database.list();
+    const byId: Record<string, OrbRunAssetState> = {};
+    let errorCount = 0;
+    let warningCount = 0;
+    let reimportCount = 0;
+    for (const record of records) {
+      const pendingError = this.#pendingErrors.get(record.id);
+      const revision = this.#revisions.get(record.id) ?? 0;
+      reimportCount += Math.max(0, revision - 1);
+      const artifact = fileSystem.files.get(record.importedPath);
+      const diagnostics = [...validateAssetRecord(record), ...record.diagnostics];
+      for (const diagnostic of diagnostics) {
+        if (diagnostic.severity === "error") errorCount += 1;
+        else if (diagnostic.severity === "warning") warningCount += 1;
+      }
+      if (!artifact) errorCount += 1;
+      const { dimensions, polycount } = record.metadata;
+      const sampleRateHz = record.metadata["sampleRateHz"];
+      const durationSeconds = record.metadata["durationSeconds"];
+      byId[record.id] = {
+        kind: record.kind,
+        importStatus: pendingError ? "failed" : artifact ? "imported" : "pending",
+        revision,
+        fingerprint: record.fingerprint,
+        sourceHash: record.source.contentHash,
+        importedPath: record.importedPath,
+        bytes: artifact?.byteLength ?? 0,
+        ...(polycount !== undefined ? { polycount } : {}),
+        ...(dimensions ? { dimensions: [dimensions[0], dimensions[1], dimensions[2]] as [number, number, number] } : {}),
+        ...(typeof sampleRateHz === "number" ? { sampleRateHz } : {}),
+        ...(typeof durationSeconds === "number" ? { durationSeconds } : {}),
+        ...(pendingError ? { error: pendingError } : {}),
+      };
+    }
+    const states = Object.values(byId);
+    return {
+      count: records.length,
+      modelCount: states.filter((s) => s.kind === "model").length,
+      audioCount: states.filter((s) => s.kind === "audio").length,
+      importedCount: states.filter((s) => s.importStatus === "imported").length,
+      failedCount: states.filter((s) => s.importStatus === "failed").length,
+      errorCount,
+      warningCount,
+      reimportCount,
+      unregisteredCues: playedAssetIds.filter((id) => !database.get(id)).length,
+      byId,
+    };
+  }
+
+  #record(result: ReimportResult): void {
+    if (result.status === "failed") {
+      const error = result.error ?? "import failed";
+      this.#pendingErrors.set(result.assetId, error);
+      this.#failureLog.push({ assetId: result.assetId, error });
+      return;
+    }
+    this.#pendingErrors.delete(result.assetId);
+    if (result.status === "reimported") {
+      this.#revisions.set(result.assetId, (this.#revisions.get(result.assetId) ?? 0) + 1);
+    }
+  }
+}
