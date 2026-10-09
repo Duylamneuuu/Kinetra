@@ -95,6 +95,18 @@ Proof: `@kinetra/animation` `graph-blend-space.test.ts`, `@kinetra/renderer-thre
 
 Not yet supported: root motion while a blend space plays (refused with `anim.blendSpace.rootMotionUnsupported`), an authored (command-bus) representation of graph blend spaces, and restoring a graph's current (non-entry) state across live reload.
 
+## Animation events
+
+`@kinetra/animation/events` is the pure contract (validation + `ClipEventTracker`). `@kinetra/renderer-three` wires it to the mixer (`packages/renderer-three/src/animation-events.ts`):
+
+- `ThreeSceneRuntime.setAnimationEvents(raw)` validates `{clip, time, name, payload?}` entries (never throws; invalid entries come back as `animation.events.*` diagnostics) and replaces the set. Unknown clip names are accepted because clips can be registered later; such events never fire.
+- `updateAnimation` records each clip action's time before `mixer.update`, then advances that action's tracker by the clip time the mixer actually moved: `delta * mixer.timeScale * action.getEffectiveTimeScale()` for looping clips (cross-checked against the observed time), the observed move for clamped non-looping clips. Active and outgoing (crossfading) actions both fire; weight does not matter.
+- A restart (same clip played again) re-arms the start point so an event at time 0 fires again. Any other discontinuity (manual `action.time`, start delay, finite repetitions) re-syncs the tracker silently: the range that was not observed fires nothing.
+- Delivery happens at the end of `updateAnimation`, after every entity moved: `onAnimationEvent(listener)` (returns unsubscribe; listeners get payload copies; a throwing listener is isolated and counted), a bounded log `getAnimationEventLog()` (256 entries, `sequence` survives eviction), `getAnimationEventStats()` and `getAnimationEventDiagnostics()`.
+- Detach / reload / dispose drop tracker state.
+
+Not yet: blend-space sample actions (phase-driven) fire no events, ping-pong loops fire nothing (`animation.events.pingPongUnsupported`), no script-facing `context.animation.onEvent`, no bridge/MCP command, no Electron-level proof.
+
 ## Morph targets
 
 Morph targets (glTF blend shapes / Blender shape keys) are addressed by their

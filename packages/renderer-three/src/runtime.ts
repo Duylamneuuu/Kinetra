@@ -37,7 +37,17 @@ import {
 } from "./morph.js";
 import { IkController, type IkSetTargetResult, type IkTargetOptions } from "./ik.js";
 import type { IkChainDefinition } from "@kinetra/animation/ik";
+import type {
+  AnimationEventDiagnostic,
+  AnimationEventNormalization,
+} from "@kinetra/animation/events.js";
 
+import {
+  AnimationEventDispatcher,
+  type AnimationEventListener,
+  type AnimationEventStats,
+  type RuntimeAnimationEvent,
+} from "./animation-events.js";
 import type { AssetResolver, ModelMetadata, ModelNodeState } from "./assets.js";
 import { asObject, numberValue, stringValue, vec3Value } from "./components.js";
 import {
@@ -269,6 +279,7 @@ export class ThreeSceneRuntime {
   #instances = new Map<string, ModelInstance>();
   #morphControllers = new Map<string, MorphTargetController>();
   #ikControllers = new Map<string, IkController>();
+  #animationEvents = new AnimationEventDispatcher();
   /** Bumped by every attach/detach so an async load can tell it was superseded. */
   #modelLoadTokens = new Map<string, number>();
   #disposed = false;
@@ -523,6 +534,7 @@ export class ThreeSceneRuntime {
       }
     }
     this.#animatorSessions.delete(entityId);
+    this.#animationEvents.forget(entityId);
     this.#mixers.delete(entityId);
     this.#clips.delete(entityId);
     this.#activeActions.delete(entityId);
@@ -645,6 +657,7 @@ export class ThreeSceneRuntime {
         }
       }
       this.#animatorSessions.delete(entityId);
+      this.#animationEvents.forget(entityId);
       this.#mixers.delete(entityId);
       this.#clips.delete(entityId);
       this.#activeActions.delete(entityId);
@@ -2143,7 +2156,12 @@ export class ThreeSceneRuntime {
 
       session.blendSpace?.prepareStep(deltaSeconds);
       session.outgoingBlendSpace?.prepareStep(deltaSeconds);
+      const eventProbe = this.#animationEvents.begin(entityId, [
+        { clip: session.activeClipName ?? "", action: session.activeAction },
+        { clip: session.outgoingClipName ?? "", action: session.outgoingAction },
+      ]);
       session.mixer.update(deltaSeconds);
+      this.#animationEvents.end(eventProbe, deltaSeconds, session.mixer.timeScale);
       if (session.blendSpace && metadata?.animation) {
         this.#publishBlendSpaceState(session, session.blendSpace, metadata);
       }
@@ -2187,6 +2205,41 @@ export class ThreeSceneRuntime {
       const modelScene = this.#modelScenes.get(entityId);
       if (metadata && modelScene) metadata.nodes = this.#extractNodeStates(modelScene);
     }
+
+    // Deliver after every entity moved, so a listener sees a consistent scene and cannot
+    // disturb the iteration above.
+    this.#animationEvents.flush();
+  }
+
+  /**
+   * Replaces the scene's animation events (clip-time markers). Validated and never throws:
+   * unusable entries come back as diagnostics. Events fire from `updateAnimation` for clip
+   * actions (active and outgoing) and are reported through `onAnimationEvent` and the bounded log.
+   */
+  setAnimationEvents(raw: unknown): AnimationEventNormalization {
+    return this.#animationEvents.setEvents(raw);
+  }
+
+  /** Subscribes to animation events; returns the unsubscribe function. */
+  onAnimationEvent(listener: AnimationEventListener): () => void {
+    return this.#animationEvents.onEvent(listener);
+  }
+
+  /** The most recent animation events (bounded ring, oldest first). */
+  getAnimationEventLog(): readonly RuntimeAnimationEvent[] {
+    return this.#animationEvents.getLog();
+  }
+
+  clearAnimationEventLog(): void {
+    this.#animationEvents.clearLog();
+  }
+
+  getAnimationEventStats(): AnimationEventStats {
+    return this.#animationEvents.getStats();
+  }
+
+  getAnimationEventDiagnostics(): readonly AnimationEventDiagnostic[] {
+    return this.#animationEvents.getDiagnostics();
   }
 
   #extractNodeStates(modelScene: THREE.Group): ModelNodeState[] {
@@ -2318,6 +2371,7 @@ export class ThreeSceneRuntime {
     this.#modelScenes.clear();
     this.#morphControllers.clear();
     this.#ikControllers.clear();
+    this.#animationEvents.dispose();
 
     // Dispose all active instances (disposes cloned materials and skeletons, removes from parent, releases template refs)
     for (const instance of this.#instances.values()) {
