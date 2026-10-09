@@ -1,6 +1,8 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 import { ThreeSceneRuntime } from "@kinetra/renderer-three";
 
+import { compareCodeUnits } from "./order.js";
+
 export type RuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
 export interface RuntimeLogEntry {
@@ -134,7 +136,7 @@ export class LocalRuntimeHost implements RuntimeHost {
       });
     }
 
-    entities.sort((left, right) => left.entityId.localeCompare(right.entityId));
+    entities.sort((left, right) => compareCodeUnits(left.entityId, right.entityId));
 
     return {
       running: true,
