@@ -36,6 +36,88 @@ desktop build / packaged executable
 
 The arrows indicate dependency/authority direction, not necessarily npm dependency edges.
 
+### Diagram: packages and apps
+
+The same map as a rendered graph. Solid arrows are real workspace dependencies read from each `package.json` (`A --> B` means A depends on B). Dashed arrows are architectural rules that are not npm edges (`apps/editor` and `packages/desktop-build` have no `package.json` of their own yet). `reference-game` and the other `examples/` are left out.
+
+```mermaid
+flowchart TD
+    PM["project-model<br/>(authoritative authoring data)"]
+    CB["command-bus<br/>(only authoring mutation path)"]
+    MCP["mcp-server<br/>(agent-facing tools)"]
+    ED["apps/editor<br/>(observer UI)"]
+    PL["apps/player<br/>(dev + packaged shell)"]
+    CORE["core<br/>(scripts, scenes, prefabs)"]
+    REN["renderer-three<br/>(Three.js projection)"]
+    ANI["animation"]
+    INP["input"]
+    AUD["audio"]
+    SAV["save-state"]
+    PHY["physics-rapier"]
+    NAV["navigation-recast"]
+    AST["asset-pipeline"]
+    BLN["blender-bridge"]
+    VER["verification<br/>(acceptance manifests)"]
+    DSK["desktop-build<br/>(packaging)"]
+
+    CB --> PM
+    MCP --> CB
+    MCP --> PM
+    MCP --> REN
+    MCP --> VER
+    ED -.->|"mutations go through"| CB
+    PL --> CORE
+    PL --> REN
+    PL --> ANI
+    PL --> INP
+    PL --> AUD
+    PL --> SAV
+    PL --> PHY
+    PL --> NAV
+    PL --> PM
+    PL --> VER
+    REN --> PM
+    REN --> ANI
+    REN --> AST
+    CORE --> PM
+    PHY --> PM
+    NAV --> PM
+    AST --> PM
+    BLN --> AST
+    VER --> ANI
+    VER --> AST
+    VER --> AUD
+    VER --> BLN
+    VER --> INP
+    VER --> PM
+    VER --> SAV
+    DSK -.->|"packages"| PL
+```
+
+### Diagram: authoring mutation and proof
+
+An agent never edits the project file or the Three.js scene directly. A change is a command, it is validated and recorded by the command bus, and "done" is decided by verification against the running game, not by the edit succeeding.
+
+```mermaid
+sequenceDiagram
+    participant Agent as AI agent
+    participant MCP as mcp-server
+    participant Bus as command-bus
+    participant Model as project-model
+    participant Run as player runtime
+    participant Ver as verification
+
+    Agent->>MCP: tool call (e.g. create entity)
+    MCP->>Bus: command (dry-run, then apply)
+    Bus->>Model: validated mutation, new revision
+    Bus-->>MCP: result or structured error
+    MCP-->>Agent: diff, revision, error code if rejected
+    Agent->>Run: load project, step simulation
+    Ver->>Run: acceptance manifest steps (state, log, metric, image)
+    Run-->>Ver: runtime probes
+    Ver-->>Agent: report (pass/fail with evidence)
+```
+
 ## Package responsibilities
 
 ### `packages/project-model`

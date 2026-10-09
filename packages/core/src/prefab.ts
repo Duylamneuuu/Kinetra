@@ -19,6 +19,8 @@ export interface PrefabOverride {
   patch:JsonObject;
 }
 
+const RESERVED_COMPONENT_NAMES=new Set(["__proto__","constructor","prototype"]);
+
 function jsonObject(value:unknown):value is JsonObject{
   return typeof value==="object"&&value!==null&&!Array.isArray(value);
 }
@@ -71,7 +73,15 @@ export function instantiatePrefab(input:{
     if(!jsonObject(override.patch)){
       throw new Error(`Override patch for "${override.localId}.${override.component}" must be a JSON object`);
     }
-    const existing=entity.components[override.component];
+    // Same rule as the command bus: "__proto__" would re-prototype the component map instead of
+    // adding a component, and inherited names ("toString", "constructor") must not count as
+    // existing component data.
+    if(RESERVED_COMPONENT_NAMES.has(override.component)){
+      throw new Error(`Component name "${override.component}" is reserved and cannot be overridden`);
+    }
+    const existing=Object.prototype.hasOwnProperty.call(entity.components,override.component)
+      ?entity.components[override.component]
+      :undefined;
     if(existing!==undefined&&!jsonObject(existing)){
       throw new Error(`Component "${override.component}" is not object data and cannot be patched`);
     }

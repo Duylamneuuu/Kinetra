@@ -18,7 +18,7 @@
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:test-registration": "node scripts/check-test-registration.mjs && node --test scripts/check-test-registration.test.mjs",
     "check:bundle": "node scripts/check-bundle-size.mjs",
-    "test:scripts": "node --test \"scripts/bundle-budget.test.mjs\" \"scripts/coverage.test.mjs\" \"scripts/check-licenses.test.mjs\"",
+    "test:scripts": "node --test \"scripts/bundle-budget.test.mjs\" \"scripts/coverage.test.mjs\" \"scripts/check-licenses.test.mjs\" \"scripts/doc-examples.test.mjs\"",
     "coverage": "node scripts/coverage.mjs",
     "check:docs": "node scripts/check-doc-examples.mjs"
   },
