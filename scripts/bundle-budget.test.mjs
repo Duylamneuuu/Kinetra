@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { evaluateBundleBudget, measureBundle } from "./bundle-budget.mjs";
+import { evaluateBundleBudget, findInitialChunks, measureBundle } from "./bundle-budget.mjs";
 
 const files = [
   { name: "index.js", rawBytes: 1000, gzipBytes: 400 },
@@ -67,4 +67,30 @@ test("measureBundle measures only .js files, deterministically, and fails struct
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("findInitialChunks lists only eager module scripts and modulepreload links", () => {
+  const html = `<!doctype html><head>
+    <script type="module" crossorigin src="./assets/index-AAA.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vendor-BBB.js?x=1">
+    <link rel="stylesheet" crossorigin href="./assets/index-CCC.css">
+    <script src="./assets/classic.js"></script>
+    <link rel="modulepreload" href="./assets/vendor-BBB.js">
+  </head>`;
+  assert.deepEqual(findInitialChunks(html), ["index-AAA.js", "vendor-BBB.js"]);
+  assert.deepEqual(findInitialChunks("<html></html>"), []);
+});
+
+test("evaluateBundleBudget measures initialJsGzipBytes over the eager chunks only", () => {
+  const result = evaluateBundleBudget(files, { initialJsGzipBytes: 399 }, ["chunk.js"]);
+  assert.equal(result.ok, true);
+  assert.equal(result.metrics.initialJsGzipBytes, 150);
+  const failing = evaluateBundleBudget(files, { initialJsGzipBytes: 399 }, ["index.js"]);
+  assert.deepEqual(failing.violations, [
+    { code: "bundle.budgetExceeded", metric: "initialJsGzipBytes", actual: 400, budget: 399 },
+  ]);
+  assert.throws(() => evaluateBundleBudget(files, {}, ["missing.js"]), { code: "bundle.initialChunkMissing" });
+  assert.throws(() => evaluateBundleBudget(files, { initialJsGzipBytes: 10 }), {
+    code: "bundle.initialChunksUnknown",
+  });
 });
