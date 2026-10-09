@@ -28,7 +28,7 @@ Avoid giant mixed PRs. A feature that changes project data, runtime behavior and
 
 - `pnpm check` runs foundation/license/test-registration checks, build, typecheck and every package test.
 - Each package's `test` script must run every `test/*.test.ts` file (`pnpm check:test-registration` enforces it).
-- `pnpm build && pnpm coverage` prints unit-test line/branch/function coverage per package (Node's built-in `--experimental-test-coverage`, measured on each package's compiled `dist` sources, excluding `dist/test`) and writes `coverage/summary.md`, `coverage/summary.json` and one lcov file per package. Real-Electron `real-*.test.js` acceptance tests are skipped unless you pass `-- --include-real` (needs a display or `xvfb-run`); `-- --package @kinetra/animation` limits the run. The report never fails on a threshold.
+- `pnpm build && pnpm coverage` prints unit-test line/branch/function coverage per package (Node's built-in `--experimental-test-coverage`, measured on each package's compiled `dist` sources, excluding `dist/test`) and writes `coverage/summary.md`, `coverage/summary.json` and one lcov file per package. Real-Electron `real-*.test.js` acceptance tests are skipped unless you pass `-- --include-real` (needs a display or `xvfb-run`); `-- --package @kinetra/animation` limits the run. The report never fails on a threshold. CI runs it in the `Coverage report` workflow (pushes to main that touch code, weekly, and manually via *Run workflow*): open the run, read the table in its job summary, and download the `coverage-<sha>` artifact for `summary.md`, `summary.json` and the lcov files. It is report-only and not a required check.
 
 ## Commit style
 
