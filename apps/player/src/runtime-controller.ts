@@ -33,6 +33,7 @@ import {
   type ScriptLifecycleState,
   type PreparedScriptRestore,
 } from "@kinetra/core";
+import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
@@ -1651,15 +1652,20 @@ export class PlayerRuntimeController {
       return { success: false, error };
     }
 
-    const entities: Record<string, EntitySaveState> = {};
-    for (const [entityId, obj] of this.#runtime.objects()) {
-      const execState = this.#scripts.getExecutionState(entityId);
-      entities[entityId] = {
-        position: [obj.position.x, obj.position.y, obj.position.z],
-        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
-        ...(execState?.state ? { gameplay: structuredClone(execState.state) } : {}),
-      };
-    }
+    // Prototype-less record: an entity id such as "__proto__" must stay an own key in the save.
+    const entities: Record<string, EntitySaveState> = createKeyedRecord(
+      Array.from(this.#runtime.objects(), ([entityId, obj]): [string, EntitySaveState] => {
+        const execState = this.#scripts.getExecutionState(entityId);
+        return [
+          entityId,
+          {
+            position: [obj.position.x, obj.position.y, obj.position.z],
+            rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+            ...(execState?.state ? { gameplay: structuredClone(execState.state) } : {}),
+          },
+        ];
+      }),
+    );
 
     const envelope: SaveEnvelope<GameplaySaveData> = {
       schemaVersion: CURRENT_SAVE_SCHEMA_VERSION,
@@ -2183,7 +2189,7 @@ export class PlayerRuntimeController {
       });
     }
 
-    entities.sort((left, right) => left.entityId.localeCompare(right.entityId));
+    entities.sort((left, right) => compareCodeUnits(left.entityId, right.entityId));
 
     let activeSession: Record<string, unknown> | undefined;
     for (const entity of entities) {
@@ -2231,16 +2237,19 @@ export class PlayerRuntimeController {
   }
 
   #getAssetsQueryState(): PlayerRuntimeAssetsQueryState {
-    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = {};
-    for (const [assetId] of this.#assetRegistry) {
-      byId[assetId] = {
+    // Prototype-less record: an asset id such as "__proto__" must stay an own key in the query.
+    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = createKeyedRecord(
+      Array.from(this.#assetRegistry.keys(), (assetId): [string, PlayerRuntimeAssetQueryInfo] => [
         assetId,
-        ...(this.#assetSourceHashes.has(assetId) ? { sourceHash: this.#assetSourceHashes.get(assetId) } : {}),
-        ...(this.#assetFingerprints.has(assetId) ? { fingerprint: this.#assetFingerprints.get(assetId) } : {}),
-        importStatus: this.#assetStatuses.get(assetId) ?? "imported",
-        ...(this.#assetRevisions.has(assetId) ? { revision: this.#assetRevisions.get(assetId) } : {}),
-      };
-    }
+        {
+          assetId,
+          ...(this.#assetSourceHashes.has(assetId) ? { sourceHash: this.#assetSourceHashes.get(assetId) } : {}),
+          ...(this.#assetFingerprints.has(assetId) ? { fingerprint: this.#assetFingerprints.get(assetId) } : {}),
+          importStatus: this.#assetStatuses.get(assetId) ?? "imported",
+          ...(this.#assetRevisions.has(assetId) ? { revision: this.#assetRevisions.get(assetId) } : {}),
+        },
+      ]),
+    );
     return { byId };
   }
 
