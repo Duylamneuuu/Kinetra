@@ -245,7 +245,7 @@ What has meaningful proof:
 What remains:
 - authenticated live multimodal AI critique (e.g. Gemini 2.5 / Claude 3.7 vision model calling live API);
 - complete-game shipping acceptance suite;
-- long-term baseline management.
+- committing real Electron-rendered baselines and gating them in CI (the baseline store, check/update logic and CLI exist and are unit-tested — `packages/verification/src/visual-baseline.ts`, `pnpm --filter @kinetra/verification visual-baseline check|update <baselines.json> <frames-dir>` — but no baseline file is committed yet and no CI job feeds real frames into it; `update` needs `--confirm` and refuses when `CI`/`GITHUB_ACTIONS` is set).
 
 ### Runtime bridge (P2)
 

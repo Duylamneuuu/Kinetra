@@ -5,6 +5,8 @@ export * from "./types.js";
 export * from "./electron-runtime.js";
 export * from "./packaged-resolver.js";
 export * from "./visual.js";
+export * from "./visual-baseline.js";
+export * from "./visual-baseline-cli.js";
 export * from "./critique.js";
 export * from "./performance.js";
 
