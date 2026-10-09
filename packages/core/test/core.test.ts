@@ -736,3 +736,61 @@ test("script host rejects non-finite execution order",()=>{
     assert.throws(()=>host.register({id:`s${order}`,order,context:{entityId:"e",sceneId:"main"},script:{}}),/order/);
   }
 });
+
+test("PlayerControllerScript rejects negative or fractional counters on restore",()=>{
+  const script=new PlayerControllerScript();
+  for(const bad of [-1,1.5,Number.MAX_SAFE_INTEGER+2,Number.NaN,Number.POSITIVE_INFINITY]){
+    assert.equal(script.validateRestoreState({moveCount:bad}).valid,false,`moveCount ${bad}`);
+    assert.equal(script.validateRestoreState({jumpCount:bad}).valid,false,`jumpCount ${bad}`);
+    assert.throws(()=>script.restoreState({moveCount:bad}),/Cannot restore invalid PlayerController state/);
+  }
+  assert.match(script.validateRestoreState({moveCount:-1}).error??"",/non-negative integer/);
+  assert.match(script.validateRestoreState({jumpCount:2.5}).error??"",/non-negative integer/);
+  assert.deepEqual(script.getState(),{moveCount:0,jumpCount:0});
+  for(const good of [0,1,42,Number.MAX_SAFE_INTEGER]){
+    assert.equal(script.validateRestoreState({moveCount:good,jumpCount:good}).valid,true);
+  }
+});
+
+test("restoreScriptState rolls back a commit that throws half-way and rethrows the original error",async()=>{
+  const host=new ScriptHost();
+  const live={a:0,b:0};
+  const calls:string[]=[];
+  host.register({
+    id:"torn",context:{entityId:"torn",sceneId:"main"},
+    script:{
+      prepareRestoreState:()=>({
+        commit:()=>{live.a=1;calls.push("commit");throw new Error("commit exploded");},
+        rollback:()=>{live.a=0;live.b=0;calls.push("rollback");},
+      }),
+    },
+  });
+  await assert.rejects(()=>host.restoreScriptState("torn",{}),/commit exploded/);
+  assert.deepEqual(calls,["commit","rollback"]);
+  assert.deepEqual(live,{a:0,b:0});
+});
+
+test("restoreScriptState reports both failures when commit and rollback throw",async()=>{
+  const host=new ScriptHost();
+  host.register({
+    id:"doubleFault",context:{entityId:"doubleFault",sceneId:"main"},
+    script:{
+      prepareRestoreState:()=>({
+        commit:()=>{throw new Error("commit exploded");},
+        rollback:()=>{throw new Error("rollback exploded");},
+      }),
+    },
+  });
+  await assert.rejects(()=>host.restoreScriptState("doubleFault",{}),/commit exploded.*rollback exploded/s);
+});
+
+test("restoreScriptState does not roll back when commit succeeds",async()=>{
+  const host=new ScriptHost();
+  let rolledBack=false;
+  host.register({
+    id:"ok",context:{entityId:"ok",sceneId:"main"},
+    script:{prepareRestoreState:()=>({commit:()=>{},rollback:()=>{rolledBack=true;}})},
+  });
+  assert.equal(await host.restoreScriptState("ok",{}),true);
+  assert.equal(rolledBack,false);
+});

@@ -459,7 +459,23 @@ export class ScriptHost {
     if (!entry) return false;
     if (typeof entry.script.prepareRestoreState === "function") {
       const prepared = await entry.script.prepareRestoreState(state, entry.context);
-      await prepared.commit();
+      try {
+        await prepared.commit();
+      } catch (commitError) {
+        // A commit that throws may have half-applied; undo it so the live script is never left torn.
+        try {
+          await prepared.rollback();
+        } catch (rollbackError) {
+          const commitMessage =
+            commitError instanceof Error ? commitError.message : String(commitError);
+          const rollbackMessage =
+            rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          throw new Error(
+            `Script "${id}" restore commit failed (${commitMessage}) and rollback also failed (${rollbackMessage})`,
+          );
+        }
+        throw commitError;
+      }
       return true;
     }
     if (typeof entry.script.restoreState === "function") {
@@ -544,10 +560,16 @@ export class PlayerControllerScript implements GameScript {
       if (typeof state.moveCount !== "number" || !Number.isFinite(state.moveCount)) {
         return { valid: false, error: "moveCount must be a finite number" };
       }
+      if (!Number.isSafeInteger(state.moveCount) || state.moveCount < 0) {
+        return { valid: false, error: "moveCount must be a non-negative integer" };
+      }
     }
     if ("jumpCount" in state) {
       if (typeof state.jumpCount !== "number" || !Number.isFinite(state.jumpCount)) {
         return { valid: false, error: "jumpCount must be a finite number" };
+      }
+      if (!Number.isSafeInteger(state.jumpCount) || state.jumpCount < 0) {
+        return { valid: false, error: "jumpCount must be a non-negative integer" };
       }
     }
     if ("lastAction" in state && state.lastAction !== undefined) {
