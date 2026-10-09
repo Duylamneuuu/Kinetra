@@ -219,6 +219,10 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
       }
       sceneIds.add(scene.id);
 
+      if (!isNonEmptyString(scene.name)) {
+        issues.push({ path: `${scenePath}.name`, code: "scene.name.empty", message: "Scene name is required" });
+      }
+
       const entities: unknown = scene.entities;
       if (!Array.isArray(entities)) {
         issues.push({
