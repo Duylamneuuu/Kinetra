@@ -7,7 +7,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isJsonValue(value: unknown): value is JsonValue {
+/**
+ * Component data nested deeper than this is rejected. It also stops cyclic
+ * input: without a bound, `a.self = a` (or a very deep literal) overflowed the
+ * stack and surfaced as a raw RangeError instead of a structured CommandError.
+ */
+const MAX_JSON_DEPTH = 128;
+
+function isJsonValue(value: unknown, depth = 0): value is JsonValue {
   if (
     value === null ||
     typeof value === "string" ||
@@ -17,12 +24,16 @@ function isJsonValue(value: unknown): value is JsonValue {
     return typeof value !== "number" || Number.isFinite(value);
   }
 
+  if (depth >= MAX_JSON_DEPTH) {
+    return false;
+  }
+
   if (Array.isArray(value)) {
-    return value.every(isJsonValue);
+    return value.every((item) => isJsonValue(item, depth + 1));
   }
 
   if (isRecord(value)) {
-    return Object.values(value).every(isJsonValue);
+    return Object.values(value).every((item) => isJsonValue(item, depth + 1));
   }
 
   return false;
@@ -49,7 +60,7 @@ function isEntityDefinition(value: unknown): value is EntityDefinition {
     return false;
   }
 
-  return Object.values(value.components).every(isJsonValue);
+  return Object.values(value.components).every((item) => isJsonValue(item));
 }
 
 function isSceneDefinition(value: unknown): value is SceneDefinition {
@@ -90,7 +101,7 @@ function assertCommonEnvelope(value: Record<string, unknown>): void {
 }
 
 function assertJsonObject(value: unknown, message: string): asserts value is Record<string, JsonValue> {
-  if (!isRecord(value) || !Object.values(value).every(isJsonValue)) {
+  if (!isRecord(value) || !Object.values(value).every((item) => isJsonValue(item))) {
     throw new CommandError("INVALID_COMMAND", message);
   }
 }
