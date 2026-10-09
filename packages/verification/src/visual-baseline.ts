@@ -29,6 +29,7 @@ export type VisualBaselineErrorCode =
   | "baseline.invalidName"
   | "baseline.invalidOption"
   | "baseline.duplicateFrame"
+  | "baseline.noFrames"
   | "baseline.updateNotConfirmed"
   | "baseline.updateForbiddenInCi"
   | "baseline.ioFailed";

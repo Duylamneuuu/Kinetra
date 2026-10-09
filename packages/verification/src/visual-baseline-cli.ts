@@ -10,6 +10,7 @@ import {
   writeVisualBaselineArtifacts,
   type VisualFrame,
 } from "./visual-baseline.js";
+import { VisualError } from "./visual.js";
 
 export const VISUAL_BASELINE_USAGE = [
   "usage:",
@@ -67,7 +68,11 @@ function parseArguments(args: readonly string[]): ParsedArguments {
       }
       parsed.tolerance = value;
     } else if (argument === "--only") {
-      parsed.only = valueOf().split(",").filter((name) => name.length > 0);
+      const only = valueOf().split(",").filter((name) => name.length > 0);
+      if (only.length === 0) {
+        throw new UsageError("--only needs at least one frame name");
+      }
+      parsed.only = only;
     } else if (argument.startsWith("--")) {
       throw new UsageError(`unknown option ${argument}`);
     } else {
@@ -83,12 +88,33 @@ function parseArguments(args: readonly string[]): ParsedArguments {
 }
 
 async function readFrames(directory: string): Promise<VisualFrame[]> {
-  const names = (await readdir(directory)).filter((file) => file.toLowerCase().endsWith(".png")).sort();
+  const entries = await readdir(directory, { withFileTypes: true });
+  const names = entries
+    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.toLowerCase().endsWith(".png"))
+    .map((entry) => entry.name)
+    .sort();
   const frames: VisualFrame[] = [];
   for (const file of names) {
-    frames.push({ name: file.slice(0, -4), bytes: new Uint8Array(await readFile(join(directory, file))) });
+    let bytes: Buffer;
+    try {
+      bytes = await readFile(join(directory, file));
+    } catch (error) {
+      // A symlink to a directory is not a frame.
+      if ((error as NodeJS.ErrnoException).code === "EISDIR") {
+        continue;
+      }
+      throw error;
+    }
+    frames.push({ name: file.slice(0, -4), bytes: new Uint8Array(bytes) });
   }
   return frames;
+}
+
+/** An empty frames directory (wrong path, capture step skipped) must never read as "no regressions". */
+function assertHasFrames(frames: readonly VisualFrame[], directory: string): void {
+  if (frames.length === 0) {
+    throw new VisualBaselineError("baseline.noFrames", `no .png frames found in ${directory}`, { directory });
+  }
 }
 
 /**
@@ -117,6 +143,7 @@ export async function runVisualBaselineCli(args: readonly string[], io: VisualBa
         env: io.env ?? process.env,
         only: parsed.only,
       });
+      assertHasFrames(frames, parsed.framesDirectory);
       await saveVisualBaselineFile(parsed.baselinePath, result.file);
       stdout(
         `baselines updated: ${result.added.length} added, ${result.updated.length} updated, ${result.unchanged.length} unchanged\n`,
@@ -126,6 +153,7 @@ export async function runVisualBaselineCli(args: readonly string[], io: VisualBa
     const report = checkVisualBaselines(baseline, frames, {
       maxPerceptualHashDistance: parsed.tolerance,
     });
+    assertHasFrames(frames, parsed.framesDirectory);
     stdout(formatVisualBaselineReport(report));
     if (!report.passed && parsed.reportDirectory !== undefined) {
       const written = await writeVisualBaselineArtifacts(parsed.reportDirectory, report, frames);
@@ -133,7 +161,7 @@ export async function runVisualBaselineCli(args: readonly string[], io: VisualBa
     }
     return report.passed ? 0 : 1;
   } catch (error) {
-    if (error instanceof VisualBaselineError) {
+    if (error instanceof VisualBaselineError || error instanceof VisualError) {
       stderr(`${error.message}\n`);
       return 2;
     }
