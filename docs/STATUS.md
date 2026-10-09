@@ -204,7 +204,7 @@ What exists:
 
 Still missing:
 - integrated runtime UI layer;
-- end-to-end game loop proof.
+- end-to-end game loop proof in the real Electron player and the packaged binary (headless Orb Run keyboard/gamepad parity and save → restart → restore are covered by `examples/orb-run/test/input-parity.test.ts`, #92 partial).
 
 ### Verification
 
