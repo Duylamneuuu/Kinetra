@@ -61,6 +61,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 ### Documentation
 
 - **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
+- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
+- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 
 ### Maintenance
 
