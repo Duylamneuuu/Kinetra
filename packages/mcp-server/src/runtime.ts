@@ -77,6 +77,12 @@ export interface RuntimeHost {
   enableTestScriptFixtures?(preset: string): Promise<void>;
 }
 
+/**
+ * Upper bound on log entries a LocalRuntimeHost keeps. An MCP session can inject input for
+ * hours; older entries are dropped (sequence numbers keep increasing, so cursors stay valid).
+ */
+export const MAX_LOCAL_RUNTIME_LOG_ENTRIES = 5_000;
+
 export class LocalRuntimeHost implements RuntimeHost {
   #runtime: ThreeSceneRuntime | undefined;
   #projectRevision: number | undefined;
@@ -193,5 +199,8 @@ export class LocalRuntimeHost implements RuntimeHost {
       message,
       ...(data ? { data: structuredClone(data) } : {}),
     });
+    if (this.#logs.length > MAX_LOCAL_RUNTIME_LOG_ENTRIES) {
+      this.#logs.splice(0, this.#logs.length - MAX_LOCAL_RUNTIME_LOG_ENTRIES);
+    }
   }
 }
