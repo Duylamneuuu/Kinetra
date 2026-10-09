@@ -12,6 +12,7 @@ import { CommandError } from "./errors.js";
 import { parseEngineCommand } from "./validation.js";
 import type {
   ChangeRecord,
+  CommandBusOptions,
   CommandBusSnapshot,
   CommandEvent,
   CommandResult,
@@ -275,6 +276,27 @@ function filterComponents(
   };
 }
 
+/** Default number of undo snapshots (each a full project clone) the bus retains. */
+export const DEFAULT_MAX_UNDO_DEPTH = 100;
+/** Default number of command events the bus retains in its replay log. */
+export const DEFAULT_MAX_EVENT_LOG_LENGTH = 10_000;
+
+function resolveBound(name: string, value: number | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  // Infinity is the explicit opt-out of a bound.
+  if (value === Infinity || (Number.isInteger(value) && value >= 1)) {
+    return value;
+  }
+  throw new RangeError(`${name} must be a positive integer (or Infinity), received ${String(value)}`);
+}
+
+function undoTokenNumber(token: string): number | undefined {
+  const match = /^undo_([1-9]\d*)$/.exec(token);
+  return match ? Number(match[1]) : undefined;
+}
+
 export class CommandBus {
   #project: ProjectDocument;
   #revision: number;
@@ -284,15 +306,40 @@ export class CommandBus {
   #undoStack: Array<{ token: string; snapshot: ProjectDocument }> = [];
   #undoCounter = 0;
   #eventCounter = 0;
+  #maxUndoDepth: number;
+  #maxEventLogLength: number;
+  // Highest undo counter dropped from the front of the bounded stack.
+  #evictedUndoThrough = 0;
+  #droppedEvents = 0;
 
-  constructor(project: ProjectDocument, initialRevision = 0) {
+  constructor(project: ProjectDocument, initialRevision = 0, options: CommandBusOptions = {}) {
     assertValidProject(project);
+    this.#maxUndoDepth = resolveBound("maxUndoDepth", options.maxUndoDepth, DEFAULT_MAX_UNDO_DEPTH);
+    this.#maxEventLogLength = resolveBound(
+      "maxEventLogLength",
+      options.maxEventLogLength,
+      DEFAULT_MAX_EVENT_LOG_LENGTH,
+    );
     this.#project = cloneProject(project);
     this.#revision = initialRevision;
   }
 
   get revision(): number {
     return this.#revision;
+  }
+
+  /** Number of events that fell out of the bounded event log (so a consumer can detect a gap). */
+  get droppedEventCount(): number {
+    return this.#droppedEvents;
+  }
+
+  #pushEvent(event: CommandEvent): void {
+    this.#events.push(event);
+    const overflow = this.#events.length - this.#maxEventLogLength;
+    if (overflow > 0) {
+      this.#events.splice(0, overflow);
+      this.#droppedEvents += overflow;
+    }
   }
 
   snapshot(): CommandBusSnapshot {
@@ -328,7 +375,9 @@ export class CommandBus {
       assertRevision(command.expectedProjectRevision, this.#revision);
     }
 
-    const before = cloneProject(this.#project);
+    // The committed document is only ever replaced, never mutated in place (commands run on
+    // `working`), so the current object can serve as the undo snapshot without a second clone.
+    const before = this.#project;
     const working = cloneProject(this.#project);
     const changes: ChangeRecord[] = [];
 
@@ -356,8 +405,15 @@ export class CommandBus {
 
     const undoToken = `undo_${++this.#undoCounter}`;
     this.#undoStack.push({ token: undoToken, snapshot: before });
+    while (this.#undoStack.length > this.#maxUndoDepth) {
+      const evicted = this.#undoStack.shift()!;
+      this.#evictedUndoThrough = Math.max(
+        this.#evictedUndoThrough,
+        undoTokenNumber(evicted.token) ?? 0,
+      );
+    }
 
-    this.#events.push({
+    this.#pushEvent({
       id: `event_${++this.#eventCounter}`,
       operation: "execute",
       revision: this.#revision,
@@ -380,6 +436,13 @@ export class CommandBus {
     const index = this.#undoStack.findIndex((entry) => entry.token === undoToken);
 
     if (index === -1) {
+      const number = undoTokenNumber(undoToken);
+      if (number !== undefined && number <= this.#evictedUndoThrough) {
+        throw new CommandError(
+          "UNDO_EXPIRED",
+          `Undo token "${undoToken}" is no longer in the undo history (maxUndoDepth=${this.#maxUndoDepth}) or was already consumed`,
+        );
+      }
       throw new CommandError("INVALID_COMMAND", `Unknown or already-consumed undo token "${undoToken}"`);
     }
 
@@ -397,7 +460,7 @@ export class CommandBus {
 
     const changes: ChangeRecord[] = [{ kind: "updated", id: this.#project.projectId, resource: "project" }];
 
-    this.#events.push({
+    this.#pushEvent({
       id: `event_${++this.#eventCounter}`,
       operation: "undo",
       revision: this.#revision,

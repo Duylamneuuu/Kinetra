@@ -52,6 +52,19 @@ export type EngineCommand =
   | EntityReparentCommand
   | EntityDeleteCommand;
 
+export interface CommandBusOptions {
+  /**
+   * Maximum number of undo snapshots (each one a full project clone) kept. Older tokens
+   * are evicted and rejected with UNDO_EXPIRED. Default 100; `Infinity` disables the bound.
+   */
+  maxUndoDepth?: number;
+  /**
+   * Maximum number of events kept in the replay log. Older events are dropped (see
+   * `bus.droppedEventCount`). Default 10000; `Infinity` disables the bound.
+   */
+  maxEventLogLength?: number;
+}
+
 export interface ExecuteOptions {
   expectedProjectRevision?: number;
   dryRun?: boolean;

@@ -8,7 +8,7 @@ Every change to a project (from the editor, a script or an AI agent over MCP) is
 
 | Export | Kind | What it does |
 | --- | --- | --- |
-| `CommandBus` | class | Owns a validated `ProjectDocument` and its revision (`new CommandBus(project, initialRevision = 0)`). |
+| `CommandBus` | class | Owns a validated `ProjectDocument` and its revision (`new CommandBus(project, initialRevision = 0, options?)`). `options.maxUndoDepth` (default 100) and `options.maxEventLogLength` (default 10000) bound the retained history; `Infinity` opts out. |
 | `bus.execute(command)` | method | Runs one typed command as a one-command transaction. Returns a `CommandResult`. |
 | `bus.executeUnknown(input)` | method | Same, but first parses untrusted JSON with `parseEngineCommand` (what MCP tools use). |
 | `bus.executeTransaction(commands, options?)` | method | All-or-nothing batch: one revision bump, one undo token. |
@@ -20,7 +20,9 @@ Every change to a project (from the editor, a script or an AI agent over MCP) is
 
 Commands: `scene.create`, `entity.create`, `component.patch`, `entity.reparent`, `entity.delete`. Every command carries a `requestId` and may carry `expectedProjectRevision` (optimistic concurrency) and `dryRun`.
 
-Error codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`, `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`, `PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`, `UNDO_CONFLICT`.
+Error codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`, `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`, `PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`, `UNDO_CONFLICT`, `UNDO_EXPIRED`.
+
+History is bounded: every `execute` keeps one full-project snapshot for undo, so only the newest `maxUndoDepth` tokens stay undoable (older ones fail with `UNDO_EXPIRED`), and the event log keeps the newest `maxEventLogLength` events (`bus.droppedEventCount` says how many fell off, so a replay consumer can detect the gap).
 
 ## Example
 
