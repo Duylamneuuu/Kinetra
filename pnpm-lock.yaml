@@ -72,6 +72,9 @@ importers:
 
   examples/orb-run:
     dependencies:
+      '@kinetra/animation':
+        specifier: workspace:*
+        version: link:../../packages/animation
       '@kinetra/command-bus':
         specifier: workspace:*
         version: link:../../packages/command-bus
