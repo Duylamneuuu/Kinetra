@@ -1,0 +1,64 @@
+name: Coverage report
+
+# Report-only (issue #107 / #153): runs the unit-test coverage report and uploads
+# it as an artifact. It has no threshold gate and is not part of `pnpm check`;
+# a failure here never blocks a PR because the workflow does not run on PRs
+# except when the report tooling itself changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "apps/**"
+      - "examples/**"
+      - "scripts/coverage.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.base.json"
+      - ".github/workflows/coverage.yml"
+  pull_request:
+    paths:
+      - "scripts/coverage.mjs"
+      - "scripts/coverage.test.mjs"
+      - ".github/workflows/coverage.yml"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Unit-test coverage report
+        run: pnpm coverage
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f coverage/summary.md ]; then
+            cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 30
