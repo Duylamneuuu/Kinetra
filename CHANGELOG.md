@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: content through the asset pipeline: synthetic GLB models and audio cues registered, imported, validated and re-imported on an in-memory file system (slice 7)
 - **orb-run**: HUD contract with acceptance manifests (slice 6) ([#188](https://github.com/Duylamneuuu/Kinetra/pull/188))
 - **orb-run**: HUD contract (objective, orbs, timer urgency, compass marker, banner) with `hud` acceptance manifests (slice 6)
 - **animation**: animation events contract (#90 part 1): validation + deterministic clip event tracker ([#180](https://github.com/Duylamneuuu/Kinetra/pull/180))

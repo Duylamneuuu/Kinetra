@@ -75,6 +75,9 @@ importers:
       '@kinetra/animation':
         specifier: workspace:*
         version: link:../../packages/animation
+      '@kinetra/asset-pipeline':
+        specifier: workspace:*
+        version: link:../../packages/asset-pipeline
       '@kinetra/audio':
         specifier: workspace:*
         version: link:../../packages/audio
