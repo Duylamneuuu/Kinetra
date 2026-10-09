@@ -19,9 +19,12 @@ Three.js is a **projection** here, never the source of truth: the authored `Proj
 | `configureRootMotion`, `sampleRootMotion`, `recordRootMotionResult` | methods | Root-motion extraction: the runtime reports the per-step delta; the caller applies it. |
 | `setMorphWeights`, `clearMorphWeights`, `MorphTargetController` | methods / class | Named morph-target weights with structured diagnostics for unknown names. |
 | `setIkChains`, `setIkTarget`, `clearIkTarget`, `IkController` | methods / class | Two-bone IK applied after the mixer update; poses are restored when a target is cleared and after a hot reimport. |
+| `setAnimationEvents`, `onAnimationEvent`, `getAnimationEventLog`, `clearAnimationEventLog`, `getAnimationEventStats`, `getAnimationEventDiagnostics`, `AnimationEventDispatcher`, `MAX_ANIMATION_EVENT_LOG` | methods / class | Clip animation events (#90): plain-data events from `@kinetra/animation` are fired from real mixer playback, once per crossing and independent of step size. Reported with the entity id and a monotonic `sequence`; the log is bounded (256) and listener exceptions are isolated. |
 | `WebGL2Backend` (`RenderBackend`) | class | The only canvas-bound piece: `initialize(canvas)`, `render(scene, camera)`, `resize(w, h, dpr)`, `getStats()`, `dispose()`. |
 
 Unsupported `Camera.type`, `Light.kind` or `Primitive.kind` values throw with the entity id in the message instead of rendering nothing.
+
+Animation event limits (also in `docs/architecture/ANIMATION.md`): only clip actions (active and outgoing) fire events, blend-space sample actions do not yet, ping-pong loops fire nothing and record one diagnostic, and events fire regardless of the action weight. A discontinuity (restart, manual time change, start delay) re-synchronizes without firing the skipped range.
 
 ## Example
 
@@ -92,6 +95,63 @@ runtime.dispose();
 assert.equal(runtime.disposed, true);
 ```
 
+Animation events are plain data validated by `setAnimationEvents`, which never throws: invalid entries are dropped and returned as diagnostics.
+
+```ts doc-check
+import assert from "node:assert/strict";
+import { createSyntheticCharacterGlb } from "@kinetra/asset-pipeline";
+import { stableId, type ProjectDocument } from "@kinetra/project-model";
+import { ThreeSceneRuntime } from "@kinetra/renderer-three";
+
+const sceneId = stableId("scene", "events");
+const hero = stableId("entity", "events_hero");
+const project: ProjectDocument = {
+  schemaVersion: 1,
+  projectId: stableId("project", "events"),
+  name: "Animation events",
+  scenes: [
+    {
+      id: sceneId,
+      name: "Events",
+      entities: [
+        {
+          id: hero,
+          name: "Hero",
+          components: { Transform: { position: [0, 0, 0] }, Model: { assetId: "bot" } },
+        },
+      ],
+    },
+  ],
+};
+const glb = await createSyntheticCharacterGlb();
+const runtime = await ThreeSceneRuntime.instantiateAsync(project, sceneId, {
+  assetResolver: { resolve: (assetId) => (assetId === "bot" ? glb : undefined) },
+});
+const walk = runtime.getModelMetadata(hero)?.animation?.clips.find((clip) => clip.name === "walk");
+assert.ok(walk && walk.duration > 0);
+
+const heard: string[] = [];
+const unsubscribe = runtime.onAnimationEvent((event) => heard.push(`${event.entityId}:${event.name}`));
+const result = runtime.setAnimationEvents([
+  { clip: "walk", time: walk.duration / 2, name: "footstep", payload: { foot: "left" } },
+]);
+assert.deepEqual(result.diagnostics, []);
+
+assert.equal(runtime.playAnimation(hero, "walk", { loop: true }), true);
+// Two full loops in small steps: the event fires once per loop, whatever the step size.
+for (let i = 0; i < Math.round((walk.duration * 2 - 0.001) * 30); i++) runtime.updateAnimation(1 / 30);
+
+const log = runtime.getAnimationEventLog();
+assert.equal(log.length, 2);
+assert.deepEqual(heard, [`${hero}:footstep`, `${hero}:footstep`]);
+assert.deepEqual(
+  log.map((event) => event.sequence),
+  [1, 2],
+);
+unsubscribe();
+runtime.dispose();
+```
+
 ## Proof level
 
 | Capability | Proof |
@@ -102,6 +162,7 @@ assert.equal(runtime.disposed, true);
 | Blend space, graph + blend space | `blend-space.test.ts`, `graph-blend-space.test.ts` |
 | Morph targets, IK | `morph.test.ts`, `ik.test.ts` |
 | Compression: a real Meshopt GLB decodes, and the capability table matches the asset pipeline's | `compressed-gltf.test.ts` (Draco and KTX2 decoding are not implemented) |
+| Animation events from mixer playback (loop, once, crossfade, restart, bounded log) | `animation-events.test.ts` |
 | Step guards (non-finite deltas), async load races | `step-guards.test.ts`, `async-races.test.ts` |
 | Real GPU rendering | Not unit-tested here; screenshots and visual checks run in the Electron player (`real-visual-verification` in `@kinetra/verification`). WebGPU is not implemented. |
 

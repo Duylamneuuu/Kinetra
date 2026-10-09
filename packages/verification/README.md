@@ -49,6 +49,7 @@ flowchart LR
 | `resolvePackagedExecutable`, `packagedExecutableRelativePath`, `packagedBuildCommand`, `isPackagedExecutableAvailable` | functions | Find the packaged player build; infrastructure problems raise `InfrastructureError` with a stable `code` (for example `CONFIGURED_EXECUTABLE_NOT_FOUND`); `KINETRA_RUNTIME_EXECUTABLE` overrides the path. |
 | `runProcessSmoke` | function | Spawn an executable with a timeout and return `{ exitCode, stdout, stderr, durationMs }`. |
 | `decodePng`, `encodePng`, `dHash`, `hammingDistance`, `calculateVisualEvidence`, `compareVisualFrames`, `detectBlankFrame` | functions | Pure PNG analysis behind the visual steps; failures are `VisualError` with a stable `code`. |
+| `createVisualBaselineFile`, `createVisualBaselineEntry`, `checkVisualBaselines`, `updateVisualBaselines`, `formatVisualBaselineReport`, `parseVisualBaselineFile`, `serializeVisualBaselineFile`, `loadVisualBaselineFile`, `saveVisualBaselineFile`, `writeVisualBaselineArtifacts`, `isCiEnvironment`, `VisualBaselineError` | functions / class | Long-term visual baselines (#100): per named frame a sha256, dHash and size. `check` is pure and never writes; `update` is the only way to change a baseline. See below. |
 | `calculatePercentiles`, `evaluatePerformanceBudget`, `resolveBudgetForPlatform`, `writePerformanceReport` | functions | Frame-time statistics and budget checks behind the performance steps. |
 
 ## Example
@@ -141,12 +142,82 @@ assert.throws(() =>
 );
 ```
 
+## Visual baselines
+
+A baseline file (`schemaVersion: 1`) stores, per frame name, the PNG's `sha256`, its 64-bit `perceptualHash` (dHash) and `width`/`height`, sorted by name so diffs are stable. `checkVisualBaselines` reports one status per frame:
+
+| Status | Meaning | Passes |
+| --- | --- | --- |
+| `identical` | Same PNG bytes as the baseline | yes |
+| `similar` | Different bytes, same size, dHash distance within tolerance (default `DEFAULT_BASELINE_HASH_TOLERANCE` = 8 of 64 bits) | yes |
+| `mismatch` | Size changed or dHash beyond tolerance | no |
+| `missing` | No baseline recorded yet, so a new frame cannot slip through un-reviewed | no |
+
+`updateVisualBaselines` needs `confirm: true` and throws `baseline.updateForbiddenInCi` when `isCiEnvironment()` sees a CI marker, so CI can never auto-accept a regression. Errors are `VisualBaselineError` with a stable `code` (`baseline.invalidFile`, `baseline.invalidName`, `baseline.updateNotConfirmed`, ...). Frame names match `/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/`.
+
+```ts doc-check
+import assert from "node:assert/strict";
+import {
+  VisualBaselineError,
+  checkVisualBaselines,
+  createVisualBaselineFile,
+  encodePng,
+  formatVisualBaselineReport,
+  updateVisualBaselines,
+  type VisualFrame,
+} from "@kinetra/verification";
+
+function halves(flip: boolean): Uint8Array {
+  const width = 32;
+  const height = 32;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = (x < width / 2) !== flip ? 20 : 235;
+      data.set([value, value, value, 255], (y * width + x) * 4);
+    }
+  }
+  return encodePng({ width, height, data });
+}
+
+const frames: VisualFrame[] = [{ name: "menu", bytes: halves(false) }];
+
+// A new frame has no baseline: that is a failure until someone accepts it on purpose.
+const empty = createVisualBaselineFile();
+assert.equal(checkVisualBaselines(empty, frames).results[0]?.status, "missing");
+
+// Accepting a baseline is explicit, and refused under CI.
+assert.throws(
+  () => updateVisualBaselines(empty, frames, { confirm: true, env: { CI: "true" } }),
+  (error) => error instanceof VisualBaselineError && error.code === "baseline.updateForbiddenInCi",
+);
+const { file, added } = updateVisualBaselines(empty, frames, { confirm: true, env: {} });
+assert.deepEqual(added, ["menu"]);
+
+// The same bytes are identical; a mirrored frame is a mismatch with a readable report.
+assert.equal(checkVisualBaselines(file, frames).results[0]?.status, "identical");
+const regression = checkVisualBaselines(file, [{ name: "menu", bytes: halves(true) }]);
+assert.equal(regression.passed, false);
+assert.equal(regression.results[0]?.status, "mismatch");
+assert.match(formatVisualBaselineReport(regression), /FAIL/);
+```
+
+The same operations are available as a CLI (`pnpm --filter @kinetra/verification visual-baseline check|update`):
+
+```text
+visual-baseline check  <baselines.json> <frames-dir> [--report-dir <dir>] [--tolerance <0..64>]
+visual-baseline update <baselines.json> <frames-dir> --confirm [--only <name,name>]
+```
+
+`<frames-dir>` holds PNG files; each file name without `.png` is the frame name. `check` exits 1 on any failing frame and, with `--report-dir`, writes the report plus diff artifacts; `update` is the only command that changes baselines. The baselines are not yet wired into `AcceptanceRunner` or CI with frames captured from the real Electron player (#100 still open).
+
 ## Proof level
 
 | Capability | Proof |
 | --- | --- |
 | Runner semantics, step failures, unsupported steps | `verification.test.ts`, `runner-steps.test.ts`, `unsupported-step.test.ts` (no Electron needed) |
 | Visual analysis, critique, performance maths | `visual.test.ts`, `visual-property.test.ts`, `critique.test.ts`, `performance.test.ts` |
+| Visual baselines (library and CLI) | `visual-baseline.test.ts`, `visual-baseline-cli.test.ts` (no Electron needed; both listed in the package `test` script) |
 | Probe over a host, packaged resolver, transport | `runtime-probe.test.ts`, `packaged-resolver.test.ts`, `electron-transport.test.ts` |
 | Real Electron player (runtime, physics, navigation, models, animation, audio, save/load, IK, hot reimport, performance, visual) | `real-*.test.ts`, listed in the package `test` script; they need Electron (`xvfb-run -a` on Linux) and skip themselves where Electron cannot launch |
 | Packaged executables | Linux packaged player smoke and Windows package in CI; the acceptance gate against the packaged build is `target: "packaged"` |
