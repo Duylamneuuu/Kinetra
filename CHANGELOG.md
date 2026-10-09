@@ -11,10 +11,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 ### Added
 
 - **verification**: visual baseline management: `visual-baseline.ts` stores sha256 + dHash + size per named frame, `check` reports identical/similar/mismatch/missing with a diff artifact, `update` needs `--confirm` and refuses under CI (#100)
+- **orb-run**: content through the asset pipeline (slice 7) ([#220](https://github.com/Duylamneuuu/Kinetra/pull/220))
 - **orb-run**: the runner animates from gameplay: per-step locomotion blend + foot IK observer (`OrbRunAnimator`), `state.animation.*` in the headless probe and an `animation` acceptance manifest (slice 8)
-- **orb-run**: content through the asset pipeline: synthetic GLB models and audio cues registered, imported, validated and re-imported on an in-memory file system (slice 7)
 - **orb-run**: HUD contract with acceptance manifests (slice 6) ([#188](https://github.com/Duylamneuuu/Kinetra/pull/188))
-- **orb-run**: HUD contract (objective, orbs, timer urgency, compass marker, banner) with `hud` acceptance manifests (slice 6)
 - **renderer-three**: `ThreeSceneRuntime` drives animation events from its mixers (`setAnimationEvents`, `onAnimationEvent`, bounded event log, diagnostics) (#90 part 2)
 - **animation**: animation events contract (#90 part 1): validation + deterministic clip event tracker ([#180](https://github.com/Duylamneuuu/Kinetra/pull/180))
 - **orb-run**: audio cues with a headless audio service (slice 5) ([#179](https://github.com/Duylamneuuu/Kinetra/pull/179))
@@ -34,6 +33,25 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **core**: ScriptHost keeps empty-message script errors visible and explains async validateRestoreState ([#240](https://github.com/Duylamneuuu/Kinetra/pull/240))
+- **player**: startArenaGame joins a pending start instead of double-starting the runtime (#230) ([#239](https://github.com/Duylamneuuu/Kinetra/pull/239))
+- **verification**: concurrent first requests share one Electron startup instead of spawning duplicates ([#235](https://github.com/Duylamneuuu/Kinetra/pull/235))
+- **save-state**: save slots can no longer alias settings files; SettingsStore.save rejects non-finite gains ([#227](https://github.com/Duylamneuuu/Kinetra/pull/227))
+- **command-bus**: bound undo history and event log (maxUndoDepth/maxEventLogLength), UNDO_EXPIRED for evicted tokens; drop redundant per-command clone (#206) ([#226](https://github.com/Duylamneuuu/Kinetra/pull/226))
+- **mcp-server**: bound LocalRuntimeHost log buffer (MAX_LOCAL_RUNTIME_LOG_ENTRIES) ([#224](https://github.com/Duylamneuuu/Kinetra/pull/224))
+- **player**: bridge answers malformed requests with a structured error instead of dropping them (#208) ([#223](https://github.com/Duylamneuuu/Kinetra/pull/223))
+- **animation**: validateSkeletonProfile/buildRetargetPlan tolerate profiles without a bones object; validateClipMetadata rejects non-object clips (follow-up to #186) ([#201](https://github.com/Duylamneuuu/Kinetra/pull/201))
+- **verification**: empty/unusable performance budgets no longer pass; probe wait rejects NaN/Infinity/oversized delays; snapshot indexes __proto__ entities ([#221](https://github.com/Duylamneuuu/Kinetra/pull/221))
+- **animation**: ClipEventTracker.finished follows the move direction (reverse parked at 0 reports finished) ([#219](https://github.com/Duylamneuuu/Kinetra/pull/219))
+- **animation**: unwrap root-motion sample yaw so a turn through 180 degrees does not produce a 2pi delta ([#217](https://github.com/Duylamneuuu/Kinetra/pull/217))
+- **blender-bridge**: timeout kills the whole process group and no longer waits forever on inherited stdio pipes ([#214](https://github.com/Duylamneuuu/Kinetra/pull/214))
+- **project-model**: validateProject requires a non-empty string scene name (scene.name.empty) ([#195](https://github.com/Duylamneuuu/Kinetra/pull/195))
+- **reference-game**: reject unreachable Arena save states; freeze run stats after win/loss ([#213](https://github.com/Duylamneuuu/Kinetra/pull/213))
+- **navigation**: validate query inputs and reject garbage navmesh bytes before they reach WASM ([#204](https://github.com/Duylamneuuu/Kinetra/pull/204))
+- **renderer-three**: reloadAsset no longer resurrects/overwrites a model detached or re-attached while the new bytes resolve; vec3Value rejects NaN/Infinity ([#199](https://github.com/Duylamneuuu/Kinetra/pull/199))
+- **audio**: reject non-boolean muted, cap createSyntheticWav payload size ([#203](https://github.com/Duylamneuuu/Kinetra/pull/203))
+- **asset-pipeline**: AssetDatabase ordering by code unit, not host-locale localeCompare ([#198](https://github.com/Duylamneuuu/Kinetra/pull/198))
+- **command-bus,core**: bound JSON depth (cyclic payloads), reject empty transactions, prefab overrides with reserved/inherited component names ([#196](https://github.com/Duylamneuuu/Kinetra/pull/196))
 - **save-state**: v1→v2 migration keeps entity id "__proto__" and rejects malformed data with a descriptive error ([#192](https://github.com/Duylamneuuu/Kinetra/pull/192))
 - **project-model**: bound JSON nesting depth and make parent checks/cycle detection linear ([#193](https://github.com/Duylamneuuu/Kinetra/pull/193))
 - **verification**: cap pixelDiffThreshold at 765 in the manifest schema; surface VisualError code/details on step results; runner-level visual tests ([#169](https://github.com/Duylamneuuu/Kinetra/pull/169))
@@ -76,6 +94,12 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **mcp-server**: FileProjectStore async write-failure, mkdir-failure and load-error branches (#145) ([#237](https://github.com/Duylamneuuu/Kinetra/pull/237))
+- **orb-run**: keyboard/gamepad input parity and save-restart-finish gate through the real InputRouter (#92 partial) ([#234](https://github.com/Duylamneuuu/Kinetra/pull/234))
+- **asset-pipeline**: inspectGlb and normalizeGlb direct tests ([#225](https://github.com/Duylamneuuu/Kinetra/pull/225))
+- **project-model**: migration and schemaVersion edge cases (v0 shapes, NaN/Infinity/fractional versions, input immutability) ([#222](https://github.com/Duylamneuuu/Kinetra/pull/222))
+- **mcp-server**: acceptance input validation, scene ordering, diffSince, dryRun and LocalRuntimeHost contract (+9 tests) ([#215](https://github.com/Duylamneuuu/Kinetra/pull/215))
+- **scripts**: end-to-end tests for check-foundation and check-bundle-size CLIs ([#207](https://github.com/Duylamneuuu/Kinetra/pull/207))
 - **scripts**: extract doc-check parser and test it; malformed doc-check fences now fail instead of being skipped ([#194](https://github.com/Duylamneuuu/Kinetra/pull/194))
 - **physics-rapier**: determinism/fuzz replay, advance() slicing, step(dt) restore, dynamic material validation, controller release on remove ([#190](https://github.com/Duylamneuuu/Kinetra/pull/190))
 - **asset-pipeline**: edge cases for validateAssetRecord, inspectGlb and normalizeGlb (+17 tests) ([#181](https://github.com/Duylamneuuu/Kinetra/pull/181))
@@ -87,14 +111,16 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- **docs**: CHANGELOG entry for #191 (input/audio/save-state READMEs) ([#200](https://github.com/Duylamneuuu/Kinetra/pull/200))
+- **docs**: READMEs for asset-pipeline, verification, renderer-three; CHANGELOG through #194; HANDOFF 20-21 ([#202](https://github.com/Duylamneuuu/Kinetra/pull/202))
+- **docs**: Mermaid package graph and authoring/proof sequence in SYSTEM_MAP ([#197](https://github.com/Duylamneuuu/Kinetra/pull/197))
 - **repo**: real READMEs for input, audio and save-state with doc-checked examples ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 - **docs**: READMEs for command-bus, project-model, core (executable examples); CHANGELOG through #160 ([#165](https://github.com/Duylamneuuu/Kinetra/pull/165))
 - **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
-- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
-- **docs**: real READMEs with executable examples for input, audio and save-state ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 
 ### Maintenance
 
+- **deps**: bump @modelcontextprotocol/server 2.0.0 -> 2.3.1 ([#241](https://github.com/Duylamneuuu/Kinetra/pull/241))
 - **ci**: add report-only coverage workflow that uploads the coverage artifact ([#163](https://github.com/Duylamneuuu/Kinetra/pull/163))
 - **deps**: bump electron 38.8.6 -> 41.10.7, clearing every remaining Electron advisory in `pnpm audit` ([#161](https://github.com/Duylamneuuu/Kinetra/pull/161))
 - **player**: lazy-load Rapier and Recast, add initial-chunk bundle budget (perf) ([#148](https://github.com/Duylamneuuu/Kinetra/pull/148))

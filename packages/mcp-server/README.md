@@ -34,7 +34,7 @@ current revision into the runtime host.
 | `createKinetraMcpServer(service)` | builds the `McpServer` with every tool above |
 | `KinetraAgentService` | in-process service each tool wraps; `KinetraAgentService.fromFile(path)` persists committed mutations through `FileProjectStore` |
 | `formatToolError(error)` | the structured `{ code, message, remediation, issues? }` body returned by failing tools |
-| `LocalRuntimeHost` | default `RuntimeHost`: Three.js scene graph, no renderer; `captureFrame()` returns `available: false` |
+| `LocalRuntimeHost` | default `RuntimeHost`: Three.js scene graph, no renderer; `captureFrame()` returns `available: false`; keeps at most `MAX_LOCAL_RUNTIME_LOG_ENTRIES` (5000) log entries |
 | `ElectronRuntimeHost` | real Electron player (or packaged executable) host; used by `test.runAcceptance` |
 | `FileProjectStore` | file-backed project persistence |
 
