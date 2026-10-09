@@ -69,6 +69,12 @@ async function toArrayBuffer(raw: unknown): Promise<ArrayBuffer | undefined> {
   return undefined;
 }
 
+/**
+ * Finished/stopped playback records kept for inspection (`getState`). Older ones are dropped so a
+ * long session of one-shot sound effects does not grow the map (and its state report) forever.
+ */
+export const MAX_FINISHED_PLAYBACK_RECORDS = 32;
+
 export const DEFAULT_AUDIO_BUSES: AudioBusDefinition[] = [
   { id: "master", gain: 1.0 },
   { id: "music", parentId: "master", gain: 1.0 },
@@ -85,6 +91,8 @@ export class PlayerAudioController {
   #playbacks = new Map<string, ActivePlaybackRecord>();
   #nextPlaybackId = 0;
   #initialized = false;
+  /** Bumped by `reset()`; an in-flight `play()` that sees a new value belongs to a dead scene. */
+  #generation = 0;
 
   constructor() {
     this.#ensureContext();
@@ -184,6 +192,7 @@ export class PlayerAudioController {
 
   async play(options: PlayAudioOptions): Promise<PlayAudioResult> {
     const busId = options.bus ?? "master";
+    const generation = this.#generation;
     if (!this.#mixer.hasBus(busId)) {
       return {
         success: false,
@@ -210,6 +219,7 @@ export class PlayerAudioController {
     if (!audioBuffer) {
       const rawAsset = this.#assetResolver.resolve(options.assetId);
       const arrayBuffer = await toArrayBuffer(rawAsset);
+      if (generation !== this.#generation) return this.#resetWhileLoading(options.assetId);
       if (!arrayBuffer) {
         return {
           success: false,
@@ -219,8 +229,8 @@ export class PlayerAudioController {
 
       try {
         audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        this.#decodedBuffers.set(options.assetId, audioBuffer);
       } catch (decodeErr) {
+        if (generation !== this.#generation) return this.#resetWhileLoading(options.assetId);
         const message =
           decodeErr instanceof Error ? decodeErr.message : String(decodeErr);
         return {
@@ -228,6 +238,10 @@ export class PlayerAudioController {
           error: `Failed to decode audio asset "${options.assetId}": ${message}`,
         };
       }
+      // The buffer was decoded from the previous scene's resolver: caching it would serve the
+      // wrong audio for the same asset id after a re-init.
+      if (generation !== this.#generation) return this.#resetWhileLoading(options.assetId);
+      this.#decodedBuffers.set(options.assetId, audioBuffer);
     }
 
     const playbackId = `playback_${++this.#nextPlaybackId}`;
@@ -268,19 +282,14 @@ export class PlayerAudioController {
 
     sourceNode.onended = () => {
       if (record.playing) {
-        record.playing = false;
-        try {
-          sourceNode.disconnect();
-          gainNode.disconnect();
-        } catch {
-          // ignore
-        }
+        this.#retire(record);
       }
     };
 
     try {
       sourceNode.start();
     } catch (startErr) {
+      this.#release(record);
       const message =
         startErr instanceof Error ? startErr.message : String(startErr);
       return {
@@ -290,6 +299,7 @@ export class PlayerAudioController {
     }
 
     this.#playbacks.set(playbackId, record);
+    this.#pruneFinished();
 
     return {
       success: true,
@@ -309,22 +319,7 @@ export class PlayerAudioController {
         options.entityId === undefined || record.entityId === options.entityId;
 
       if (matchesPlayback && matchesEntity) {
-        record.playing = false;
-        if (record.sourceNode) {
-          try {
-            record.sourceNode.stop();
-            record.sourceNode.disconnect();
-          } catch {
-            // ignore
-          }
-        }
-        if (record.gainNode) {
-          try {
-            record.gainNode.disconnect();
-          } catch {
-            // ignore
-          }
-        }
+        this.#retire(record, true);
         stoppedCount++;
       }
     }
@@ -333,6 +328,53 @@ export class PlayerAudioController {
       success: true,
       stoppedCount,
     };
+  }
+
+  #resetWhileLoading(assetId: string): PlayAudioResult {
+    return {
+      success: false,
+      error: `Audio controller was reset while loading "${assetId}"`,
+    };
+  }
+
+  /** Marks a playback finished, frees its Web Audio nodes and trims old finished records. */
+  #retire(record: ActivePlaybackRecord, stopSource = false): void {
+    record.playing = false;
+    if (stopSource && record.sourceNode) {
+      try {
+        record.sourceNode.stop();
+      } catch {
+        // ignore
+      }
+    }
+    this.#release(record);
+    this.#pruneFinished();
+  }
+
+  #release(record: ActivePlaybackRecord): void {
+    for (const node of [record.sourceNode, record.gainNode]) {
+      try {
+        node?.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    record.sourceNode = undefined;
+    record.gainNode = undefined;
+  }
+
+  #pruneFinished(): void {
+    let finished = 0;
+    for (const record of this.#playbacks.values()) if (!record.playing) finished++;
+    if (finished <= MAX_FINISHED_PLAYBACK_RECORDS) return;
+    // Map iteration is insertion order, so the oldest finished records go first.
+    for (const [id, record] of this.#playbacks) {
+      if (finished <= MAX_FINISHED_PLAYBACK_RECORDS) break;
+      if (!record.playing) {
+        this.#playbacks.delete(id);
+        finished--;
+      }
+    }
   }
 
   getState(): AudioRuntimeState {
@@ -375,6 +417,7 @@ export class PlayerAudioController {
   }
 
   reset(): void {
+    this.#generation++;
     // Stop and disconnect all playbacks
     for (const record of this.#playbacks.values()) {
       if (record.playing) {

@@ -5,5 +5,5 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "include": ["electron/bridge-protocol.ts", "src/keyed-record.ts", "src/single-flight.ts", "test/**/*.ts"]
+  "include": ["electron/bridge-protocol.ts", "src/audio-controller.ts", "src/keyed-record.ts", "src/single-flight.ts", "test/**/*.ts"]
 }
