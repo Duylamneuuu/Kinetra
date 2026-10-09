@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: HUD contract with acceptance manifests (slice 6) ([#188](https://github.com/Duylamneuuu/Kinetra/pull/188))
 - **orb-run**: HUD contract (objective, orbs, timer urgency, compass marker, banner) with `hud` acceptance manifests (slice 6)
 - **animation**: animation events contract (#90 part 1): validation + deterministic clip event tracker ([#180](https://github.com/Duylamneuuu/Kinetra/pull/180))
 - **orb-run**: audio cues with a headless audio service (slice 5) ([#179](https://github.com/Duylamneuuu/Kinetra/pull/179))
@@ -29,6 +30,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **save-state**: v1→v2 migration keeps entity id "__proto__" and rejects malformed data with a descriptive error ([#192](https://github.com/Duylamneuuu/Kinetra/pull/192))
+- **project-model**: bound JSON nesting depth and make parent checks/cycle detection linear ([#193](https://github.com/Duylamneuuu/Kinetra/pull/193))
+- **verification**: cap pixelDiffThreshold at 765 in the manifest schema; surface VisualError code/details on step results; runner-level visual tests ([#169](https://github.com/Duylamneuuu/Kinetra/pull/169))
+- **animation**: skeleton/clip validators tolerate null bones and NaN times; locale-independent ordering ([#186](https://github.com/Duylamneuuu/Kinetra/pull/186))
 - **core**: PlayerControllerScript rejects negative/fractional counters; restoreScriptState rolls back a throwing commit ([#184](https://github.com/Duylamneuuu/Kinetra/pull/184))
 - **project-model**: canonical key order so a project serializes to the same bytes regardless of property assignment order ([#183](https://github.com/Duylamneuuu/Kinetra/pull/183))
 - **animation**: retarget cache key includes rest poses; dotted bone names; concurrent cache writes; metadata_mismatch reason ([#182](https://github.com/Duylamneuuu/Kinetra/pull/182))
@@ -67,6 +72,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **physics-rapier**: determinism/fuzz replay, advance() slicing, step(dt) restore, dynamic material validation, controller release on remove ([#190](https://github.com/Duylamneuuu/Kinetra/pull/190))
 - **asset-pipeline**: edge cases for validateAssetRecord, inspectGlb and normalizeGlb (+17 tests) ([#181](https://github.com/Duylamneuuu/Kinetra/pull/181))
 - **scripts**: unit + fixture tests for the license gate (extract license-policy.mjs) ([#176](https://github.com/Duylamneuuu/Kinetra/pull/176))
 - **verification**: unit-test AcceptanceRunner screenshot, visual, critique and performance steps ([#164](https://github.com/Duylamneuuu/Kinetra/pull/164))
@@ -76,6 +82,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- **repo**: real READMEs for input, audio and save-state with doc-checked examples ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
 - **docs**: READMEs for command-bus, project-model, core (executable examples); CHANGELOG through #160 ([#165](https://github.com/Duylamneuuu/Kinetra/pull/165))
 - **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
 
