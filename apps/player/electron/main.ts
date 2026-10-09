@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
+import { parseBridgeLine, type BridgeRequest } from "./bridge-protocol.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,12 +42,6 @@ const captureMode =
     : "performance";
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
-
-interface BridgeRequest {
-  id: string;
-  method: string;
-  params?: unknown;
-}
 
 interface BridgeResponse {
   type: "response";
@@ -357,40 +352,17 @@ function attachBridgeInput(
     }
 
     void (async () => {
-      let request: BridgeRequest;
+      const parsed = parseBridgeLine(line);
 
-      try {
-        const parsed = JSON.parse(line) as unknown;
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          throw new TypeError("Bridge request must be an object");
-        }
-
-        const candidate = parsed as Record<string, unknown>;
-
-        if (
-          typeof candidate.id !== "string" ||
-          typeof candidate.method !== "string"
-        ) {
-          throw new TypeError("Bridge request requires string id and method");
-        }
-
-        request = {
-          id: candidate.id,
-          method: candidate.method,
-          ...(candidate.params !== undefined
-            ? { params: candidate.params }
-            : {}),
-        };
-      } catch (error) {
-        console.error(
-          error instanceof Error ? error.message : String(error),
-        );
+      if (!parsed.ok) {
+        // Answer instead of dropping the line, so the client fails fast with
+        // a structured error rather than waiting for its request timeout.
+        console.error(parsed.response.error);
+        bridgeWrite(parsed.response);
         return;
       }
+
+      const request: BridgeRequest = parsed.request;
 
       let response: BridgeResponse;
 
