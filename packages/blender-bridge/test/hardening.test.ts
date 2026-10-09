@@ -175,6 +175,45 @@ test("NodeProcessRunner rejects when the executable does not exist", async () =>
   );
 });
 
+test("NodeProcessRunner kills a hung process and reports blender.timeout", async () => {
+  const hang = "setInterval(() => {}, 1000)";
+  const runner = new NodeProcessRunner({ timeoutMs: 200 });
+  const started = Date.now();
+  const hung = await runner.run(process.execPath, ["-e", hang]);
+  assert.equal(hung.timedOut, true);
+  assert.equal(hung.signal, "SIGKILL");
+  assert.ok(Date.now() - started < 10_000, "the hung process must be killed promptly");
+
+  await assert.rejects(
+    runBlenderExport(
+      { ...base, blenderExecutable: process.execPath },
+      { run: (exe) => new NodeProcessRunner({ timeoutMs: 200 }).run(exe, ["-e", hang]) },
+    ),
+    isBridgeError("blender.timeout"),
+  );
+});
+
+test("NodeProcessRunner does not flag a process that finishes within its limit", async () => {
+  const result = await new NodeProcessRunner({ timeoutMs: 30_000 }).run(process.execPath, ["-e", "process.stdout.write('ok')"]);
+  assert.equal(result.code, 0);
+  assert.equal(result.timedOut, undefined);
+});
+
+test("NodeProcessRunner rejects non-positive or non-finite timeouts", () => {
+  for (const timeoutMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => new NodeProcessRunner({ timeoutMs }), isBridgeError("blender.invalidOption"));
+  }
+});
+
+test("a custom runner that reports timedOut produces blender.timeout, not exportFailed", async () => {
+  const runner: ProcessRunner = {
+    async run() {
+      return { code: -1, stdout: "", stderr: "", signal: "SIGKILL", timedOut: true };
+    },
+  };
+  await assert.rejects(runBlenderExport(base, runner), isBridgeError("blender.timeout"));
+});
+
 class MemoryFs {
   readonly files = new Map<string, Uint8Array>();
   async readFile(path: string): Promise<Uint8Array> {

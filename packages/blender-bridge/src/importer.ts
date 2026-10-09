@@ -105,6 +105,8 @@ export interface BlenderGlbImporterOptions {
   blenderExecutable?: string;
   pythonScript?: string;
   runner?: ProcessRunner;
+  /** Wall-clock limit for the default process runner (ignored when `runner` is given). */
+  timeoutMs?: number;
   fileSystem?: {
     readFile(path: string): Promise<Uint8Array>;
   };
@@ -131,7 +133,8 @@ export class BlenderGlbImporter implements AssetImporter {
       process.env.BLENDER_PATH ??
       "blender";
     this.#pythonScript = options.pythonScript ?? defaultExportScriptPath();
-    this.#runner = options.runner ?? new NodeProcessRunner();
+    this.#runner = options.runner ??
+      new NodeProcessRunner(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {});
     this.#fs = options.fileSystem ?? {
       async readFile(p: string) {
         const buf = await readFile(p);

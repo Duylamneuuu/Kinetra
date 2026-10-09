@@ -13,6 +13,8 @@ export interface ProcessRunResult {
   stderr: string;
   /** Signal that terminated the process, when it did not exit normally. */
   signal?: string | null;
+  /** True when the runner killed the process because it exceeded its time limit. */
+  timedOut?: boolean;
 }
 
 export interface ProcessRunner {
@@ -23,6 +25,7 @@ export type BlenderBridgeErrorCode =
   | "blender.invalidOption"
   | "blender.spawnFailed"
   | "blender.exportFailed"
+  | "blender.timeout"
   | "blender.outputMissing";
 
 /** Structured error raised by the Blender bridge boundary. */
@@ -48,11 +51,25 @@ function appendBounded(current: string, chunk: string, limit: number): string {
   return next.length > limit ? next.slice(next.length - limit) : next;
 }
 
+/** Default wall-clock limit for one Blender export (a hung Blender must not hang an import forever). */
+export const DEFAULT_BLENDER_TIMEOUT_MS = 5 * 60_000;
+
 export class NodeProcessRunner implements ProcessRunner {
   readonly #maxOutputChars: number;
+  readonly #timeoutMs: number;
 
-  constructor(options: { maxOutputChars?: number } = {}) {
+  constructor(options: { maxOutputChars?: number; timeoutMs?: number } = {}) {
     this.#maxOutputChars = options.maxOutputChars ?? MAX_CAPTURED_OUTPUT_CHARS;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_BLENDER_TIMEOUT_MS;
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new BlenderBridgeError(
+        "blender.invalidOption",
+        `Blender timeoutMs must be a positive finite number (got ${String(timeoutMs)})`,
+        { option: "timeoutMs", received: timeoutMs },
+      );
+    }
+    // setTimeout overflows (fires immediately) above 2^31-1 ms.
+    this.#timeoutMs = Math.min(timeoutMs, 2_147_483_647);
   }
 
   run(executable: string, args: string[]): Promise<ProcessRunResult> {
@@ -68,6 +85,11 @@ export class NodeProcessRunner implements ProcessRunner {
       }
       let stdout = "";
       let stderr = "";
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGKILL");
+      }, this.#timeoutMs);
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
       child.stdout?.on("data", (chunk: string) => {
@@ -79,6 +101,7 @@ export class NodeProcessRunner implements ProcessRunner {
       child.once("error", (err) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         reject(err);
       });
       // "close" (not "exit") fires after stdio streams are drained, so the
@@ -86,7 +109,14 @@ export class NodeProcessRunner implements ProcessRunner {
       child.once("close", (code, signal) => {
         if (settled) return;
         settled = true;
-        resolve({ code: code ?? -1, stdout, stderr, signal: signal ?? null });
+        clearTimeout(timer);
+        resolve({
+          code: code ?? -1,
+          stdout,
+          stderr,
+          signal: signal ?? null,
+          ...(timedOut ? { timedOut: true } : {}),
+        });
       });
     });
   }
@@ -143,11 +173,19 @@ export async function runBlenderExport(
   try {
     result = await runner.run(executable, args);
   } catch (err) {
+    if (err instanceof BlenderBridgeError) throw err;
     const cause = err instanceof Error ? err.message : String(err);
     throw new BlenderBridgeError(
       "blender.spawnFailed",
       `Failed to start Blender "${executable}": ${cause}`,
       { executable, cause },
+    );
+  }
+  if (result.timedOut) {
+    throw new BlenderBridgeError(
+      "blender.timeout",
+      `Blender export exceeded its time limit and was killed (${executable})`,
+      { executable, signal: result.signal ?? null },
     );
   }
   if (result.code !== 0) {
