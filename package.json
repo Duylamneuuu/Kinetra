@@ -14,12 +14,13 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
     "lint": "oxlint",
-    "check": "pnpm check:foundation && pnpm check:licenses && pnpm lint && pnpm check:test-registration && pnpm test:scripts && pnpm build && pnpm check:bundle && pnpm typecheck && pnpm test",
+    "check": "pnpm check:foundation && pnpm check:licenses && pnpm lint && pnpm check:test-registration && pnpm test:scripts && pnpm build && pnpm check:bundle && pnpm typecheck && pnpm check:docs && pnpm test",
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:test-registration": "node scripts/check-test-registration.mjs && node --test scripts/check-test-registration.test.mjs",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "test:scripts": "node --test \"scripts/bundle-budget.test.mjs\" \"scripts/coverage.test.mjs\"",
-    "coverage": "node scripts/coverage.mjs"
+    "coverage": "node scripts/coverage.mjs",
+    "check:docs": "node scripts/check-doc-examples.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

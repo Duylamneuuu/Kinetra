@@ -1,7 +1,7 @@
 # Implementation status
 
-**Snapshot:** 2026-09-19  
-**Authoritative base:** `main` at the documentation handoff point.
+**Snapshot:** 2026-09-19, updated through PR #75 (2026-10-09)  
+**Authoritative base:** `main`. Merged change history: [`CHANGELOG.md`](../CHANGELOG.md).
 
 Legend:
 
@@ -174,7 +174,7 @@ What has meaningful proof:
 
 Still missing:
 - blend-space root motion (graph states that play a blend space, with crossfades into/out of it, are proven in unit tests and real Electron — see docs/architecture/ANIMATION.md; packaged-binary proof not yet run);
-- inverse kinematics (IK) runtime adapter: `IkController` (renderer-three) applies the pure solver to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains/setIkTarget/clearIkTarget`; it also runs for models without animation clips, restores the input pose of bones no clip rewrote (so partial weights do not compound and clearing a target un-bends the chain), applies chains in chain-id order; unit + runtime tests pass. The player bridge exposes `animation.ik.setChains`/`animation.ik.setTarget`/`animation.ik.clearTarget` (real Electron proof covers structured error paths only, on a model without bones). Not yet proven: IK on a real skinned model through the bridge, authoring command-bus exposure, Electron acceptance, foot-planting helpers.
+- inverse kinematics (IK) runtime adapter: `IkController` (renderer-three) applies the pure solver to named bones after `mixer.update()` via `ThreeSceneRuntime.setIkChains/setIkTarget/clearIkTarget`; it also runs for models without animation clips, restores the input pose of bones no clip rewrote (so partial weights do not compound and clearing a target un-bends the chain), applies chains in chain-id order; unit + runtime tests pass. The player bridge exposes `animation.ik.setChains`/`animation.ik.setTarget`/`animation.ik.clearTarget` (`packages/verification/test/real-ik-bridge.test.ts` covers structured error paths only, on a model without bones; it runs in CI since #118). Not yet proven: IK on a real skinned model through the bridge, authoring command-bus exposure, Electron acceptance, foot-planting helpers.
 
 ### Complete-game contracts
 

@@ -12,7 +12,7 @@ The core product thesis is simple:
 
 Kinetra is currently at a **pre-alpha architecture/handoff checkpoint**.
 
-Several foundational and subsystem cores are merged, while the real Electron runtime bridge, observer editor, physics/navigation integration and release/Steam work remain experimental/WIP.
+Several foundational and subsystem cores are merged, including the real Electron runtime bridge, Rapier physics and Recast navigation slices, the Blender hot-reimport asset loop and a playable reference game. The observer editor and release/Steam distribution remain experimental/WIP. `docs/STATUS.md` is the authority on what is proven and at which level.
 
 Before implementing anything, read:
 
@@ -20,6 +20,8 @@ Before implementing anything, read:
 - [docs/STATUS.md](./docs/STATUS.md)
 - [AGENTS.md](./AGENTS.md)
 - [ROADMAP.md](./ROADMAP.md)
+- [CHANGELOG.md](./CHANGELOG.md) — merged changes, newest first
+- [docs/guides/AI_AGENT_MCP.md](./docs/guides/AI_AGENT_MCP.md) — how an AI agent drives Kinetra through MCP tools
 
 Do **not** infer that a feature is finished because a package folder or open PR exists.
 
@@ -118,20 +120,21 @@ packages/
   mcp-server/         agent-facing tools/service
   asset-pipeline/     asset identity/import/validation/cache
   blender-bridge/     headless Blender automation
-  animation/          skeleton/retarget/root-motion/graph semantics
+  animation/          skeleton/retarget/root-motion/graph/blend-space/morph/IK semantics
   core/               scripts/scenes/prefab lifecycle contracts
   input/              named actions/remapping
   audio/              mixer/bus semantics
   save-state/         save/settings migrations/storage contracts
   verification/       acceptance proof
-  physics-rapier/     planned/WIP adapter boundary
-  navigation-recast/  planned/WIP adapter boundary
+  physics-rapier/     Rapier physics adapter (real Electron slice proven)
+  navigation-recast/  Recast navigation adapter (real Electron slice proven)
   desktop-build/      planned/WIP release/platform boundary
 
 agents/
   engine-guide/       compact machine guidance
 
 docs/
+  guides/             task guides (AI agent + MCP tools)
   HANDOFF.md
   STATUS.md
   ENVIRONMENT_BOUNDARIES.md

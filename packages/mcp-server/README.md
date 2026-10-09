@@ -2,33 +2,41 @@
 
 The primary AI authoring gateway for Kinetra.
 
-Kinetra treats MCP/typed commands as the AI's editor. This package adapts semantic MCP tools onto the same project command bus used by every future human UI.
+Kinetra treats MCP/typed commands as the AI's editor. This package adapts
+semantic MCP tools onto the same project command bus used by every future human
+UI. **Agent-facing usage guide:** [`docs/guides/AI_AGENT_MCP.md`](../../docs/guides/AI_AGENT_MCP.md)
+(tool reference, recommended loop, error format, and an executed TypeScript
+example).
 
-## Current P2 surface
+## Tools on `main`
 
 ~~~text
-project.inspect
-project.diff
-project.undo
-
-scene.query
-scene.create
-
-entity.query
-entity.create
-entity.patch
-entity.reparent
-entity.delete
-
-runtime.start
-runtime.stop
-runtime.query
-runtime.injectInput
-runtime.readLogs
-runtime.captureFrame
+project.inspect      project.diff        project.undo
+scene.query          scene.create
+entity.query         entity.create       entity.patch
+entity.reparent      entity.delete
+runtime.start        runtime.stop        runtime.query
+runtime.injectInput  runtime.readLogs    runtime.captureFrame
+test.runAcceptance
 ~~~
 
-The MCP layer does **not** mutate Three.js objects directly. Authoring tools mutate the text project through `@kinetra/command-bus`. `runtime.start` then instantiates a snapshot into the runtime model.
+The source of truth is `createKinetraMcpServer` in `src/server.ts`.
+
+The MCP layer does **not** mutate Three.js objects directly. Authoring tools
+mutate the text project through `@kinetra/command-bus` (revision preconditions,
+`dryRun`, undo tokens). `runtime.start` then instantiates a snapshot of the
+current revision into the runtime host.
+
+## Public API
+
+| Export | Role |
+| --- | --- |
+| `createKinetraMcpServer(service)` | builds the `McpServer` with every tool above |
+| `KinetraAgentService` | in-process service each tool wraps; `KinetraAgentService.fromFile(path)` persists committed mutations through `FileProjectStore` |
+| `formatToolError(error)` | the structured `{ code, message, remediation, issues? }` body returned by failing tools |
+| `LocalRuntimeHost` | default `RuntimeHost`: Three.js scene graph, no renderer; `captureFrame()` returns `available: false` |
+| `ElectronRuntimeHost` | real Electron player (or packaged executable) host; used by `test.runAcceptance` |
+| `FileProjectStore` | file-backed project persistence |
 
 ## Stdio
 
@@ -48,6 +56,13 @@ The stdio process writes protocol traffic to stdout and errors only to stderr.
 
 ## Runtime capture status
 
-P2 currently includes a local Three.js **scene-graph** runtime host that supports start/stop/state query/logs/semantic input. It intentionally does not fake a screenshot: `runtime.captureFrame` reports that raster capture is unavailable and returns structured fallback state.
-
-A later P2 bridge connects the MCP service to the Electron/browser player so the same tool returns a real frame without changing the MCP contract.
+- The stdio CLI uses `LocalRuntimeHost` for the `runtime.*` tools. It never
+  fakes a screenshot: `runtime.captureFrame` returns `available: false` with
+  structured fallback state.
+- `test.runAcceptance` launches a real `ElectronRuntimeHost` per run
+  (`target: "runtime"` for the dev player, `target: "packaged"` for the packaged
+  executable) and returns an `AcceptanceReport` with PNG/state/log evidence.
+  Proof: `test/real-mcp-acceptance.test.ts` and the packaged smoke suites.
+- An embedding host can pass `{ runtime: new ElectronRuntimeHost(...) }` to
+  `KinetraAgentService` so `runtime.captureFrame` returns a real PNG; the CLI
+  does not expose a flag for this yet.
