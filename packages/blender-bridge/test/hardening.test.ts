@@ -275,6 +275,34 @@ test("importer rejects non-string recipe overrides before spawning Blender", asy
   }
 });
 
+test("importer refuses recipe-chosen executables/scripts unless the host opts in, without spawning", async () => {
+  for (const settings of [
+    { blenderExecutable: "/tmp/evil" },
+    { pythonScript: "/tmp/evil.py" },
+    { blenderExecutable: "/tmp/evil", pythonScript: "/tmp/evil.py" },
+  ]) {
+    const calls: Array<{ exe: string; args: string[] }> = [];
+    const importer = new BlenderGlbImporter({ runner: okRunner(calls), fileSystem: new MemoryFs() });
+    await assert.rejects(importer.import(context(settings)), (err: unknown) => {
+      isBridgeError("blender.invalidOption")(err);
+      assert.equal((err as BlenderBridgeError).details.reason, "recipeOverrideNotAllowed");
+      return true;
+    });
+    assert.equal(calls.length, 0, JSON.stringify(settings));
+  }
+});
+
+test("importer without overrides in the recipe still uses its configured executable", async () => {
+  const calls: Array<{ exe: string; args: string[] }> = [];
+  const importer = new BlenderGlbImporter({
+    blenderExecutable: "configured-blender",
+    runner: okRunner(calls),
+    fileSystem: new MemoryFs(),
+  });
+  await importer.import(context({ unrelated: true })).catch(() => undefined);
+  assert.equal(calls[0]?.exe, "configured-blender");
+});
+
 test("importer reports a missing GLB as blender.outputMissing naming both candidate paths", async () => {
   const importer = new BlenderGlbImporter({ runner: okRunner(), fileSystem: new MemoryFs() });
   await assert.rejects(importer.import(context({})), (err: unknown) => {

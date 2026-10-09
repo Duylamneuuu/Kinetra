@@ -105,7 +105,7 @@ test("BlenderGlbImporter Unit Suite", async (t) => {
     assert.deepEqual((result.metadata?.custom as any)?.meshes, ["TestMesh"]);
   });
 
-  await t.test("recipe settings can override blenderExecutable and pythonScript", async () => {
+  await t.test("recipe settings can override blenderExecutable and pythonScript when the host opts in", async () => {
     const mockRunner = new MockProcessRunner();
     const fs = new MemoryFileSystem();
     const validGlb = await createSyntheticGlb({ size: [1, 1, 1] });
@@ -117,6 +117,7 @@ test("BlenderGlbImporter Unit Suite", async (t) => {
     const importer = new BlenderGlbImporter({
       runner: mockRunner,
       fileSystem: fs,
+      allowRecipeExecutableOverrides: true,
     });
 
     await importer.import({
