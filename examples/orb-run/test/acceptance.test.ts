@@ -18,7 +18,7 @@ import {
   createOrbRunProject,
 } from "../src/index.js";
 
-const MANIFESTS = ["win", "timeout", "save-load", "audio", "hud", "hud-timeout"] as const;
+const MANIFESTS = ["win", "timeout", "save-load", "audio", "hud", "hud-timeout", "animation"] as const;
 
 async function loadManifest(name: string): Promise<AcceptanceManifest> {
   // dist/test/*.js -> examples/orb-run/acceptance/
