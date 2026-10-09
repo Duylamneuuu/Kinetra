@@ -46,6 +46,15 @@ function assertNonNegativeFinite(name: string, value: number | undefined): void 
   }
 }
 
+/** Accept plain arrays and typed arrays only; anything else is a structured RangeError, not a raw TypeError. */
+function toNumberArray(name: string, value: unknown): number[] {
+  if (Array.isArray(value)) return value as number[];
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+    return Array.from(value as unknown as ArrayLike<number>);
+  }
+  throw new RangeError(`NavMesh bake input "${name}" must be an array or typed array of numbers, got ${value === null ? "null" : typeof value}`);
+}
+
 function validateBakeInput(input: NavMeshBakeInput, positions: number[], indices: number[]): void {
   assertPositiveFinite("cellSize", input.cellSize);
   assertPositiveFinite("cellHeight", input.cellHeight);
@@ -148,12 +157,11 @@ export class RecastNavMesh {
   static async bake(input: NavMeshBakeInput): Promise<RecastNavMesh> {
     await initNavigation();
 
-    const positions = Array.isArray(input.positions)
-      ? input.positions
-      : Array.from(input.positions);
-    const indices = Array.isArray(input.indices)
-      ? input.indices
-      : Array.from(input.indices);
+    if (typeof input !== "object" || input === null) {
+      throw new RangeError("NavMesh bake input must be an object with positions and indices");
+    }
+    const positions = toNumberArray("positions", input.positions);
+    const indices = toNumberArray("indices", input.indices);
     validateBakeInput(input, positions, indices);
 
     const config: Record<string, unknown> = {};

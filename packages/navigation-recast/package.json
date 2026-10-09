@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/navigation.test.js"
+    "test": "node --test dist/test/navigation.test.js dist/test/navigation-geometry.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
