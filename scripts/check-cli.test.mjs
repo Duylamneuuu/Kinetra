@@ -76,7 +76,7 @@ describe("check-foundation.mjs", () => {
       assert.notEqual(result.status, 0, `${missing} missing should fail`);
       assert.match(result.stderr, /ENOENT/);
       assert.ok(
-        result.stderr.includes(missing),
+        result.stderr.replace(/\\+/g, "/").includes(missing),
         `stderr should name ${missing}: ${result.stderr}`,
       );
       assert.doesNotMatch(result.stdout, /passed/);
