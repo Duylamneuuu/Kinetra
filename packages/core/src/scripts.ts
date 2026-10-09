@@ -1,3 +1,9 @@
+/** Readable text for a thrown value; an Error with an empty message still names its type. */
+function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name || "Error";
+  return String(err);
+}
+
 export interface GameScriptInputReader {
   getAction(actionId: string): number;
   isPressed(actionId: string): boolean;
@@ -204,7 +210,7 @@ export class ScriptHost {
           entry.lifecycleState = "created";
         } catch (err) {
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -222,7 +228,7 @@ export class ScriptHost {
           entry.lifecycleState = "started";
         } catch (err) {
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -246,7 +252,7 @@ export class ScriptHost {
           entry.updateCount++;
         } catch (err) {
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -265,7 +271,7 @@ export class ScriptHost {
           entry.script.onEvent?.(event, payload, entry.context);
         } catch (err) {
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -290,7 +296,7 @@ export class ScriptHost {
         } catch (err) {
           entry.stopped = true;
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -316,7 +322,7 @@ export class ScriptHost {
         } catch (err) {
           entry.destroyed = true;
           entry.lifecycleState = "error";
-          entry.error = err instanceof Error ? err.message : String(err);
+          entry.error = errorText(err);
           entry.context.log?.("error", "script.error", {
             id: entry.id,
             scriptId: entry.scriptId,
@@ -369,7 +375,7 @@ export class ScriptHost {
       stopped: entry.stopped,
       destroyed: entry.destroyed,
       ...(state ? { state } : {}),
-      ...(entry.error ? { error: entry.error } : {}),
+      ...(entry.error !== undefined ? { error: entry.error } : {}),
     };
   }
 
@@ -429,6 +435,14 @@ export class ScriptHost {
     if (typeof entry.script.validateRestoreState === "function") {
       try {
         const result = entry.script.validateRestoreState(state, entry.context);
+        if (result instanceof Promise) {
+          // Restore validation is a synchronous pre-flight; do not leave a later rejection unhandled.
+          (result as Promise<unknown>).catch(() => undefined);
+          return {
+            valid: false,
+            error: `Script "${id}" validateRestoreState must be synchronous`,
+          };
+        }
         if (typeof result === "boolean") {
           return result
             ? { valid: true }
@@ -447,7 +461,7 @@ export class ScriptHost {
       } catch (err) {
         return {
           valid: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorText(err),
         };
       }
     }
