@@ -8,6 +8,7 @@ import type {
   MissingPathDiagnostic,
   RuntimeLog,
   RuntimeProbe,
+  VisualErrorInfo,
   StepResult,
 } from "./types.js";
 import {
@@ -15,6 +16,7 @@ import {
   compareVisualFrames,
   decodePng,
   detectBlankFrame,
+  VisualError,
   type DecodedImage,
   type VisualComparison,
   type VisualFrameEvidence,
@@ -774,6 +776,10 @@ export class AcceptanceRunner {
                 : undefined);
           const actual = isAssertion ? error.actual : undefined;
           const diagnostics = isAssertion ? error.diagnostics : undefined;
+          const visualError: VisualErrorInfo | undefined =
+            error instanceof VisualError
+              ? { code: error.code, details: error.details }
+              : undefined;
           const violations =
             isAssertion && actual && typeof actual === "object" && Array.isArray((actual as any).violations)
               ? ((actual as any).violations as PerformanceBudgetViolation[])
@@ -791,6 +797,7 @@ export class AcceptanceRunner {
             ...(expected !== undefined ? { expected } : {}),
             ...(actual !== undefined ? { actual } : {}),
             ...(diagnostics !== undefined ? { diagnostics } : {}),
+            ...(visualError !== undefined ? { visualError } : {}),
             ...(violations !== undefined ? { performanceViolations: violations } : {}),
           });
           break;
