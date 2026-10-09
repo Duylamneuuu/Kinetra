@@ -569,12 +569,18 @@ export class ThreeSceneRuntime {
       return { success: false, affectedEntities: [], error: "Runtime is disposed" };
     }
 
-    const affectedEntities: string[] = [];
+    const requestedEntities: string[] = [];
+    // Attach/detach bump an entity's load token. A token that moved while the new bytes
+    // resolved means the entity was detached or re-attached meanwhile, so the reload must
+    // not resurrect the old asset on it.
+    const tokensAtStart = new Map<string, number>();
     for (const [entityId, meta] of this.#models) {
       if (meta.assetId === assetId) {
-        affectedEntities.push(entityId);
+        requestedEntities.push(entityId);
+        tokensAtStart.set(entityId, this.#modelLoadTokens.get(entityId) ?? 0);
       }
     }
+    let affectedEntities = requestedEntities;
 
     const droppedMorphOverrides: Record<string, string[]> = {};
     const droppedIkChains: Record<string, string[]> = {};
@@ -588,6 +594,14 @@ export class ThreeSceneRuntime {
     if (this.#disposed) {
       return { success: false, affectedEntities: [], error: "Runtime is disposed" };
     }
+
+    affectedEntities = requestedEntities.filter((entityId) => {
+      const metadata = this.#models.get(entityId);
+      return (
+        metadata?.assetId === assetId &&
+        (this.#modelLoadTokens.get(entityId) ?? 0) === tokensAtStart.get(entityId)
+      );
+    });
 
     for (const entityId of affectedEntities) {
       const object = this.#objects.get(entityId);

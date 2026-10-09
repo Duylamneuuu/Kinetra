@@ -191,3 +191,55 @@ test("attachModel: detachModel while the asset resolves cancels the pending atta
   assert.equal(object.children.length, 0);
   assert.equal(runtime.getModelMetadata(entityId)?.loaded, false);
 });
+
+async function runtimeWithLoadedModel(assetId: string): Promise<ThreeSceneRuntime> {
+  const resolver = new GatedResolver();
+  const runtime = ThreeSceneRuntime.instantiate(projectWithModel(assetId), sceneId);
+  const loading = runtime.loadModels(resolver);
+  await resolver.until(1);
+  resolver.pending[0]!.release(await createSyntheticGlb({ size: [1, 1, 1] }));
+  await loading;
+  assert.equal(runtime.instanceCount, 1);
+  return runtime;
+}
+
+test("reloadAsset: detachModel while the new bytes resolve is not resurrected by the reload", async () => {
+  const runtime = await runtimeWithLoadedModel("model_a");
+  const object = runtime.getObject(entityId)!;
+  const resolver = new GatedResolver();
+
+  const reloading = runtime.reloadAsset("model_a", resolver);
+  await resolver.until(1);
+  runtime.detachModel(entityId);
+  resolver.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  const result = await reloading;
+
+  assert.equal(result.success, true);
+  assert.equal(runtime.instanceCount, 0, "a detached entity must stay detached after a reload");
+  assert.equal(object.children.length, 0);
+  assert.equal(runtime.getModelMetadata(entityId)?.loaded, false);
+  assert.deepEqual(result.affectedEntities, []);
+});
+
+test("reloadAsset: an attach of another asset that started during the reload is not overwritten", async () => {
+  const runtime = await runtimeWithLoadedModel("model_a");
+  const object = runtime.getObject(entityId)!;
+  const reloadResolver = new GatedResolver();
+  const attachResolver = new GatedResolver();
+
+  const reloading = runtime.reloadAsset("model_a", reloadResolver);
+  await reloadResolver.until(1);
+  const attaching = runtime.attachModel(entityId, "model_b", attachResolver);
+  await attachResolver.until(1);
+
+  reloadResolver.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  await reloading;
+  attachResolver.pending[0]!.release(await createSyntheticGlb({ size: [3, 3, 3] }));
+  const attached = await attaching;
+
+  assert.equal(attached.success, true);
+  assert.equal(runtime.getInstance(entityId)?.assetId, "model_b");
+  assert.equal(runtime.getModelMetadata(entityId)?.assetId, "model_b");
+  assert.equal(runtime.instanceCount, 1);
+  assert.equal(object.children.length, 1, "the reload must not leave a second model scene attached");
+});
