@@ -61,8 +61,18 @@ export class SettingsStore {
   }
 
   async load(key = "user-settings"): Promise<PlayerSettingsData> {
-    const data = await this.#docStore.load(key);
-    if (!data) {
+    let data: PlayerSettingsData | undefined;
+    try {
+      data = await this.#docStore.load(key);
+    } catch (error) {
+      // A truncated/corrupt settings file (crash mid-write, full disk) must not block
+      // player start-up; the next save overwrites it. Storage I/O errors still propagate.
+      if (error instanceof SyntaxError) {
+        return structuredClone(DEFAULT_PLAYER_SETTINGS);
+      }
+      throw error;
+    }
+    if (typeof data !== "object" || data === null || Array.isArray(data)) {
       return structuredClone(DEFAULT_PLAYER_SETTINGS);
     }
     const base: PlayerSettingsData = {
