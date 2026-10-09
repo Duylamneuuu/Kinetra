@@ -23,10 +23,15 @@ function compareCodePoints(a:string,b:string):number{
   return a<b?-1:a>b?1:0;
 }
 
+/** The raw bone map of a profile; `{}` when JSON/MCP input has no usable `bones` object. */
+function rawBoneMap(profile:SkeletonProfile):Record<string,unknown>{
+  return (profile&&typeof profile.bones==="object"&&profile.bones!==null&&!Array.isArray(profile.bones)
+    ?profile.bones:{}) as Record<string,unknown>;
+}
+
 /** Bone map entries that actually name a bone (JSON/MCP input may carry null/undefined). */
 function boneEntries(profile:SkeletonProfile):Array<[HumanoidBone,string]>{
-  const bones=(profile&&typeof profile.bones==="object"&&profile.bones!==null?profile.bones:{}) as Record<string,unknown>;
-  return Object.entries(bones).filter(
+  return Object.entries(rawBoneMap(profile)).filter(
     (entry):entry is [HumanoidBone,string]=>typeof entry[1]==="string",
   );
 }
@@ -43,7 +48,7 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
   const diagnostics:SkeletonProfileDiagnostic[]=[];
   const physical=new Map<string,HumanoidBone>();
 
-  const rawBones=(profile&&typeof profile.bones==="object"&&profile.bones!==null?profile.bones:{}) as Record<string,unknown>;
+  const rawBones=rawBoneMap(profile);
   for(const [semantic,name] of Object.entries(rawBones) as Array<[HumanoidBone,unknown]>){
     if(typeof name!=="string"||!name.trim()){
       diagnostics.push({
@@ -65,7 +70,7 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
   }
 
   for(const semantic of REQUIRED){
-    if(!profile.bones[semantic]){
+    if(!rawBones[semantic]){
       diagnostics.push({
         severity:"warning",code:"skeleton.required.missing",
         message:`Recommended humanoid bone "${semantic}" is not mapped`,
@@ -105,8 +110,9 @@ export function buildRetargetPlan(
   const pairs:RetargetBonePair[]=[];
   const missingOnTarget:HumanoidBone[]=[];
 
+  const targetBones=rawBoneMap(target);
   for(const [semantic,sourceBone] of boneEntries(source)){
-    const targetBone=target.bones[semantic];
+    const targetBone=Object.hasOwn(targetBones,semantic)?targetBones[semantic]:undefined;
     if(typeof targetBone==="string"&&targetBone!==""){
       pairs.push({semantic,sourceBone,targetBone});
     }else{

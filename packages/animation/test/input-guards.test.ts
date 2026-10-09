@@ -79,3 +79,34 @@ test("validateClipMetadata still accepts a sorted in-range clip", () => {
     [],
   );
 });
+
+test("validateSkeletonProfile and buildRetargetPlan tolerate a profile without a bones object", () => {
+  const noBones = { id: "p" } as unknown as SkeletonProfile;
+  let diagnostics: ReturnType<typeof validateSkeletonProfile> = [];
+  assert.doesNotThrow(() => {
+    diagnostics = validateSkeletonProfile(noBones);
+  });
+  assert.ok(diagnostics.some((d) => d.code === "skeleton.required.missing"));
+  assert.doesNotThrow(() => validateSkeletonProfile({ id: "p", bones: null } as unknown as SkeletonProfile));
+
+  const plan = buildRetargetPlan(asProfile({ hips: "SrcHips" }), noBones);
+  assert.deepEqual(plan.pairs, []);
+  assert.deepEqual(plan.missingOnTarget, ["hips"]);
+  assert.doesNotThrow(() => buildRetargetPlan(noBones, asProfile({ hips: "Hips" })));
+});
+
+test("buildRetargetPlan ignores inherited properties on the target bone map", () => {
+  const plan = buildRetargetPlan(asProfile({ toString: "Src" }), asProfile({ hips: "Hips" }));
+  assert.deepEqual(plan.pairs, []);
+  assert.deepEqual(plan.missingOnTarget, ["toString"]);
+});
+
+test("validateClipMetadata reports a non-object clip instead of throwing", () => {
+  for (const bad of [null, undefined, 42, "clip"]) {
+    let issues: string[] = [];
+    assert.doesNotThrow(() => {
+      issues = validateClipMetadata(bad as unknown as AnimationClipMetadata);
+    });
+    assert.deepEqual(issues, ["clip must be an object"]);
+  }
+});

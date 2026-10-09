@@ -16,6 +16,9 @@ export interface AnimationClipMetadata {
 
 export function validateClipMetadata(clip:AnimationClipMetadata):string[]{
   const issues:string[]=[];
+  if(typeof clip!=="object"||clip===null){
+    return ["clip must be an object"];
+  }
   if(!clip.id) issues.push("clip id is required");
   if(!clip.name) issues.push("clip name is required");
   const durationOk=typeof clip.duration==="number"&&Number.isFinite(clip.duration)&&clip.duration>0;
