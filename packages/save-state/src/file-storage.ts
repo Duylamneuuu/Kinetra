@@ -58,6 +58,14 @@ export class FileKeyValueStorage implements KeyValueStorage {
       );
     }
 
+    // "settings:user" is stored as "settings_user.json", so a save slot whose name starts with
+    // "settings_" would alias a settings file and overwrite it.
+    if (key.startsWith("saves:") && cleanKey.startsWith("settings_")) {
+      throw new Error(
+        `Invalid storage key "${key}": save slot names starting with "settings_" collide with the settings namespace`,
+      );
+    }
+
     // Windows treats device names as reserved even with an extension
     // ("nul.json", "con.backup.json"), so such keys cannot be stored portably.
     if (WINDOWS_RESERVED_NAME.test(cleanKey.split(".")[0] ?? "")) {
