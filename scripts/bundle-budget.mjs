@@ -6,7 +6,31 @@ export const BUDGET_METRICS = Object.freeze([
   "totalJsRawBytes",
   "totalJsGzipBytes",
   "largestJsGzipBytes",
+  "initialJsGzipBytes",
 ]);
+
+/**
+ * Names of the JavaScript chunks the entry HTML loads eagerly: module
+ * scripts and modulepreload links. Chunks reached only through dynamic
+ * import() (Rapier, Recast) are deliberately excluded - they are not on
+ * the startup path.
+ */
+export function findInitialChunks(html) {
+  const names = new Set();
+  const tagPattern = /<(script|link)\b[^>]*>/gi;
+  for (const [tag, kind] of [...html.matchAll(tagPattern)].map((m) => [m[0], m[1].toLowerCase()])) {
+    const isScript = kind === "script" && /\btype\s*=\s*["']module["']/i.test(tag);
+    const isPreload = kind === "link" && /\brel\s*=\s*["']modulepreload["']/i.test(tag);
+    if (!isScript && !isPreload) continue;
+    const attr = isScript ? "src" : "href";
+    const match = new RegExp(`\\b${attr}\\s*=\\s*["']([^"']+)["']`, "i").exec(tag);
+    if (!match) continue;
+    const path = match[1].split(/[?#]/)[0];
+    if (!path.endsWith(".js")) continue;
+    names.add(path.slice(path.lastIndexOf("/") + 1));
+  }
+  return [...names].sort();
+}
 
 /**
  * Measure the JavaScript chunks of a built bundle directory.
@@ -50,7 +74,7 @@ export async function measureBundle(assetsDir) {
  * Returns { ok, metrics, violations } where each violation names the metric,
  * the actual value, and the budget it exceeded.
  */
-export function evaluateBundleBudget(files, budgets) {
+export function evaluateBundleBudget(files, budgets, initialChunkNames) {
   if (!Array.isArray(files) || files.length === 0) {
     throw Object.assign(new Error("evaluateBundleBudget requires at least one chunk"), {
       code: "bundle.noChunks",
@@ -75,6 +99,20 @@ export function evaluateBundleBudget(files, budgets) {
     totalJsGzipBytes: files.reduce((sum, file) => sum + file.gzipBytes, 0),
     largestJsGzipBytes: Math.max(...files.map((file) => file.gzipBytes)),
   };
+
+  if (initialChunkNames !== undefined) {
+    const initial = files.filter((file) => initialChunkNames.includes(file.name));
+    if (initial.length !== initialChunkNames.length) {
+      throw Object.assign(new Error("Entry HTML references a JavaScript chunk that is not in the bundle"), {
+        code: "bundle.initialChunkMissing",
+      });
+    }
+    metrics.initialJsGzipBytes = initial.reduce((sum, file) => sum + file.gzipBytes, 0);
+  } else if (budgets?.initialJsGzipBytes !== undefined) {
+    throw Object.assign(new Error("initialJsGzipBytes budget requires the entry HTML chunk list"), {
+      code: "bundle.initialChunksUnknown",
+    });
+  }
 
   const violations = BUDGET_METRICS.filter(
     (metric) => budgets?.[metric] !== undefined && metrics[metric] > budgets[metric],

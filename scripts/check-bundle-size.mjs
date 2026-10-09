@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { evaluateBundleBudget, measureBundle } from "./bundle-budget.mjs";
+import { evaluateBundleBudget, findInitialChunks, measureBundle } from "./bundle-budget.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const config = JSON.parse(
@@ -9,7 +9,11 @@ const config = JSON.parse(
 );
 
 const files = await measureBundle(join(repoRoot, config.assetsDir));
-const result = evaluateBundleBudget(files, config.budgets);
+let initialChunks;
+if (config.entryHtml) {
+  initialChunks = findInitialChunks(await readFile(join(repoRoot, config.entryHtml), "utf8"));
+}
+const result = evaluateBundleBudget(files, config.budgets, initialChunks);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KiB`;
 console.log(`Kinetra bundle size (${config.assetsDir}):`);

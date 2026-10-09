@@ -2,11 +2,11 @@ import {
   assertValidProject,
   type ProjectDocument,
 } from "@kinetra/project-model";
-import {
-  createPhysicsWorldFromScene,
-  RapierPhysicsWorld,
-} from "@kinetra/physics-rapier";
-import { RecastNavMesh } from "@kinetra/navigation-recast";
+// Rapier (~2.8 MB of inlined WASM source) and Recast are loaded on demand
+// with dynamic import() so the first-paint chunk stays small (see
+// .kinetra/bundle-budget.json). Only types are imported statically.
+import type { RapierPhysicsWorld } from "@kinetra/physics-rapier";
+import type { RecastNavMesh } from "@kinetra/navigation-recast";
 import {
   ThreeSceneRuntime,
   type AssetResolver,
@@ -661,6 +661,9 @@ export class PlayerRuntimeController {
     }
 
     try {
+      const { createPhysicsWorldFromScene } = await import(
+        "@kinetra/physics-rapier"
+      );
       this.#physics = await createPhysicsWorldFromScene(scene);
       this.#syncTransformsFromPhysics();
     } catch (error) {
@@ -950,6 +953,7 @@ export class PlayerRuntimeController {
       );
     }
 
+    const { RecastNavMesh } = await import("@kinetra/navigation-recast");
     this.#navMesh = await RecastNavMesh.bake({
       positions,
       indices,
@@ -974,6 +978,7 @@ export class PlayerRuntimeController {
     }
 
     const bytes = base64ToUint8Array(dataBase64);
+    const { RecastNavMesh } = await import("@kinetra/navigation-recast");
     this.#navMesh = await RecastNavMesh.fromBytes(bytes);
     this.#navigationState = {
       hasNavMesh: true,
