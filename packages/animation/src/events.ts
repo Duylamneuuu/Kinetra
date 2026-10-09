@@ -370,7 +370,7 @@ export class ClipEventTracker {
   advance(deltaSeconds: number): ClipEventAdvanceResult {
     const from = this.#position;
     if (!Number.isFinite(deltaSeconds) || deltaSeconds === 0) {
-      return this.#result([], false, from);
+      return this.#result([], false, undefined);
     }
     let to = from + deltaSeconds;
     if (!Number.isFinite(to)) to = from;
@@ -379,7 +379,7 @@ export class ClipEventTracker {
     this.#started = true;
     this.#position = to;
 
-    if (this.#events.length === 0) return this.#result([], false, from);
+    if (this.#events.length === 0) return this.#result([], false, deltaSeconds > 0);
 
     const fired: AnimationEventFire[] = [];
     let truncated = false;
@@ -438,7 +438,7 @@ export class ClipEventTracker {
         }
       }
     }
-    return this.#result(fired, truncated, from);
+    return this.#result(fired, truncated, forward);
   }
 
   #wrap(position: number): number {
@@ -447,15 +447,18 @@ export class ClipEventTracker {
     return wrapped;
   }
 
-  #result(fired: AnimationEventFire[], truncated: boolean, previous: number): ClipEventAdvanceResult {
+  /**
+   * `forward` is the direction of the move; `undefined` (zero or non-finite delta) keeps the
+   * head where it is and is judged against the end of the clip.
+   */
+  #result(fired: AnimationEventFire[], truncated: boolean, forward: boolean | undefined): ClipEventAdvanceResult {
     const position = this.#position;
-    const movedForward = position >= previous;
     return {
       fired,
       truncated,
       time: this.#wrap(position),
       position,
-      finished: !this.loop && (movedForward ? position >= this.duration : position <= 0),
+      finished: !this.loop && (forward === false ? position <= 0 : position >= this.duration),
     };
   }
 }
