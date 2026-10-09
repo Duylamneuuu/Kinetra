@@ -18,11 +18,14 @@ export interface FileStorageOptions {
   renameRetryAttempts?: number;
   /** Backoff delay per retry attempt in ms (default 10) */
   retryDelayMs?: number;
+  /** Optional custom temp-file opener, primarily for deterministic failure injection in tests */
+  openFile?: typeof open;
 }
 
 export class FileKeyValueStorage implements KeyValueStorage {
   readonly rootDir: string;
   readonly #renameFile: (sourcePath: string, targetPath: string) => Promise<void>;
+  readonly #openFile: typeof open;
   readonly #retryAttempts: number;
   readonly #retryDelayMs: number;
 
@@ -32,6 +35,7 @@ export class FileKeyValueStorage implements KeyValueStorage {
     }
     this.rootDir = resolve(rootDir);
     this.#renameFile = options.renameFile ?? rename;
+    this.#openFile = options.openFile ?? open;
     this.#retryAttempts = options.renameRetryAttempts ?? 3;
     this.#retryDelayMs = options.retryDelayMs ?? 10;
   }
@@ -99,12 +103,18 @@ export class FileKeyValueStorage implements KeyValueStorage {
     const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
 
     // 1. Open temp handle, write full contents, sync/flush, and close
-    const handle = await open(tempPath, "w");
+    // A failed write/sync (e.g. ENOSPC) must not leak the partial temp file.
     try {
-      await handle.writeFile(value, "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
+      const handle = await this.#openFile(tempPath, "w");
+      try {
+        await handle.writeFile(value, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } catch (err) {
+      await unlink(tempPath).catch(() => {});
+      throw err;
     }
 
     // 2. Attempt atomic rename/replace with bounded retry on Windows NTFS
