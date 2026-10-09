@@ -104,6 +104,13 @@ export function parseBlenderManifest(
 export interface BlenderGlbImporterOptions {
   blenderExecutable?: string;
   pythonScript?: string;
+  /**
+   * Import recipes are project data, and an agent (or a downloaded project) can write them.
+   * `recipe.settings.blenderExecutable` / `pythonScript` therefore only take effect when the host
+   * opts in here; otherwise a recipe that sets them is rejected with `blender.invalidOption`
+   * before anything is spawned. Default: false.
+   */
+  allowRecipeExecutableOverrides?: boolean;
   runner?: ProcessRunner;
   /** Wall-clock limit for the default process runner (ignored when `runner` is given). */
   timeoutMs?: number;
@@ -126,6 +133,7 @@ export function defaultExportScriptPath(): string {
 export class BlenderGlbImporter implements AssetImporter {
   readonly #blenderExecutable: string;
   readonly #pythonScript: string;
+  readonly #allowRecipeOverrides: boolean;
   readonly #runner: ProcessRunner;
   readonly #fs: { readFile(path: string): Promise<Uint8Array> };
   readonly #unlink: (path: string) => Promise<void>;
@@ -136,6 +144,7 @@ export class BlenderGlbImporter implements AssetImporter {
       process.env.BLENDER_PATH ??
       "blender";
     this.#pythonScript = options.pythonScript ?? defaultExportScriptPath();
+    this.#allowRecipeOverrides = options.allowRecipeExecutableOverrides === true;
     this.#runner = options.runner ??
       new NodeProcessRunner(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {});
     this.#fs = options.fileSystem ?? {
@@ -175,8 +184,25 @@ export class BlenderGlbImporter implements AssetImporter {
 
   async #importStaged(context: AssetImporterContext): Promise<AssetImporterResult> {
     const settings = context.recipe.settings as Record<string, unknown> | undefined;
-    const blenderExecutable = readStringSetting(settings, "blenderExecutable") ?? this.#blenderExecutable;
-    const pythonScript = readStringSetting(settings, "pythonScript") ?? this.#pythonScript;
+    const executableOverride = readStringSetting(settings, "blenderExecutable");
+    const scriptOverride = readStringSetting(settings, "pythonScript");
+    if (!this.#allowRecipeOverrides) {
+      for (const [key, value] of [
+        ["blenderExecutable", executableOverride],
+        ["pythonScript", scriptOverride],
+      ] as const) {
+        if (value !== undefined) {
+          throw new BlenderBridgeError(
+            "blender.invalidOption",
+            `Import recipe setting "${key}" is not allowed: recipes are project data and must not choose which program runs. ` +
+              `Configure the importer (or set allowRecipeExecutableOverrides) instead.`,
+            { option: key, reason: "recipeOverrideNotAllowed" },
+          );
+        }
+      }
+    }
+    const blenderExecutable = executableOverride ?? this.#blenderExecutable;
+    const pythonScript = scriptOverride ?? this.#pythonScript;
 
     // Run Blender export into staging path context.targetPath
     await runBlenderExport(
