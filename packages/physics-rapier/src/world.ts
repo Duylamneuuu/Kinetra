@@ -62,6 +62,27 @@ function assertFiniteVec3(value: Vec3, label: string): void {
   }
 }
 
+function assertPositive(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${label} must be finite and > 0`);
+  }
+  return value;
+}
+
+function assertNonNegative(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new RangeError(`${label} must be finite and >= 0`);
+  }
+  return value;
+}
+
+function assertFinite(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new RangeError(`${label} must be finite`);
+  }
+  return value;
+}
+
 let rapierReady: Promise<void> | undefined;
 
 export async function initRapier(): Promise<void> {
@@ -119,13 +140,16 @@ export class RapierPhysicsWorld {
   }): void {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addFixedBox layer");
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(
-        input.position.x,
-        input.position.y,
-        input.position.z,
-      ),
-    );
+    assertFiniteVec3(input.position, "addFixedBox position");
+    assertFiniteVec3(input.halfExtents, "addFixedBox halfExtents");
+    assertPositive(input.halfExtents.x, "addFixedBox halfExtents.x");
+    assertPositive(input.halfExtents.y, "addFixedBox halfExtents.y");
+    assertPositive(input.halfExtents.z, "addFixedBox halfExtents.z");
+    if (input.friction !== undefined)
+      assertNonNegative(input.friction, "addFixedBox friction");
+    if (input.restitution !== undefined)
+      assertNonNegative(input.restitution, "addFixedBox restitution");
+
     const colDesc = RAPIER.ColliderDesc.cuboid(
       input.halfExtents.x,
       input.halfExtents.y,
@@ -135,7 +159,14 @@ export class RapierPhysicsWorld {
     if (input.restitution !== undefined)
       colDesc.setRestitution(input.restitution);
 
-    const collider = this.world.createCollider(colDesc, body);
+    const body = this.world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(
+        input.position.x,
+        input.position.y,
+        input.position.z,
+      ),
+    );
+    const collider = this.#createCollider(colDesc, body);
     this.#register({
       id: input.id,
       body,
@@ -160,31 +191,41 @@ export class RapierPhysicsWorld {
   }): void {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addDynamicBody layer");
-    const bodyDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(
-      input.position.x,
-      input.position.y,
-      input.position.z,
-    );
-    if (input.gravityScale !== undefined) {
-      bodyDesc.setGravityScale(input.gravityScale);
-    }
-    const body = this.world.createRigidBody(bodyDesc);
+    assertFiniteVec3(input.position, "addDynamicBody position");
+    if (input.gravityScale !== undefined)
+      assertFinite(input.gravityScale, "addDynamicBody gravityScale");
+    if (input.restitution !== undefined)
+      assertNonNegative(input.restitution, "addDynamicBody restitution");
+    if (input.friction !== undefined)
+      assertNonNegative(input.friction, "addDynamicBody friction");
+    if (input.mass !== undefined)
+      assertPositive(input.mass, "addDynamicBody mass");
 
+    // Build and validate the collider description before touching the world so that a bad shape
+    // can never leave an orphan rigid body behind.
     let colDesc: RAPIER.ColliderDesc;
     switch (input.shape) {
       case "box": {
         const ext = input.halfExtents ?? { x: 0.5, y: 0.5, z: 0.5 };
-        colDesc = RAPIER.ColliderDesc.cuboid(ext.x, ext.y, ext.z);
+        assertFiniteVec3(ext, "addDynamicBody halfExtents");
+        colDesc = RAPIER.ColliderDesc.cuboid(
+          assertPositive(ext.x, "addDynamicBody halfExtents.x"),
+          assertPositive(ext.y, "addDynamicBody halfExtents.y"),
+          assertPositive(ext.z, "addDynamicBody halfExtents.z"),
+        );
         break;
       }
       case "sphere": {
-        const r = input.radius ?? 0.5;
+        const r = assertPositive(input.radius ?? 0.5, "addDynamicBody radius");
         colDesc = RAPIER.ColliderDesc.ball(r);
         break;
       }
       case "capsule": {
-        const hh = input.halfHeight ?? 0.5;
-        const r = input.radius ?? 0.5;
+        const hh = assertPositive(
+          input.halfHeight ?? 0.5,
+          "addDynamicBody halfHeight",
+        );
+        const r = assertPositive(input.radius ?? 0.5, "addDynamicBody radius");
         colDesc = RAPIER.ColliderDesc.capsule(hh, r);
         break;
       }
@@ -197,7 +238,16 @@ export class RapierPhysicsWorld {
     if (input.friction !== undefined) colDesc.setFriction(input.friction);
     if (input.mass !== undefined) colDesc.setMass(input.mass);
 
-    const collider = this.world.createCollider(colDesc, body);
+    const bodyDesc = RAPIER.RigidBodyDesc.dynamic().setTranslation(
+      input.position.x,
+      input.position.y,
+      input.position.z,
+    );
+    if (input.gravityScale !== undefined) {
+      bodyDesc.setGravityScale(input.gravityScale);
+    }
+    const body = this.world.createRigidBody(bodyDesc);
+    const collider = this.#createCollider(colDesc, body);
     this.#register({
       id: input.id,
       body,
@@ -219,6 +269,24 @@ export class RapierPhysicsWorld {
   }): void {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addKinematicCharacter layer");
+    assertFiniteVec3(input.position, "addKinematicCharacter position");
+    assertPositive(input.halfHeight, "addKinematicCharacter halfHeight");
+    assertPositive(input.radius, "addKinematicCharacter radius");
+    const offset = assertNonNegative(
+      input.offset ?? 0.01,
+      "addKinematicCharacter offset",
+    );
+    if (input.autostepMaxHeight !== undefined)
+      assertNonNegative(
+        input.autostepMaxHeight,
+        "addKinematicCharacter autostepMaxHeight",
+      );
+    if (input.autostepMinWidth !== undefined)
+      assertNonNegative(
+        input.autostepMinWidth,
+        "addKinematicCharacter autostepMinWidth",
+      );
+
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
         input.position.x,
@@ -226,12 +294,11 @@ export class RapierPhysicsWorld {
         input.position.z,
       ),
     );
-    const collider = this.world.createCollider(
+    const collider = this.#createCollider(
       RAPIER.ColliderDesc.capsule(input.halfHeight, input.radius),
       body,
     );
 
-    const offset = input.offset ?? 0.01;
     const controller = this.world.createCharacterController(offset);
     controller.setUp({ x: 0, y: 1, z: 0 });
     controller.setSlideEnabled(true);
@@ -607,6 +674,19 @@ export class RapierPhysicsWorld {
   /** Query-filter layer of a body (0 unless assigned). */
   layerOf(id: string): number {
     return this.#require(id).layer;
+  }
+
+  /** Creates a collider; if Rapier rejects it the parent body is removed so nothing leaks. */
+  #createCollider(
+    desc: RAPIER.ColliderDesc,
+    body: RAPIER.RigidBody,
+  ): RAPIER.Collider {
+    try {
+      return this.world.createCollider(desc, body);
+    } catch (error) {
+      this.world.removeRigidBody(body);
+      throw error;
+    }
   }
 
   #register(entry: BodyEntry): void {

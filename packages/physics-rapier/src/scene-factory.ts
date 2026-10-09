@@ -48,6 +48,17 @@ export async function createPhysicsWorldFromScene(
   options: RapierPhysicsWorldOptions = {},
 ): Promise<RapierPhysicsWorld> {
   const world = await RapierPhysicsWorld.create(options);
+  try {
+    populateWorld(world, scene);
+  } catch (error) {
+    // Do not leak the WASM world when one entity is rejected.
+    world.dispose();
+    throw error;
+  }
+  return world;
+}
+
+function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void {
   const initialDynamicStates = new Map<string, Vec3>();
 
   for (const entity of scene.entities) {
@@ -224,6 +235,4 @@ export async function createPhysicsWorldFromScene(
       world.setBodyTranslation(id, pos, true);
     }
   }
-
-  return world;
 }
