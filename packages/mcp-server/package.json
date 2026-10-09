@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@kinetra/reference-game": "workspace:*",
-    "electron": "38.8.6"
+    "electron": "41.10.7"
   },
   "dependencies": {
     "@kinetra/command-bus": "workspace:*",
