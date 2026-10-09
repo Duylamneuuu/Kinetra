@@ -62,7 +62,16 @@ export class NodeProcessRunner implements ProcessRunner {
   readonly #timeoutMs: number;
 
   constructor(options: { maxOutputChars?: number; timeoutMs?: number } = {}) {
-    this.#maxOutputChars = options.maxOutputChars ?? MAX_CAPTURED_OUTPUT_CHARS;
+    const maxOutputChars = options.maxOutputChars ?? MAX_CAPTURED_OUTPUT_CHARS;
+    // NaN would make `length > limit` always false, silently turning the bound into "unbounded".
+    if (!Number.isSafeInteger(maxOutputChars) || maxOutputChars <= 0) {
+      throw new BlenderBridgeError(
+        "blender.invalidOption",
+        `Blender maxOutputChars must be a positive integer (got ${String(maxOutputChars)})`,
+        { option: "maxOutputChars", received: maxOutputChars },
+      );
+    }
+    this.#maxOutputChars = maxOutputChars;
     const timeoutMs = options.timeoutMs ?? DEFAULT_BLENDER_TIMEOUT_MS;
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new BlenderBridgeError(

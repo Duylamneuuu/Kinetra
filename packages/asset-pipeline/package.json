@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/asset-pipeline.test.js dist/test/reimport.test.js dist/test/rebuild-order.test.js dist/test/coordinator.test.js dist/test/compression.test.js dist/test/database-integrity.test.js dist/test/watcher-reassign.test.js dist/test/hash-canonical.test.js dist/test/reimport-concurrency.test.js dist/test/watcher-lifecycle.test.js dist/test/coordinator-start-failure.test.js dist/test/validation-edge.test.js dist/test/locale-independent-order.test.js dist/test/glb-normalize.test.js dist/test/watcher-inflight-check.test.js dist/test/coordinator-runtime-failure.test.js dist/test/reimport-edge.test.js dist/test/coordinator-edge.test.js"
+    "test": "node --test dist/test/asset-pipeline.test.js dist/test/reimport.test.js dist/test/rebuild-order.test.js dist/test/coordinator.test.js dist/test/compression.test.js dist/test/database-integrity.test.js dist/test/watcher-reassign.test.js dist/test/hash-canonical.test.js dist/test/reimport-concurrency.test.js dist/test/watcher-lifecycle.test.js dist/test/coordinator-start-failure.test.js dist/test/validation-edge.test.js dist/test/locale-independent-order.test.js dist/test/glb-normalize.test.js dist/test/watcher-inflight-check.test.js dist/test/coordinator-runtime-failure.test.js dist/test/reimport-edge.test.js dist/test/coordinator-edge.test.js dist/test/rebuild-retry.test.js dist/test/validation-cost.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
