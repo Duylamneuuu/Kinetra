@@ -8,10 +8,12 @@ import type {
 } from "@kinetra/verification";
 
 import { createOrbRunProject } from "./authoring.js";
+import type { OrbRunAnimatorOptions } from "./animator.js";
 import { buildOrbRunHud } from "./hud.js";
 import {
   captureOrbRunSave,
   restoreOrbRunSave,
+  orbRunAnimator,
   orbRunAudio,
   startOrbRunSimulation,
   summarizeOrbRun,
@@ -38,19 +40,24 @@ import type { HeadlessSceneSimulation } from "./simulation.js";
  * - `state.hud.<objective|orbs|timer|exit|marker|banner>.*`: the HUD model of `computeOrbRunHud` (`marker` and `banner` are `null` when absent)
  * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
  *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
+ * - `state.animation.*`: the runner's locomotion + foot IK (`OrbRunAnimator`): `speed`, `smoothedSpeed`, `weights.<idle|walk|run>`, `dominant`,
+ *   `transitions`, `visited`, `pelvis.<0|1|2>`, `pelvisDrop`, `feet.<left|right>.<groundY|targetY|ankleY|error|planted|reachable|converged>`,
+ *   `maxBoneLengthError`, `legsValid`, `failedCount`; a pose that could not be computed is also an `animation.failed` warning log
  * - `audio.play` / `audio.stop` / `audio.setBusGain` / `audio.setBusMuted` steps drive the same headless mixer;
  *   a refused `audio.play` (unknown bus/asset) throws so the manifest fails instead of passing silently
  * - logs: every started cue also appears as an `audio.played` info log (same message the Electron player logs)
  */
 export class OrbRunHeadlessProbe implements RuntimeProbe {
   readonly #project: ProjectDocument;
+  readonly #animation: OrbRunAnimatorOptions;
   #simulation: HeadlessSceneSimulation | undefined;
   #paused = false;
   #slots = new Map<string, OrbRunSaveData>();
   #previousLogs: RuntimeLog[] = [];
 
-  constructor(options: { project?: ProjectDocument } = {}) {
+  constructor(options: { project?: ProjectDocument; animation?: OrbRunAnimatorOptions } = {}) {
     this.#project = options.project ?? createOrbRunProject();
+    this.#animation = options.animation ?? {};
   }
 
   /** The running simulation (for tests that want to cross-check the probe). */
@@ -63,7 +70,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       throw new Error(`Orb Run probe can only start scene "${ORB_RUN_SCENE_ID}", got "${sceneId}"`);
     }
     await this.stop();
-    this.#simulation = await startOrbRunSimulation(this.#project);
+    this.#simulation = await startOrbRunSimulation(this.#project, this.#animation);
     this.#paused = false;
   }
 
@@ -182,6 +189,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
         entities,
         events,
         hud: buildOrbRunHud(simulation),
+        animation: orbRunAnimator(simulation).state(),
         audio: {
           initialized: audioState.initialized,
           buses: Object.fromEntries(audioState.buses.map((bus) => [bus.id, bus])),
@@ -248,7 +256,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       ? (structuredClone(params.envelope) as unknown as OrbRunSaveData)
       : this.#slots.get(slotId);
     if (!save) return { success: false, error: `No save in slot "${slotId}"` };
-    const fresh = await startOrbRunSimulation(this.#project);
+    const fresh = await startOrbRunSimulation(this.#project, this.#animation);
     try {
       fresh.restoreStep(save.step);
       await restoreOrbRunSave(fresh, save);
@@ -300,6 +308,9 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     }
     for (const failure of audio.failures()) {
       logs.push({ level: "warning", message: "audio.failed", data: { ...failure } });
+    }
+    for (const failure of orbRunAnimator(simulation).failures()) {
+      logs.push({ level: "warning", message: "animation.failed", data: { ...failure } });
     }
     return logs;
   }

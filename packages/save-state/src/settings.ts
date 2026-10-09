@@ -93,6 +93,14 @@ export class SettingsStore {
   }
 
   async save(settings: PlayerSettingsData, key = "user-settings"): Promise<void> {
+    // JSON.stringify writes NaN/Infinity as null and load() maps that back to the default gain (1.0),
+    // so a muted or broken slider value would silently come back as full volume.
+    for (const name of ["masterGain", "sfxGain"] as const) {
+      const value: unknown = settings?.audio?.[name];
+      if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
+        throw new RangeError(`Player settings audio.${name} must be a finite number, got ${String(value)}`);
+      }
+    }
     await this.#docStore.save(key, settings);
   }
 

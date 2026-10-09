@@ -1,13 +1,17 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 
+import { OrbRunAnimator, type OrbRunAnimatorOptions } from "./animator.js";
 import { HeadlessAudioService } from "./audio.js";
 import { ORB_RUN_DEFAULT_RULES, createOrbRunProject } from "./authoring.js";
 import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_SCENE_ID } from "./ids.js";
 import { createOrbRunScriptRegistry, type OrbRunStatus } from "./scripts.js";
 import { HeadlessSceneSimulation, type Vec3 } from "./simulation.js";
 
+const animators = new WeakMap<HeadlessSceneSimulation, OrbRunAnimator>();
+
 export async function startOrbRunSimulation(
   project: ProjectDocument = createOrbRunProject(),
+  options: OrbRunAnimatorOptions = {},
 ): Promise<HeadlessSceneSimulation> {
   const simulation = new HeadlessSceneSimulation({
     project,
@@ -16,7 +20,15 @@ export async function startOrbRunSimulation(
     createAudio: (clock) => new HeadlessAudioService(clock),
   });
   await simulation.start();
+  animators.set(simulation, new OrbRunAnimator(simulation, options));
   return simulation;
+}
+
+/** The runner animator of a simulation started by `startOrbRunSimulation`. */
+export function orbRunAnimator(simulation: HeadlessSceneSimulation): OrbRunAnimator {
+  const animator = animators.get(simulation);
+  if (!animator) throw new Error("This simulation was not started with the Orb Run animator");
+  return animator;
 }
 
 /** The headless audio service of a simulation started by `startOrbRunSimulation`. */
@@ -144,4 +156,6 @@ export async function restoreOrbRunSave(
   for (const [entityId, state] of Object.entries(save.scripts)) {
     await simulation.restoreScript(entityId, state);
   }
+  // The animation is derived from movement and isn't saved: restart it from rest.
+  animators.get(simulation)?.resync();
 }

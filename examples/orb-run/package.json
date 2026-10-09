@@ -25,6 +25,7 @@
     "@kinetra/verification": "workspace:*"
   },
   "devDependencies": {
+    "@kinetra/input": "workspace:*",
     "@kinetra/mcp-server": "workspace:*",
     "@modelcontextprotocol/server": "2.3.1"
   }

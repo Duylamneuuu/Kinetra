@@ -90,6 +90,7 @@ export class HeadlessSceneSimulation {
   #events: SimulationEvent[] = [];
   #step = 0;
   #started = false;
+  #stepListeners = new Set<(simulation: HeadlessSceneSimulation) => void>();
 
   constructor(options: HeadlessSimulationOptions) {
     assertValidProject(options.project);
@@ -169,7 +170,19 @@ export class HeadlessSceneSimulation {
     for (let index = 0; index < steps; index += 1) {
       this.#step += 1;
       this.#host.update(this.fixedDeltaSeconds);
+      for (const listener of [...this.#stepListeners]) listener(this);
     }
+  }
+
+  /**
+   * Observe the world after every fixed step (after the scripts ran). Listeners
+   * are read-only observers such as an animator; returns an unsubscribe function.
+   */
+  onStep(listener: (simulation: HeadlessSceneSimulation) => void): () => void {
+    this.#stepListeners.add(listener);
+    return () => {
+      this.#stepListeners.delete(listener);
+    };
   }
 
   /** Advance until `predicate` is true or `maxSteps` elapse; returns whether it became true. */
@@ -237,6 +250,7 @@ export class HeadlessSceneSimulation {
   }
 
   async dispose(): Promise<void> {
+    this.#stepListeners.clear();
     await this.#host.destroyAll();
   }
 
