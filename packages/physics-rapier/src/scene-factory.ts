@@ -1,6 +1,6 @@
 import type { SceneDefinition } from "@kinetra/project-model";
 
-import type { Vec3 } from "./types.js";
+import { MAX_PHYSICS_LAYER, type Vec3 } from "./types.js";
 import { RapierPhysicsWorld, type RapierPhysicsWorldOptions } from "./world.js";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -17,6 +17,16 @@ function numberValue(value: unknown, fallback: number): number {
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+/** Query-filter layer from a Collider component; invalid values fall back to the default layer. */
+function layerValue(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= MAX_PHYSICS_LAYER
+    ? value
+    : undefined;
 }
 
 function vec3Value(
@@ -53,6 +63,8 @@ export async function createPhysicsWorldFromScene(
     const collider = asObject(entity.components.Collider);
     const character = asObject(entity.components.CharacterBody);
     const primitive = asObject(entity.components.Primitive);
+    const layer = layerValue(collider?.layer);
+    const layerOption = layer !== undefined ? { layer } : {};
 
     if (!rigidBody && !collider && !character) {
       continue;
@@ -88,6 +100,7 @@ export async function createPhysicsWorldFromScene(
         offset,
         ...(autostepMaxHeight !== undefined ? { autostepMaxHeight } : {}),
         ...(autostepMinWidth !== undefined ? { autostepMinWidth } : {}),
+        ...layerOption,
       });
       continue;
     }
@@ -121,6 +134,7 @@ export async function createPhysicsWorldFromScene(
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...layerOption,
         });
       } else if (shape === "capsule") {
         const radius = numberValue(collider?.radius, 0.4);
@@ -134,6 +148,7 @@ export async function createPhysicsWorldFromScene(
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...layerOption,
         });
       } else {
         let halfExtents: Vec3;
@@ -160,6 +175,7 @@ export async function createPhysicsWorldFromScene(
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...layerOption,
         });
       }
 
@@ -197,6 +213,7 @@ export async function createPhysicsWorldFromScene(
       halfExtents,
       ...(friction !== undefined ? { friction } : {}),
       ...(restitution !== undefined ? { restitution } : {}),
+      ...layerOption,
     });
   }
 
