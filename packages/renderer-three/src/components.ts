@@ -21,11 +21,11 @@ export function vec3Value(
   if (
     Array.isArray(value) &&
     value.length >= 3 &&
-    typeof value[0] === "number" &&
-    typeof value[1] === "number" &&
-    typeof value[2] === "number"
+    Number.isFinite(value[0]) &&
+    Number.isFinite(value[1]) &&
+    Number.isFinite(value[2])
   ) {
-    return [value[0], value[1], value[2]];
+    return [value[0] as number, value[1] as number, value[2] as number];
   }
 
   return [fallback[0], fallback[1], fallback[2]];

@@ -1,6 +1,6 @@
 # Implementation status
 
-**Snapshot:** 2026-09-19, updated through PR #75 (2026-10-09)  
+**Snapshot:** 2026-09-19, updated through PR #184 (2026-10-09); per-PR detail and verification evidence are in the CHANGELOG  
 **Authoritative base:** `main`. Merged change history: [`CHANGELOG.md`](../CHANGELOG.md).
 
 Legend:

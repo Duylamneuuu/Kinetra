@@ -1,5 +1,13 @@
 import type { AssetDatabaseDocument, AssetRecord } from "./types.js";
 
+/**
+ * UTF-16 code-unit comparison. `localeCompare` depends on the host ICU/locale, which would make the
+ * serialized database and the rebuild order differ between machines.
+ */
+function compareIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class AssetDatabase {
   #records = new Map<string, AssetRecord>();
 
@@ -36,7 +44,7 @@ export class AssetDatabase {
   list(): AssetRecord[] {
     return [...this.#records.values()]
       .map((value) => structuredClone(value))
-      .sort((a, b) => a.id.localeCompare(b.id));
+      .sort((a, b) => compareIds(a.id, b.id));
   }
 
   dependentsOf(id: string): string[] {
@@ -85,7 +93,7 @@ export class AssetDatabase {
         queue.push(depId);
       }
     }
-    queue.sort((a, b) => a.localeCompare(b));
+    queue.sort(compareIds);
 
     const result: string[] = [];
     while (queue.length > 0) {
@@ -104,7 +112,7 @@ export class AssetDatabase {
           }
         }
       }
-      newlyReady.sort((a, b) => a.localeCompare(b));
+      newlyReady.sort(compareIds);
       queue.push(...newlyReady);
     }
 

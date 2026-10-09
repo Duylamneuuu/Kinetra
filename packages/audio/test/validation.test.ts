@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AudioMixerModel, createSyntheticWav } from "../src/index.js";
+import { AudioMixerModel, createSyntheticWav, MAX_SYNTHETIC_WAV_DATA_BYTES } from "../src/index.js";
 
 test("constructor rejects bus gains that setGain would reject (no NaN effective gain)", () => {
   for (const gain of [Number.NaN, -0.5, Number.POSITIVE_INFINITY, "1" as unknown as number]) {
@@ -50,4 +50,42 @@ test("createSyntheticWav with zero duration yields a valid empty data chunk", ()
   const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
   assert.equal(view.getUint32(40, true), 0);
   assert.equal(view.getUint32(4, true), 36);
+});
+
+test("setMuted and the constructor reject non-boolean muted values instead of silencing a bus by truthiness", () => {
+  const mixer = new AudioMixerModel([{ id: "master", gain: 1 }]);
+  for (const value of ["false", 0, 1, null, undefined] as unknown[]) {
+    assert.throws(() => mixer.setMuted("master", value as boolean), TypeError, String(value));
+  }
+  assert.equal(mixer.effectiveGain("master"), 1);
+  assert.throws(() => new AudioMixerModel([{ id: "m", gain: 1, muted: "no" as unknown as boolean }]), TypeError);
+  mixer.setMuted("master", true);
+  assert.equal(mixer.effectiveGain("master"), 0);
+  assert.equal(mixer.getBusState("master")?.muted, true);
+  assert.throws(() => mixer.setMuted("missing", true), /Unknown audio bus/);
+});
+
+test("createSyntheticWav caps the payload size with a structured RangeError and keeps the cap itself buildable", () => {
+  assert.throws(() => createSyntheticWav({ durationSeconds: 1e9 }), /createSyntheticWav.*limit/);
+  assert.throws(() => createSyntheticWav({ sampleRate: 2_000_000_000, durationSeconds: 10 }), RangeError);
+  // 1 second at the maximum sample rate the header supports would be ~4 GB, far over the cap.
+  assert.throws(() => createSyntheticWav({ sampleRate: 2_147_483_647, durationSeconds: 1 }), /limit/);
+  const exactly = createSyntheticWav({ sampleRate: 1000, durationSeconds: 2 });
+  assert.equal(exactly.byteLength, 44 + 4000);
+  const view = new DataView(exactly.buffer, exactly.byteOffset, exactly.byteLength);
+  assert.equal(view.getUint32(4, true), 36 + 4000);
+  assert.equal(view.getUint32(40, true), 4000);
+  assert.equal(MAX_SYNTHETIC_WAV_DATA_BYTES, 64 * 1024 * 1024);
+});
+
+test("createSyntheticWav output is deterministic and every sample stays inside the 0.8 amplitude envelope", () => {
+  const a = createSyntheticWav({ sampleRate: 8000, durationSeconds: 0.1, frequency: 123 });
+  const b = createSyntheticWav({ sampleRate: 8000, durationSeconds: 0.1, frequency: 123 });
+  assert.deepEqual(a, b);
+  const view = new DataView(a.buffer, a.byteOffset, a.byteLength);
+  const limit = Math.ceil(0.8 * 32767);
+  for (let offset = 44; offset < a.byteLength; offset += 2) assert.ok(Math.abs(view.getInt16(offset, true)) <= limit);
+  // frequency 0 is silence
+  const silent = createSyntheticWav({ sampleRate: 8000, durationSeconds: 0.01, frequency: 0 });
+  assert.ok(new Uint8Array(silent.buffer, silent.byteOffset + 44).every((byte) => byte === 0));
 });

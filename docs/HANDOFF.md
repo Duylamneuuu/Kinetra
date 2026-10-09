@@ -298,7 +298,8 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Pure contract** (`@kinetra/animation/blend-space`): schema-versioned `BlendSpace1DDefinition` / `BlendSpace2DDefinition`, `validateBlendSpace` returning `anim.blendSpace.*` diagnostics with remediation, deterministic `evaluateBlendSpace1D/2D` (1D linear with end clamping; 2D cartesian gradient-band interpolation; weights normalised to 1, locale-independent ordering, nearest-sample fallback) and `evaluateBlendSpace` reading `AnimationGraphMachine.getParameters()`;
 - **Runtime** (`@kinetra/renderer-three`): `BlendSpacePlayback` driven by `ThreeSceneRuntime.playBlendSpace(entityId, space, { input, speed })` / `setBlendSpaceInput(entityId, input)`; clips of different lengths are phase-synced, errors are atomic and structured, direct clip playback takes over cleanly, and `reloadAsset` restores the blend space. Player bridge: `animation.blendSpace.play` / `animation.blendSpace.setInput`;
 - **Proof**: `packages/animation/test/blend-space.test.ts`, `packages/renderer-three/test/blend-space.test.ts`, real Electron `packages/verification/test/real-blend-space.test.ts` (in the verification `test` script);
-- **Not done**: graph states that reference a blend space, crossfade into/out of a blend space, blend-space root motion, packaged-binary run.
+- **Since then**: graph states that play a blend space, with crossfades into and out of it, landed in PR #146 (`graph-blend-space.test.ts` in animation and renderer-three, real Electron `real-graph-blend-space.test.ts`);
+- **Not done**: blend-space root motion, packaged-binary run.
 
 ### 17. Morph Targets by Semantic Name (P5, PR #72)
 
@@ -321,6 +322,18 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - `@kinetra/renderer-three`: `createRuntimeGltfLoader` decodes `EXT_meshopt_compression`; `RUNTIME_DECODER_CAPABILITIES` and `RUNTIME_GLTF_DECODERS` are kept equal by a test;
 - **Proof**: `packages/asset-pipeline/test/compression.test.ts`, `packages/renderer-three/test/compressed-gltf.test.ts` (Node);
 - **Not done**: an offline Meshopt encode step in the pipeline, Draco/KTX2 decoders, Meshopt assets inside the packaged player.
+
+### 20. Animation Events Contract (P5, PR #180, issue #90 part 1)
+
+- **Pure contract** (`@kinetra/animation/events`): `normalizeAnimationEvents` / `parseAnimationEventsText` validate `{clip, time, name, payload}` definitions with `animation.events.*` diagnostics (never throw); `createClipEventTracker` reports the events a playback head crossed (forward `(from, to]`, reverse `[to, from)`, loop wraps fire once per crossing, per-call fire cap with `truncated`);
+- **Proof**: `packages/animation/test/events.test.ts` (pure Node; the animation `test` script runs `dist/test/*.test.js`);
+- **Not done**: `ThreeSceneRuntime` does not drive trackers from its mixers, no `context.animation.onEvent` for scripts, no runtime log entry or bridge command, no real Electron test. Issue #90 stays open until that wiring lands.
+
+### 21. Executable Documentation (docs)
+
+- `pnpm check:docs` (`scripts/check-doc-examples.mjs`, part of `pnpm check`) compiles every ```` ```ts doc-check ```` fence in the READMEs and guides with the owning package's tsconfig and runs it with Node, so a README example that no longer typechecks or asserts wrongly fails CI;
+- Package READMEs with checked examples: animation, asset-pipeline, audio, command-bus, core, input, navigation-recast, physics-rapier, project-model, renderer-three, save-state, verification, plus `docs/guides/AI_AGENT_MCP.md` (tool table from `packages/mcp-server/src/server.ts`);
+- **Not done**: READMEs for blender-bridge (short), desktop-build, mcp-server (no checked example yet), apps/player and apps/editor; TSDoc on every public export.
 
 ## Completion definition
 

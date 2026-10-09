@@ -97,6 +97,32 @@ test("serializeProject orders scenes, entities and keys by code unit, independen
   assert.deepEqual(parsed.scenes[0]!.entities.map((entity) => entity.id), ["B", "_z", "a", "b"]);
 });
 
+test("validateProject requires a non-empty string scene name, matching the scene.create command contract", () => {
+  const withSceneName = (name: unknown): ProjectDocument =>
+    ({ schemaVersion: 1, projectId: "p", name: "P", scenes: [{ id: "s", name, entities: [] }] }) as unknown as ProjectDocument;
+
+  for (const bad of [undefined, null, "", 0, 7, true, {}, ["S"]]) {
+    const issues = validateProject(withSceneName(bad));
+    assert.deepEqual(
+      issues.map((issue) => [issue.path, issue.code]),
+      [["scenes[0].name", "scene.name.empty"]],
+      `name=${JSON.stringify(bad)}`,
+    );
+  }
+  assert.deepEqual(validateProject(withSceneName("Level 1")), []);
+});
+
+test("a missing scene name in stored JSON or a v0 migration is a structured issue", () => {
+  assert.throws(
+    () => parseProject('{"schemaVersion":1,"projectId":"p","name":"P","scenes":[{"id":"s","entities":[]}]}'),
+    (error: unknown) => issueCodes(error).includes("scene.name.empty"),
+  );
+  assert.throws(
+    () => migrateProject({ schemaVersion: 0, id: "p", name: "P", scenes: [{ id: "s", objects: [] }] }),
+    (error: unknown) => issueCodes(error).includes("scene.name.empty"),
+  );
+});
+
 test("migrateProject reports a v0 document with malformed scenes as a structured error", () => {
   assert.throws(
     () => migrateProject({ schemaVersion: 0, id: "p", name: "P", scenes: [{ id: "s", name: "S", objects: "nope" }] }),
