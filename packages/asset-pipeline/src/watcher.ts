@@ -206,10 +206,20 @@ export class SourceAssetWatcher {
     const assetId = this.#pathToAssetId.get(sourcePath);
     if (!assetId) return null;
 
+    const generation = this.#generation;
     let bytes: Uint8Array;
     try {
       bytes = await this.#readFileWithRetry(sourcePath);
     } catch {
+      return null;
+    }
+
+    // The read is asynchronous: stop() may have run, or the asset may have been removed or
+    // re-pointed (or the path handed to another asset). Reporting a change now would emit an event
+    // for an asset that no longer owns this file and resurrect its forgotten hash. The hash is left
+    // untouched so a later check still sees the change.
+    if (generation !== this.#generation) return null;
+    if (this.#pathToAssetId.get(sourcePath) !== assetId || this.#assets.get(assetId) !== sourcePath) {
       return null;
     }
 

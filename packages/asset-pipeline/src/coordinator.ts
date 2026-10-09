@@ -240,11 +240,22 @@ export class AssetHotReloadCoordinator {
 
         const base64 = Buffer.from(artifactBytes).toString("base64");
 
-        // Publish to runtime resolver
-        await this.#runtimeTarget.updateAsset(rebuiltId, base64, {
-          fingerprint: updatedRecord.fingerprint,
-          sourceHash: updatedRecord.source.contentHash,
-        });
+        // Publish to runtime resolver. A runtime that rejects the new bytes must not abort the whole
+        // transaction (it would be lost from the history and waitForAssetReload would time out), and
+        // reloading against stale bytes would be wrong, so report the failure and move on.
+        try {
+          await this.#runtimeTarget.updateAsset(rebuiltId, base64, {
+            fingerprint: updatedRecord.fingerprint,
+            sourceHash: updatedRecord.source.contentHash,
+          });
+        } catch (err) {
+          this.#emit({
+            type: "asset.runtimeReloadFailed",
+            assetId: rebuiltId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
 
         // Trigger live reload
         this.#emit({
