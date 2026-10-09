@@ -13,7 +13,7 @@ A Kinetra project is a plain JSON `ProjectDocument` (`schemaVersion`, `projectId
 | `newId(kind)` | function | Fresh random id with the same `kind_` prefix. |
 | `validateProject(project)` | function | Returns `ValidationIssue[]` (`path`, `code`, `message`); empty means valid. Safe on untrusted documents. |
 | `assertValidProject(project)` | function | Throws `ProjectValidationError` (with `.issues`) when invalid. |
-| `normalizeProject(project)` | function | Deep copy with scenes/entities sorted by id (locale-independent) and object keys sorted. |
+| `normalizeProject(project)` | function | Deep copy with scenes/entities sorted by id (locale-independent), component/metadata keys sorted, and envelope keys in schema order (`schemaVersion, projectId, name, scenes, metadata`; scene `id, name, entities`; entity `id, name, parentId, components`; unknown keys after them, sorted). The same project serializes to the same bytes whatever order its properties were assigned in. |
 | `serializeProject(project)` / `parseProject(text)` | functions | Canonical, diff-friendly JSON text (2-space indent, trailing newline), and the inverse including migration. JSON `"__proto__"` keys survive the round trip. |
 | `migrateProject(input)` / `CURRENT_SCHEMA_VERSION` | function / const | Upgrades older documents step by step (schema 0 to 1 today); rejects documents newer than the engine supports. |
 | `cloneProject(project)` | function | Deep copy. |
@@ -67,6 +67,6 @@ assert.throws(() => assertValidProject(broken), ProjectValidationError);
 
 ## Proof level
 
-Covered by `test/project-model.test.ts`, `test/untrusted-input.test.ts` and `test/contracts.test.ts` (all in the package `test` script): schema validation of untrusted documents, locale-independent ordering, migration, and serialization round trips. See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
+Covered by `test/project-model.test.ts`, `test/untrusted-input.test.ts`, `test/contracts.test.ts` and `test/canonical-order.test.ts` (all in the package `test` script): schema validation of untrusted documents, locale-independent ordering, migration, and serialization round trips. See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
 
 Not here: prefab/build/input/test data are defined by the packages that consume them; this package owns the document envelope, ids and migrations.

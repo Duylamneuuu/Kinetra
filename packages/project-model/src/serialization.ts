@@ -35,24 +35,56 @@ function sortJson(value: JsonValue): JsonValue {
   return value;
 }
 
+const PROJECT_KEY_ORDER = ["schemaVersion", "projectId", "name", "scenes", "metadata"] as const;
+const SCENE_KEY_ORDER = ["id", "name", "entities"] as const;
+const ENTITY_KEY_ORDER = ["id", "name", "parentId", "components"] as const;
+
+/**
+ * Rebuilds an object with its documented keys first (in schema order) and any other own
+ * keys after them, sorted. Without this the serialized text depends on the order the
+ * properties happened to be assigned in (for example a reparent appends `parentId` after
+ * `components`), so the same logical project would produce different bytes and noisy diffs.
+ */
+function withCanonicalKeyOrder<T extends object>(value: T, order: readonly string[]): T {
+  const source = value as Record<string, unknown>;
+  const ordered: Record<string, unknown> = {};
+  const define = (key: string): void => {
+    Object.defineProperty(ordered, key, {
+      value: source[key],
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  };
+  for (const key of order) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) define(key);
+  }
+  for (const key of Object.keys(source).sort(compareCodeUnits)) {
+    if (!order.includes(key)) define(key);
+  }
+  return ordered as T;
+}
+
 export function normalizeProject(project: ProjectDocument): ProjectDocument {
   assertValidProject(project);
-  const normalized = cloneProject(project);
+  const cloned = cloneProject(project);
 
-  normalized.scenes.sort((left, right) => compareCodeUnits(left.id, right.id));
+  cloned.scenes.sort((left, right) => compareCodeUnits(left.id, right.id));
 
-  for (const scene of normalized.scenes) {
+  for (const scene of cloned.scenes) {
     scene.entities.sort((left, right) => compareCodeUnits(left.id, right.id));
     for (const entity of scene.entities) {
       entity.components = sortJson(entity.components) as Record<string, JsonValue>;
     }
+    scene.entities = scene.entities.map((entity) => withCanonicalKeyOrder(entity, ENTITY_KEY_ORDER));
+  }
+  cloned.scenes = cloned.scenes.map((scene) => withCanonicalKeyOrder(scene, SCENE_KEY_ORDER));
+
+  if (cloned.metadata) {
+    cloned.metadata = sortJson(cloned.metadata) as JsonObject;
   }
 
-  if (normalized.metadata) {
-    normalized.metadata = sortJson(normalized.metadata) as JsonObject;
-  }
-
-  return normalized;
+  return withCanonicalKeyOrder(cloned, PROJECT_KEY_ORDER);
 }
 
 export function serializeProject(project: ProjectDocument): string {
