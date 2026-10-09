@@ -1419,6 +1419,15 @@ export class ThreeSceneRuntime {
 
     const shouldLoop = options.loop !== false;
 
+    // The mixer caches one action per clip. Fading a clip into itself would make the incoming
+    // and the outgoing side the same action: the fade could not blend anything, and finishing it
+    // would stop the very action it just started. Restart the clip instead.
+    if (blendSeconds > 0 && session.activeAction && mixer.existingAction(clip) === session.activeAction) {
+      blendSeconds = 0;
+      this.#stopBlendSpace(session, metadata);
+      this.#stopOutgoingBlendSpace(session);
+    }
+
     // Case 1: Immediate switch (blendSeconds <= 0)
     if (blendSeconds <= 0) {
       if (session.outgoingAction) {
