@@ -41,6 +41,13 @@ function findEntity(project: ProjectDocument, entityId: string): LocatedEntity |
   return undefined;
 }
 
+/** Own-property read: component names such as "toString" must not resolve to Object.prototype members. */
+function ownComponent(entity: EntityDefinition, name: string): JsonValue | undefined {
+  return Object.prototype.hasOwnProperty.call(entity.components, name)
+    ? entity.components[name]
+    : undefined;
+}
+
 function assertRevision(expected: number | undefined, actual: number): void {
   if (expected !== undefined && expected !== actual) {
     throw new CommandError(
@@ -152,7 +159,7 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
         );
       }
 
-      const existing = located.entity.components[command.payload.component];
+      const existing = ownComponent(located.entity, command.payload.component);
       if (existing !== undefined && !isJsonObject(existing)) {
         throw new CommandError(
           "COMPONENT_NOT_OBJECT",
@@ -254,7 +261,7 @@ function filterComponents(
 
   const components: Record<string, JsonValue> = {};
   for (const name of selectComponents) {
-    const value = entity.components[name];
+    const value = ownComponent(entity, name);
     if (value !== undefined) {
       components[name] = structuredClone(value);
     }
@@ -413,7 +420,7 @@ export class CommandBus {
         if (query.ids && !query.ids.includes(entity.id)) {
           continue;
         }
-        if (query.component && entity.components[query.component] === undefined) {
+        if (query.component && ownComponent(entity, query.component) === undefined) {
           continue;
         }
         if (
