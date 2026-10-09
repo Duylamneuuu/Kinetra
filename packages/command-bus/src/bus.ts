@@ -152,7 +152,10 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
         );
       }
 
-      const existing = located.entity.components[command.payload.component];
+      // Own properties only: names such as "toString" must not resolve to Object.prototype members.
+      const existing = Object.hasOwn(located.entity.components, command.payload.component)
+        ? located.entity.components[command.payload.component]
+        : undefined;
       if (existing !== undefined && !isJsonObject(existing)) {
         throw new CommandError(
           "COMPONENT_NOT_OBJECT",
@@ -254,9 +257,15 @@ function filterComponents(
 
   const components: Record<string, JsonValue> = {};
   for (const name of selectComponents) {
-    const value = entity.components[name];
+    const value = Object.hasOwn(entity.components, name) ? entity.components[name] : undefined;
     if (value !== undefined) {
-      components[name] = structuredClone(value);
+      // defineProperty keeps a stored "__proto__" key as plain data instead of re-pointing the prototype.
+      Object.defineProperty(components, name, {
+        value: structuredClone(value),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
   }
 
@@ -413,7 +422,8 @@ export class CommandBus {
         if (query.ids && !query.ids.includes(entity.id)) {
           continue;
         }
-        if (query.component && entity.components[query.component] === undefined) {
+        if (query.component && (!Object.hasOwn(entity.components, query.component) ||
+            entity.components[query.component] === undefined)) {
           continue;
         }
         if (
