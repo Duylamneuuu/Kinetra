@@ -54,6 +54,9 @@ function appendBounded(current: string, chunk: string, limit: number): string {
 /** Default wall-clock limit for one Blender export (a hung Blender must not hang an import forever). */
 export const DEFAULT_BLENDER_TIMEOUT_MS = 5 * 60_000;
 
+/** After a timeout kill, how long to wait for stdio to drain before giving up on "close". */
+const TIMEOUT_DRAIN_GRACE_MS = 500;
+
 export class NodeProcessRunner implements ProcessRunner {
   readonly #maxOutputChars: number;
   readonly #timeoutMs: number;
@@ -77,8 +80,16 @@ export class NodeProcessRunner implements ProcessRunner {
     return new Promise((resolve, reject) => {
       let settled = false;
       let child: ReturnType<typeof spawn>;
+      // On POSIX the child leads its own process group so a timeout can kill the
+      // whole tree: `blender` is often a launcher script whose real binary would
+      // otherwise survive and keep the stdio pipes (and so "close") open forever.
+      const ownGroup = process.platform !== "win32";
       try {
-        child = spawn(executable, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+        child = spawn(executable, args, {
+          stdio: ["ignore", "pipe", "pipe"],
+          windowsHide: true,
+          detached: ownGroup,
+        });
       } catch (err) {
         reject(err);
         return;
@@ -86,9 +97,44 @@ export class NodeProcessRunner implements ProcessRunner {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      const finish = (code: number | null, signal: NodeJS.Signals | null): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        clearTimeout(graceTimer);
+        resolve({
+          code: code ?? -1,
+          stdout,
+          stderr,
+          signal: signal ?? null,
+          ...(timedOut ? { timedOut: true } : {}),
+        });
+      };
+      let graceTimer: NodeJS.Timeout | undefined;
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGKILL");
+        let killedGroup = false;
+        if (ownGroup && child.pid !== undefined) {
+          try {
+            process.kill(-child.pid, "SIGKILL");
+            killedGroup = true;
+          } catch {
+            // group already gone or not signalable: fall back to the child alone
+          }
+        }
+        if (!killedGroup) child.kill("SIGKILL");
+        // Even if a descendant (or a platform without group kill) still holds the
+        // pipes open, do not wait for "close" past a short grace after "exit".
+        const armGrace = (code: number | null, signal: NodeJS.Signals | null): void => {
+          if (settled) return;
+          graceTimer = setTimeout(() => {
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+            finish(code, signal);
+          }, TIMEOUT_DRAIN_GRACE_MS);
+        };
+        if (child.exitCode !== null || child.signalCode !== null) armGrace(child.exitCode, child.signalCode);
+        else child.once("exit", armGrace);
       }, this.#timeoutMs);
       child.stdout?.setEncoding("utf8");
       child.stderr?.setEncoding("utf8");
@@ -106,18 +152,7 @@ export class NodeProcessRunner implements ProcessRunner {
       });
       // "close" (not "exit") fires after stdio streams are drained, so the
       // captured output is complete.
-      child.once("close", (code, signal) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({
-          code: code ?? -1,
-          stdout,
-          stderr,
-          signal: signal ?? null,
-          ...(timedOut ? { timedOut: true } : {}),
-        });
-      });
+      child.once("close", (code, signal) => finish(code, signal));
     });
   }
 }

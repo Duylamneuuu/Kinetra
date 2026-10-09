@@ -193,6 +193,33 @@ test("NodeProcessRunner kills a hung process and reports blender.timeout", async
   );
 });
 
+test(
+  "NodeProcessRunner timeout resolves even when a grandchild keeps the stdio pipes open (launcher-script Blender)",
+  { skip: process.platform === "win32" },
+  async () => {
+    // The child spawns a grandchild that inherits stdout/stderr and then both hang,
+    // like a `blender` shell wrapper whose real binary outlives the wrapper. The
+    // grandchild stops itself after 8 s so a failing run cannot leak it forever.
+    const script =
+      "const { spawn } = require('node:child_process');" +
+      "spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 8000)'], { stdio: 'inherit' });" +
+      "setInterval(() => {}, 1000)";
+    const runner = new NodeProcessRunner({ timeoutMs: 300 });
+    const started = Date.now();
+    let guard: NodeJS.Timeout | undefined;
+    const outcome = await Promise.race([
+      runner.run(process.execPath, ["-e", script]),
+      new Promise<"hung">((resolve) => {
+        guard = setTimeout(() => resolve("hung"), 4000);
+      }),
+    ]);
+    clearTimeout(guard);
+    assert.notEqual(outcome, "hung", "run() must settle shortly after the timeout, not wait for the grandchild");
+    assert.equal((outcome as { timedOut?: boolean }).timedOut, true);
+    assert.ok(Date.now() - started < 4000);
+  },
+);
+
 test("NodeProcessRunner does not flag a process that finishes within its limit", async () => {
   const result = await new NodeProcessRunner({ timeoutMs: 30_000 }).run(process.execPath, ["-e", "process.stdout.write('ok')"]);
   assert.equal(result.code, 0);
