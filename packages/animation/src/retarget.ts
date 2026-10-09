@@ -72,6 +72,22 @@ export interface RetargetCacheKeyOptions {
     | undefined;
   settings?: Record<string, unknown> | RetargetSettings | undefined;
   retargetVersion?: number | undefined;
+  /** Rest poses change the baked values, so they are part of the cache identity. */
+  sourceRestPoses?: RestPoseMap | undefined;
+  targetRestPoses?: RestPoseMap | undefined;
+}
+
+function compareCodePoints(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Order-independent canonical form of a rest pose map (Map or plain record). */
+function canonicalRestPoses(map: RestPoseMap | undefined): Array<[string, RestPoseTransform]> | undefined {
+  if (!map) return undefined;
+  const entries: Array<[string, RestPoseTransform]> =
+    map instanceof Map ? [...map.entries()] : Object.entries(map);
+  if (entries.length === 0) return undefined;
+  return entries.sort(([a], [b]) => compareCodePoints(a, b));
 }
 
 export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string {
@@ -96,7 +112,7 @@ export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string 
     }))
     .sort((a, b) => a.semantic.localeCompare(b.semantic));
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     sourceAssetHash: input.sourceAssetHash ?? "",
     sourceClipId: input.sourceClipId,
     source: skeletonSignature(input.source),
@@ -105,6 +121,11 @@ export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string 
     settings: input.settings ?? {},
     retargetVersion: input.retargetVersion ?? 1,
   };
+  // Only present when rest poses were supplied, so keys of pose-less bakes stay unchanged.
+  const sourceRest = canonicalRestPoses(input.sourceRestPoses);
+  const targetRest = canonicalRestPoses(input.targetRestPoses);
+  if (sourceRest) payload.sourceRestPoses = sourceRest;
+  if (targetRest) payload.targetRestPoses = targetRest;
 
   return createHash("sha256")
     .update(JSON.stringify(stable(payload)))
@@ -205,6 +226,21 @@ export async function inspectSkeletonFromGlb(
   };
 }
 
+const TRACK_PROPERTY_RE = /^(.+)\.(quaternion|rotation|position|scale)$/;
+
+/**
+ * Splits "node.property" into its parts. Bone names may themselves contain dots
+ * (Blender's "Arm.L", "Bone.001"), so a known transform property suffix wins over
+ * the first dot; anything else falls back to splitting at the first dot.
+ */
+function splitTrackName(trackName: string): { node: string; property: string } | undefined {
+  const known = TRACK_PROPERTY_RE.exec(trackName);
+  if (known) return { node: known[1]!, property: known[2]! };
+  const dotIndex = trackName.indexOf(".");
+  if (dotIndex === -1) return undefined;
+  return { node: trackName.slice(0, dotIndex), property: trackName.slice(dotIndex + 1) };
+}
+
 export interface BakeRetargetOptions {
   sourceClip: THREE.AnimationClip;
   sourceProfile: SkeletonProfile;
@@ -272,6 +308,8 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
     target: options.targetProfile,
     settings,
     retargetVersion: settings.version,
+    sourceRestPoses: options.sourceRestPoses,
+    targetRestPoses: options.targetRestPoses,
   });
 
   // Verify essential bone mapping: hips is required for humanoid retargeting
@@ -329,8 +367,8 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
   const scaleFactor = settings.scaleFactor ?? 1.0;
 
   for (const track of options.sourceClip.tracks) {
-    const dotIndex = track.name.indexOf(".");
-    if (dotIndex === -1) {
+    const split = splitTrackName(track.name);
+    if (!split) {
       diagnostics.push({
         severity: "warning",
         code: "retarget.track.invalid-name",
@@ -340,8 +378,8 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
       continue;
     }
 
-    const sourceNodeName = track.name.slice(0, dotIndex);
-    const property = track.name.slice(dotIndex + 1);
+    const sourceNodeName = split.node;
+    const property = split.property;
 
     const mapping = sourceToTarget.get(sourceNodeName);
     if (!mapping) {
@@ -520,8 +558,7 @@ export function inspectRetargetedClip(
   const unmappedTracks: string[] = [];
 
   for (const track of clip.tracks) {
-    const dotIdx = track.name.indexOf(".");
-    const nodeName = dotIdx !== -1 ? track.name.slice(0, dotIdx) : track.name;
+    const nodeName = splitTrackName(track.name)?.node ?? track.name;
 
     if (targetBoneSet.has(nodeName)) {
       targetBonesAnimated.add(nodeName);

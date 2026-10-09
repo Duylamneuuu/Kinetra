@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import * as THREE from "three";
@@ -119,14 +120,18 @@ export class FileRetargetCacheStorage implements RetargetCacheStorage {
       mkdirSync(targetDir, { recursive: true });
     }
 
-    const tempPath = join(targetDir, `.${basename(filePath)}.${process.pid}.${Date.now()}.tmp`);
+    // Unique per call: two concurrent writers of the same key must never share a temp file.
+    const tempPath = join(targetDir, `.${basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
     const fileHandle = await open(tempPath, "w");
     try {
       await fileHandle.writeFile(data, "utf-8");
       await fileHandle.sync();
-    } finally {
-      await fileHandle.close();
+    } catch (err: unknown) {
+      await fileHandle.close().catch(() => undefined);
+      await unlink(tempPath).catch(() => undefined);
+      throw err;
     }
+    await fileHandle.close();
 
     // Atomic rename with Windows retry
     let renameAttempts = 0;
@@ -292,6 +297,8 @@ export class RetargetBakeCache {
       target: options.targetProfile,
       settings: options.settings,
       retargetVersion: options.settings?.version ?? 1,
+      sourceRestPoses: options.sourceRestPoses,
+      targetRestPoses: options.targetRestPoses,
     });
 
     const cacheIdentity = this.storage.resolveIdentity(cacheKey);
@@ -324,8 +331,13 @@ export class RetargetBakeCache {
       }
     }
 
-    // Cache MISS or invalidated/corrupt -> execute real retarget baking
-    const regenerationReason = lookup.reason !== "miss" ? lookup.reason : undefined;
+    // Cache MISS or invalidated/corrupt -> execute real retarget baking.
+    // A parseable record whose metadata disagrees with the request is stale, not a plain miss.
+    const regenerationReason = lookup.hit
+      ? "metadata_mismatch"
+      : lookup.reason !== "miss"
+        ? lookup.reason
+        : undefined;
     const bakeFn = options.bakeFn ?? bakeRetargetedClip;
     const bakeResult = bakeFn(options);
 
