@@ -89,6 +89,9 @@ export interface OrbRunAnimatorOptions {
   smoothingSeconds?: number;
 }
 
+/** Most recent failures kept (the total is `failedCount`); a broken ground function fails every step. */
+export const ORB_RUN_MAX_ANIMATION_FAILURES = 100;
+
 const CLIPS = ORB_RUN_LOCOMOTION.samples.map((sample) => sample.clipId) as LocomotionClip[];
 
 function distance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
@@ -108,6 +111,7 @@ export class OrbRunAnimator {
   #transitions = 0;
   #visited: LocomotionClip[] = ["idle"];
   #pose: OrbRunAnimationState | undefined;
+  #failureTotal = 0;
   #detach: () => void;
 
   constructor(simulation: HeadlessSceneSimulation, options: OrbRunAnimatorOptions = {}) {
@@ -121,7 +125,14 @@ export class OrbRunAnimator {
     this.#previous = this.#playerPosition();
     this.#lastStep = simulation.step;
     this.#pose = this.#compute(true);
-    this.#detach = simulation.onStep(() => this.#sample());
+    this.#detach = simulation.onStep(() => {
+      // Visual layer: whatever goes wrong here must never break the simulation loop.
+      try {
+        this.#sample();
+      } catch (error) {
+        this.#recordFailure(simulation.step, error);
+      }
+    });
   }
 
   /** The current pose as plain JSON (a copy). */
@@ -129,7 +140,11 @@ export class OrbRunAnimator {
     return structuredClone(this.#pose ?? this.#restPose());
   }
 
-  /** Poses that could not be computed so far (visual only: gameplay was not affected). */
+  /**
+   * The most recent poses that could not be computed (visual only: gameplay
+   * was not affected), at most `ORB_RUN_MAX_ANIMATION_FAILURES`; the total is
+   * `state().failedCount`.
+   */
   failures(): OrbRunAnimationFailure[] {
     return structuredClone(this.#failures);
   }
@@ -191,16 +206,18 @@ export class OrbRunAnimator {
     this.#dominant = dominant;
 
     let plan: FootPlan | undefined;
+    let leftGround = 0;
+    let rightGround = 0;
     try {
       const [x, , z] = this.#previous;
-      plan = planFootPlacement({
-        position: [x, 0, z],
-        baseGround: this.#ground(x, z),
-        leftGround: this.#ground(x - RUNNER_LEG_RIG.hipOffsetX, z),
-        rightGround: this.#ground(x + RUNNER_LEG_RIG.hipOffsetX, z),
-      });
+      // Each ground height is read exactly once, so an impure ground function
+      // can only fail here, inside the guard.
+      const baseGround = this.#ground(x, z);
+      leftGround = this.#ground(x - RUNNER_LEG_RIG.hipOffsetX, z);
+      rightGround = this.#ground(x + RUNNER_LEG_RIG.hipOffsetX, z);
+      plan = planFootPlacement({ position: [x, 0, z], baseGround, leftGround, rightGround });
     } catch (error) {
-      this.#failures.push({ step, message: error instanceof Error ? error.message : String(error) });
+      this.#recordFailure(step, error);
     }
     if (!plan) {
       // Keep the last good pose; only the bookkeeping that doesn't need IK moves on.
@@ -214,13 +231,12 @@ export class OrbRunAnimator {
         dominant,
         transitions: this.#transitions,
         visited: [...this.#visited],
-        failedCount: this.#failures.length,
+        failedCount: this.#failureTotal,
       };
     }
 
-    const [px, , pz] = this.#previous;
-    const left = this.#foot(plan.feet[0], this.#ground(px - RUNNER_LEG_RIG.hipOffsetX, pz));
-    const right = this.#foot(plan.feet[1], this.#ground(px + RUNNER_LEG_RIG.hipOffsetX, pz));
+    const left = this.#foot(plan.feet[0], leftGround);
+    const right = this.#foot(plan.feet[1], rightGround);
     const maxBoneLengthError = Math.max(...plan.feet.map((foot) => this.#boneError(foot)));
     return {
       step,
@@ -235,8 +251,14 @@ export class OrbRunAnimator {
       feet: { left, right },
       maxBoneLengthError,
       legsValid: maxBoneLengthError <= PLANT_TOLERANCE,
-      failedCount: this.#failures.length,
+      failedCount: this.#failureTotal,
     };
+  }
+
+  #recordFailure(step: number, error: unknown): void {
+    this.#failureTotal += 1;
+    this.#failures.push({ step, message: error instanceof Error ? error.message : String(error) });
+    if (this.#failures.length > ORB_RUN_MAX_ANIMATION_FAILURES) this.#failures.shift();
   }
 
   /** Pose reported before any IK succeeded: standing height, feet unplanted. */
@@ -244,8 +266,8 @@ export class OrbRunAnimator {
     const foot: AnimatedFoot = {
       groundY: 0,
       targetY: RUNNER_LEG_RIG.ankleHeight,
-      ankleY: Number.NaN,
-      error: Number.NaN,
+      ankleY: 0,
+      error: 0,
       planted: false,
       reachable: false,
       converged: false,
@@ -261,7 +283,7 @@ export class OrbRunAnimator {
       pelvis: [this.#previous[0], RUNNER_LEG_RIG.pelvisHeight, this.#previous[2]],
       pelvisDrop: 0,
       feet: { left: { ...foot }, right: { ...foot } },
-      maxBoneLengthError: Number.NaN,
+      maxBoneLengthError: 0,
       legsValid: false,
       failedCount: 0,
     };

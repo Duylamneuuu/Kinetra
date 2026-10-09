@@ -6,6 +6,7 @@ import {
   ORB_RUN_ACTION,
   ORB_RUN_DEFAULT_RULES,
   ORB_RUN_ENTITY,
+  ORB_RUN_MAX_ANIMATION_FAILURES,
   ORB_RUN_WINNING_ROUTE,
   OrbRunAnimator,
   OrbRunHeadlessProbe,
@@ -168,12 +169,32 @@ test("animation is visual only: a ground function that throws or returns NaN is 
     for (const target of ORB_RUN_WINNING_ROUTE) walkTo(simulation, target);
     assert.equal(summarizeOrbRun(simulation).status, "won");
     assert.ok(animator.state().failedCount > 100);
-    assert.equal(animator.failures().length, animator.state().failedCount);
+    assert.equal(animator.failures().length, ORB_RUN_MAX_ANIMATION_FAILURES, "the failure list is a bounded ring");
+    assert.ok(animator.state().failedCount > animator.failures().length, "failedCount stays the running total");
+    // Broken from the very first pose: the state is still plain finite JSON (no NaN -> null).
+    assert.deepEqual(JSON.parse(JSON.stringify(animator.state())), animator.state());
     assert.match(animator.failures()[0]!.message, /finite|terrain unavailable/);
     // The locomotion half still works without foot IK.
     assert.ok(animator.state().visited.includes("run"));
     await simulation.dispose();
   }
+});
+
+test("an impure ground function that fails only after the first read cannot break the simulation loop", async () => {
+  let calls = 0;
+  const ground: GroundHeightFn = () => {
+    calls += 1;
+    // Fine for the first pose (construction reads 3 heights), then every 3rd read throws: it fails mid-pose.
+    if (calls > 3 && calls % 3 === 2) throw new Error("flaky terrain");
+    return 0;
+  };
+  const simulation = await startOrbRunSimulation(undefined, { ground });
+  const animator = orbRunAnimator(simulation);
+  for (const target of ORB_RUN_WINNING_ROUTE) walkTo(simulation, target);
+  assert.equal(summarizeOrbRun(simulation).status, "won");
+  assert.ok(animator.state().failedCount > 0);
+  assert.match(animator.failures()[0]!.message, /flaky terrain/);
+  await simulation.dispose();
 });
 
 test("a restored save restarts the animation from rest at the saved position", async () => {
