@@ -37,13 +37,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
+/** Deepest nesting accepted in component/metadata JSON (far beyond any real document). */
+export const MAX_JSON_DEPTH = 512;
+
 /**
  * True when the value round-trips through JSON unchanged: finite numbers, plain
  * objects, dense arrays, no cycles. Map/Set/Date/class instances, sparse arrays and
  * cyclic graphs are rejected instead of silently serializing to something else
  * (or overflowing the stack).
  */
-function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): value is JsonValue {
+function isJsonValue(
+  value: unknown,
+  ancestors: Set<object> = new Set(),
+  depth = 0,
+): value is JsonValue {
   if (
     value === null ||
     typeof value === "string" ||
@@ -57,7 +64,9 @@ function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): value 
     return false;
   }
 
-  if (ancestors.has(value)) {
+  // Documents arrive as untrusted JSON; unbounded nesting would overflow the stack here
+  // (and later in JSON.stringify/structuredClone) instead of yielding a structured issue.
+  if (ancestors.has(value) || depth >= MAX_JSON_DEPTH) {
     return false;
   }
 
@@ -65,13 +74,13 @@ function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): value 
   try {
     if (Array.isArray(value)) {
       for (let index = 0; index < value.length; index += 1) {
-        if (!(index in value) || !isJsonValue(value[index], ancestors)) return false;
+        if (!(index in value) || !isJsonValue(value[index], ancestors, depth + 1)) return false;
       }
       return true;
     }
 
     if (isPlainObject(value)) {
-      return Object.values(value).every((child) => isJsonValue(child, ancestors));
+      return Object.values(value).every((child) => isJsonValue(child, ancestors, depth + 1));
     }
 
     return false;
@@ -83,6 +92,7 @@ function isJsonValue(value: unknown, ancestors: Set<object> = new Set()): value 
 function validateEntity(
   entity: EntityDefinition,
   scene: SceneDefinition,
+  sceneEntityIds: ReadonlySet<unknown>,
   path: string,
   issues: ValidationIssue[],
 ): void {
@@ -130,7 +140,7 @@ function validateEntity(
       code: "entity.parent.invalid",
       message: "Entity parentId must be a non-empty string when present",
     });
-  } else if (entity.parentId && !scene.entities.some((candidate) => candidate.id === entity.parentId)) {
+  } else if (entity.parentId && !sceneEntityIds.has(entity.parentId)) {
     issues.push({
       path: `${path}.parentId`,
       code: "entity.parent.missing",
@@ -141,23 +151,42 @@ function validateEntity(
 
 function validateParentCycles(scene: SceneDefinition, issues: ValidationIssue[]): void {
   const byId = new Map(scene.entities.map((entity) => [entity.id, entity]));
+  // Memoised per id so a deep chain is walked once, not once per descendant.
+  const verdict = new Map<string, "finite" | "cyclic">();
 
-  for (const entity of scene.entities) {
-    const visited = new Set<string>([entity.id]);
-    let cursor: unknown = entity.parentId;
+  /** True when following parentId links from `start` never terminates. */
+  const isInfiniteChain = (start: unknown): boolean => {
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let cursor: unknown = start;
+    let cyclic = false;
 
     while (typeof cursor === "string" && cursor.length > 0) {
-      if (visited.has(cursor)) {
-        issues.push({
-          path: `scenes[${scene.id}].entities[${entity.id}].parentId`,
-          code: "entity.parent.cycle",
-          message: `Parent cycle detected for entity "${entity.id}"`,
-        });
+      const known = verdict.get(cursor);
+      if (known !== undefined) {
+        cyclic = known === "cyclic";
         break;
       }
-
-      visited.add(cursor);
+      if (onPath.has(cursor)) {
+        cyclic = true;
+        break;
+      }
+      onPath.add(cursor);
+      path.push(cursor);
       cursor = byId.get(cursor)?.parentId;
+    }
+
+    for (const id of path) verdict.set(id, cyclic ? "cyclic" : "finite");
+    return cyclic;
+  };
+
+  for (const entity of scene.entities) {
+    if (isInfiniteChain(entity.parentId)) {
+      issues.push({
+        path: `scenes[${scene.id}].entities[${entity.id}].parentId`,
+        code: "entity.parent.cycle",
+        message: `Parent cycle detected for entity "${entity.id}"`,
+      });
     }
   }
 }
@@ -238,6 +267,8 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
         return;
       }
 
+      // One lookup set per scene keeps parent checks linear instead of O(n²).
+      const sceneEntityIds = new Set<unknown>(scene.entities.map((entity) => entity.id));
       const localIds = new Set<string>();
       scene.entities.forEach((entity, entityIndex) => {
         const entityPath = `${scenePath}.entities[${entityIndex}]`;
@@ -259,7 +290,7 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
           });
         }
         entityIds.add(entity.id);
-        validateEntity(entity, scene, entityPath, issues);
+        validateEntity(entity, scene, sceneEntityIds, entityPath, issues);
       });
 
       validateParentCycles(scene, issues);
