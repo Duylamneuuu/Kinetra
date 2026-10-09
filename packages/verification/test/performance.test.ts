@@ -169,3 +169,23 @@ test("performance: evaluatePerformanceBudget detects passes and multiple violati
   assert.equal(minViolation.limit, 10);
   assert.equal(minViolation.comparison, "min");
 });
+
+test("performance: calculatePercentiles refuses to invent finite numbers from NaN or Infinity samples", () => {
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    for (const samples of [[bad], [1, 2, bad, 3], [bad, 5, 1], [10, 10, 10, 10, bad]]) {
+      const result = calculatePercentiles(samples);
+      for (const [key, value] of Object.entries(result)) {
+        assert.ok(Number.isNaN(value), `${key} = ${value} for samples ${JSON.stringify(samples)}`);
+      }
+    }
+  }
+
+  // And a budget over such evidence fails instead of passing on a made-up number.
+  const poisoned = {
+    ...mockEvidence,
+    frame: calculatePercentiles([16, 16, Number.NaN, 16, 16]),
+  };
+  const evaluation = evaluatePerformanceBudget(poisoned, { "frame.p95Ms": 33 });
+  assert.equal(evaluation.passed, false);
+  assert.equal(evaluation.violations[0]?.metric, "frame.p95Ms");
+});

@@ -29,6 +29,8 @@ export class SourceAssetWatcher {
   #watchers = new Map<string, FSWatcher>(); // sourcePath -> FSWatcher
   #debounceTimers = new Map<string, NodeJS.Timeout>();
   #running = false;
+  /** Bumped by every stop(); a start() that outlives its generation must not create watchers. */
+  #generation = 0;
 
   constructor(options: SourceAssetWatcherOptions = {}) {
     this.#debounceMs = options.debounceMs ?? 60;
@@ -104,22 +106,30 @@ export class SourceAssetWatcher {
   async start(): Promise<void> {
     if (this.#running) return;
     this.#running = true;
+    const generation = this.#generation;
 
-    for (const [assetId, sourcePath] of this.#assets) {
+    for (const [assetId, sourcePath] of [...this.#assets]) {
       if (!this.#knownHashes.has(assetId)) {
         try {
           const bytes = await this.#readFileWithRetry(sourcePath);
-          this.#knownHashes.set(assetId, hashBytes(bytes));
+          // Do not clobber a hash recorded meanwhile (setKnownHash / an earlier check).
+          if (!this.#knownHashes.has(assetId)) this.#knownHashes.set(assetId, hashBytes(bytes));
         } catch {
           // File may not exist yet; watcher will handle creation
         }
+        // stop() (or stop() + start()) ran while the file was being read: this start is obsolete,
+        // and carrying on would leave FSWatchers alive on a stopped watcher.
+        if (!this.#running || generation !== this.#generation) return;
       }
+      // The asset may have been removed or re-pointed while we awaited.
+      if (this.#assets.get(assetId) !== sourcePath) continue;
       this.#watchFile(sourcePath);
     }
   }
 
   async stop(): Promise<void> {
     this.#running = false;
+    this.#generation++;
     for (const watcher of this.#watchers.values()) {
       watcher.close();
     }
