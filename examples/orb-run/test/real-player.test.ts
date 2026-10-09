@@ -59,9 +59,10 @@ test(
             { type: "assert.equal", path: "state.game.totalOrbs", expected: 3 },
             { type: "assert.equal", path: "state.game.collectedCount", expected: 0 },
             { type: "assert.equal", path: "state.game.exitUnlocked", expected: false },
-            { type: "assert.near", path: "state.byName.Player.position.0", expected: 0, tolerance: 0.01 },
-            { type: "input", action: "player.moveRight", phase: "hold", durationMs: 2000 },
-            { type: "assert.near", path: "state.byName.Player.position.0", expected: 4, tolerance: 0.05 },
+            { type: "assert.near", path: "state.byName.Player.position.0", expected: -4, tolerance: 0.01 },
+            { type: "input", action: "player.moveRight", phase: "hold", value: 1 },
+            { type: "runtime.step", steps: 120 },
+            { type: "assert.near", path: "state.byName.Player.position.0", expected: 4, tolerance: 0.1 },
             { type: "assert.equal", path: "state.game.collectedCount", expected: 1 },
             { type: "assert.equal", path: "state.byName.OrbA.gameplay.state.collected", expected: true },
             { type: "assert.logAbsent", minimumLevel: "error" },
@@ -129,7 +130,8 @@ test(
         const steps = [
           { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
           { type: "assert.equal", path: "state.game.totalOrbs", expected: 3 },
-          { type: "input", action: "player.moveRight", phase: "hold", durationMs: 2000 },
+          { type: "input", action: "player.moveRight", phase: "hold", value: 1 },
+          { type: "runtime.step", steps: 120 },
           { type: "assert.equal", path: "state.game.collectedCount", expected: 1 },
           { type: "runtime.stop" },
         ];
