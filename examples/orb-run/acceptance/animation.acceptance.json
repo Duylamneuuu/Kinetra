@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.animation",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.animation.dominant", "expected": "idle" },
+    { "type": "assert.equal", "path": "state.animation.weights.idle", "expected": 1 },
+    { "type": "assert.equal", "path": "state.animation.transitions", "expected": 0 },
+    { "type": "assert.near", "path": "state.animation.pelvis.1", "expected": 0.95, "tolerance": 0.000001 },
+    { "type": "assert.equal", "path": "state.animation.pelvisDrop", "expected": 0 },
+    { "type": "assert.equal", "path": "state.animation.feet.left.planted", "expected": true },
+    { "type": "assert.equal", "path": "state.animation.feet.right.planted", "expected": true },
+    { "type": "assert.near", "path": "state.animation.feet.left.ankleY", "expected": 0.08, "tolerance": 0.000001 },
+    { "type": "assert.equal", "path": "state.animation.legsValid", "expected": true },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 500 },
+    { "type": "assert.near", "path": "state.animation.speed", "expected": 4, "tolerance": 0.000001 },
+    { "type": "assert.equal", "path": "state.animation.dominant", "expected": "run" },
+    { "type": "assert.near", "path": "state.animation.weights.run", "expected": 0.975, "tolerance": 0.005 },
+    { "type": "assert.near", "path": "state.animation.weights.walk", "expected": 0.025, "tolerance": 0.005 },
+    { "type": "assert.near", "path": "state.animation.weights.idle", "expected": 0, "tolerance": 0.000001 },
+    { "type": "assert.equal", "path": "state.animation.transitions", "expected": 2 },
+    { "type": "assert.equal", "path": "state.animation.feet.left.planted", "expected": true },
+    { "type": "assert.equal", "path": "state.animation.legsValid", "expected": true },
+
+    { "type": "wait", "milliseconds": 1500 },
+    { "type": "assert.equal", "path": "state.animation.speed", "expected": 0 },
+    { "type": "assert.equal", "path": "state.animation.dominant", "expected": "idle" },
+    { "type": "assert.equal", "path": "state.animation.weights.idle", "expected": 1 },
+    { "type": "assert.equal", "path": "state.animation.transitions", "expected": 4 },
+
+    { "type": "assert.equal", "path": "state.animation.failedCount", "expected": 0 },
+    { "type": "assert.logAbsent", "minimumLevel": "warning" },
+    { "type": "runtime.stop" }
+  ]
+}

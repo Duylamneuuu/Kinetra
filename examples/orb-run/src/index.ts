@@ -7,5 +7,6 @@ export * from "./simulation.js";
 export * from "./game.js";
 export * from "./acceptance-probe.js";
 export * from "./locomotion.js";
+export * from "./animator.js";
 export * from "./foot-ik.js";
 export * from "./hud.js";
