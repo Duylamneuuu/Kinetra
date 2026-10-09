@@ -6,7 +6,14 @@
   "license": "MIT",
   "description": "Orb Run: a small dogfood sample game authored entirely through Kinetra's MCP tools and command bus.",
   "exports": {
-    ".": "./dist/src/index.js"
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./game-module": {
+      "types": "./dist/src/game-module.d.ts",
+      "default": "./dist/src/game-module.js"
+    }
   },
   "types": "./dist/src/index.d.ts",
   "scripts": {

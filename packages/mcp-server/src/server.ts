@@ -453,6 +453,11 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
         target: z.enum(["runtime", "packaged"]).optional(),
         project: z.record(z.string(), z.unknown()).optional(),
         assets: z.record(z.string(), z.string()).optional(),
+        game: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+          .describe("Game module id the player should run, e.g. \"orb-run\". Defaults to the Arena reference game.")
+          .optional(),
         timeoutMs: z.number().int().min(1_000).max(180_000).optional(),
       }).strict(),
     },
@@ -468,6 +473,7 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
             ? { project: input.project as unknown as ProjectDocument }
             : {}),
           ...(input.assets !== undefined ? { assets: input.assets } : {}),
+          ...(input.game !== undefined ? { game: input.game } : {}),
           ...(input.timeoutMs !== undefined
             ? { timeoutMs: input.timeoutMs }
             : {}),

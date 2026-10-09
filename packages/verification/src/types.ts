@@ -41,6 +41,8 @@ export interface RuntimeProbeHost {
     options?: {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
+      /** Game module id the player should run (default game when omitted). */
+      game?: string;
     },
   ): Promise<void>;
   stop(): Promise<void>;

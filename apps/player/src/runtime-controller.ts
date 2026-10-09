@@ -28,6 +28,8 @@ import {
   ScriptHost,
   ScriptRegistry,
   PlayerControllerScript,
+  type GameModule,
+  type GameModuleRegistry,
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
@@ -45,11 +47,7 @@ import {
   BrowserGamepadSnapshotProvider,
   type PhysicalInputSnapshot,
 } from "@kinetra/input";
-import {
-  ArenaPlayerController,
-  ArenaEnemyController,
-  ArenaGameManager,
-} from "@kinetra/reference-game";
+import { createBuiltinGameModules } from "./game-modules.js";
 import {
   JsonDocumentStore,
   MemoryStorage,
@@ -295,6 +293,8 @@ export interface PlayerRuntimeControllerOptions {
 
 export interface PlayerRuntimeQueryResult {
   running: boolean;
+  /** Id of the game module the running scene was started with (e.g. "arena", "orb-run"). */
+  gameId?: string;
   sceneId?: string;
   projectRevision?: number;
   entities: PlayerRuntimeEntityState[];
@@ -367,7 +367,13 @@ export class PlayerRuntimeController {
   #assetStatuses = new Map<string, "imported" | "reimporting" | "failed" | "unimported">();
   #assetRevisions = new Map<string, number>();
   #scripts: ScriptHost = new ScriptHost();
+  // Engine-level scripts, test fixtures and scripts added with registerScript().
   #scriptRegistry: ScriptRegistry = new ScriptRegistry();
+  // Game-specific scripts for the running game; rebuilt on every start so one
+  // game's scripts never leak into the next (see game-modules.ts).
+  #gameModules: GameModuleRegistry = createBuiltinGameModules();
+  #activeGame: GameModule | undefined;
+  #gameScripts: ScriptRegistry | undefined;
   #inputRouter: InputRouter = new InputRouter(DEFAULT_PLAYER_INPUT_MAP);
   #unresolvedScripts = new Map<string, { scriptId: string; error: string }>();
   #stepped = false;
@@ -420,9 +426,6 @@ export class PlayerRuntimeController {
     );
 
     this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
-    this.#scriptRegistry.register("ArenaPlayerController", () => new ArenaPlayerController());
-    this.#scriptRegistry.register("ArenaEnemyController", () => new ArenaEnemyController());
-    this.#scriptRegistry.register("ArenaGameManager", () => new ArenaGameManager());
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
@@ -591,6 +594,8 @@ export class PlayerRuntimeController {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
+      /** Game module id (see game-modules.ts). Omitted selects the default game (Arena). */
+      game?: string;
     },
   ): Promise<PlayerRuntimeQueryResult> {
     const queue = this.#lifecycleQueue;
@@ -631,13 +636,29 @@ export class PlayerRuntimeController {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
+      /** Game module id (see game-modules.ts). Omitted selects the default game (Arena). */
+      game?: string;
     },
   ): Promise<PlayerRuntimeQueryResult> {
     if (options?.testScriptPreset === "save-load-atomicity") {
       this.enableTestScriptFixtures("save-load-atomicity");
     }
     assertValidProject(project);
+
+    // Validate everything that can fail before tearing down a running game, so a
+    // bad request (unknown game, wrong scene) leaves the current run untouched.
+    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
+    if (!scene) {
+      throw new Error(`Scene "${sceneId}" does not exist`);
+    }
+    const { module: game, registry: gameScripts } = await this.#gameModules.createScriptRegistry(
+      options?.game,
+      { project, sceneId },
+    );
+
     await this.#doStop();
+    this.#activeGame = game;
+    this.#gameScripts = gameScripts;
     this.#stepped = options?.stepped ?? false;
 
     if (options?.assets) {
@@ -645,11 +666,6 @@ export class PlayerRuntimeController {
         const meta = options.assetMetadata?.[assetId];
         this.registerAsset(assetId, base64, meta);
       }
-    }
-
-    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
-    if (!scene) {
-      throw new Error(`Scene "${sceneId}" does not exist`);
     }
 
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
@@ -725,7 +741,8 @@ export class PlayerRuntimeController {
 
       if (scriptComp && typeof scriptComp.scriptId === "string") {
         const scriptId = scriptComp.scriptId;
-        const factory = this.#scriptRegistry.resolve(scriptId);
+        const factory =
+          this.#gameScripts?.resolve(scriptId) ?? this.#scriptRegistry.resolve(scriptId);
         if (!factory) {
           const error = `Script "${scriptId}" could not be resolved`;
           this.#unresolvedScripts.set(entity.id, { scriptId, error });
@@ -741,14 +758,12 @@ export class PlayerRuntimeController {
             entityId,
             sceneId,
           });
+          // Execution order comes from the authored Script component only; a game
+          // that needs an order must author it (no script-name special cases).
           const order =
-            typeof scriptComp.order === "number"
+            typeof scriptComp.order === "number" && Number.isFinite(scriptComp.order)
               ? scriptComp.order
-              : scriptId === "ArenaPlayerController"
-                ? -10
-                : scriptId === "ArenaGameManager"
-                  ? 10
-                  : 0;
+              : 0;
           this.#scripts.register({
             id: entityId,
             scriptId,
@@ -924,6 +939,8 @@ export class PlayerRuntimeController {
     this.#unresolvedScripts.clear();
     this.#rootMotionUnsupportedLogged.clear();
     this.#inputRouter.clearSemanticActions();
+    this.#gameScripts = undefined;
+    this.#activeGame = undefined;
 
     if (this.#physics) {
       this.#physics.dispose();
@@ -2210,17 +2227,8 @@ export class PlayerRuntimeController {
 
     entities.sort((left, right) => compareCodeUnits(left.entityId, right.entityId));
 
-    let activeSession: Record<string, unknown> | undefined;
-    for (const entity of entities) {
-      if (
-        entity.gameplay?.state &&
-        typeof entity.gameplay.state.session === "object" &&
-        entity.gameplay.state.session !== null
-      ) {
-        activeSession = entity.gameplay.state.session as Record<string, unknown>;
-        break;
-      }
-    }
+    // Game-level state comes from the running game's module (Arena: its session).
+    const activeSession = this.#activeGame?.readGameState?.(entities);
 
     if (activeSession) {
       if (activeSession.status === "won" && this.#shellMode === "playing") {
@@ -2232,6 +2240,7 @@ export class PlayerRuntimeController {
 
     return {
       running: true,
+      ...(this.#activeGame ? { gameId: this.#activeGame.id } : {}),
       sceneId: this.#runtime.sceneId,
       ...(this.#projectRevision !== undefined
         ? { projectRevision: this.#projectRevision }
