@@ -9,7 +9,8 @@ export type CommandErrorCode =
   | "CHILDREN_EXIST"
   | "COMPONENT_NOT_OBJECT"
   | "INVALID_COMMAND"
-  | "UNDO_CONFLICT";
+  | "UNDO_CONFLICT"
+  | "UNDO_EXPIRED";
 
 const remediationByCode: Record<CommandErrorCode, string> = {
   STALE_REVISION:
@@ -34,6 +35,8 @@ const remediationByCode: Record<CommandErrorCode, string> = {
     "Compare the command with the typed tool schema and resend a supported command name and payload.",
   UNDO_CONFLICT:
     "Undo the most recent change first (undo is last-in, first-out), or re-apply the intended state with new commands.",
+  UNDO_EXPIRED:
+    "This undo token fell out of the bounded undo history. Re-apply the intended state with new commands, or construct the CommandBus with a larger maxUndoDepth.",
 };
 
 export class CommandError extends Error {

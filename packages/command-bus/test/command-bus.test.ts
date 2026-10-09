@@ -81,6 +81,7 @@ test("every command error code includes a next-step remediation", () => {
     COMPONENT_NOT_OBJECT: true,
     INVALID_COMMAND: true,
     UNDO_CONFLICT: true,
+    UNDO_EXPIRED: true,
   } satisfies Record<CommandErrorCode, true>;
 
   for (const code of Object.keys(covered) as CommandErrorCode[]) {
