@@ -18,7 +18,15 @@ function sortJson(value: JsonValue): JsonValue {
     for (const key of Object.keys(value).sort()) {
       const child = value[key];
       if (child !== undefined) {
-        sorted[key] = sortJson(child);
+        // defineProperty, not assignment: a JSON.parse'd "__proto__" key is an own data
+        // property, and `sorted["__proto__"] = ...` would set the prototype instead and
+        // silently drop the data from the serialized document.
+        Object.defineProperty(sorted, key, {
+          value: sortJson(child),
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
     }
     return sorted;
