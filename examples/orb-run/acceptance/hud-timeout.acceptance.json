@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.hud-timeout",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.hud.timer.urgency", "expected": "normal" },
+
+    { "type": "wait", "milliseconds": 11000 },
+    { "type": "assert.equal", "path": "state.hud.timer.urgency", "expected": "warning" },
+    { "type": "assert.equal", "path": "state.hud.timer.text", "expected": "0:09" },
+    { "type": "assert.near", "path": "state.hud.timer.fraction", "expected": 0.45, "tolerance": 0.001 },
+
+    { "type": "wait", "milliseconds": 5000 },
+    { "type": "assert.equal", "path": "state.hud.timer.urgency", "expected": "critical" },
+    { "type": "assert.equal", "path": "state.hud.timer.text", "expected": "0:04" },
+    { "type": "assert.equal", "path": "state.hud.banner", "expected": null },
+
+    { "type": "wait", "milliseconds": 5000 },
+    { "type": "assert.equal", "path": "state.hud.timer.urgency", "expected": "expired" },
+    { "type": "assert.equal", "path": "state.hud.timer.text", "expected": "0:00" },
+    { "type": "assert.equal", "path": "state.hud.objective.kind", "expected": "lost" },
+    { "type": "assert.equal", "path": "state.hud.banner.kind", "expected": "lost" },
+    { "type": "assert.equal", "path": "state.hud.banner.subtitle", "expected": "0/3 orbs collected" },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "lost" },
+    { "type": "assert.equal", "path": "state.events.lost", "expected": 1 },
+    { "type": "runtime.stop" }
+  ]
+}

@@ -18,7 +18,7 @@ import {
   createOrbRunProject,
 } from "../src/index.js";
 
-const MANIFESTS = ["win", "timeout", "save-load", "audio"] as const;
+const MANIFESTS = ["win", "timeout", "save-load", "audio", "hud", "hud-timeout"] as const;
 
 async function loadManifest(name: string): Promise<AcceptanceManifest> {
   // dist/test/*.js -> examples/orb-run/acceptance/
@@ -213,4 +213,38 @@ test("a typo'd script id fails acceptance and surfaces as an error log", async (
   );
   assert.equal(report.passed, false);
   assert.match(report.steps[1]?.message ?? "", /script\.resolveFailed/);
+});
+
+test("the HUD manifest notices a rebalanced clock: an 8 s limit fails the first timer check", async () => {
+  const bus = new CommandBus(createOrbRunProject());
+  bus.execute({
+    requestId: "short-clock",
+    command: "component.patch",
+    payload: { entityId: ORB_RUN_ENTITY.manager, component: ORB_RUN_RULES_COMPONENT, patch: { timeLimitSeconds: 8 } },
+  });
+  const report = await new AcceptanceRunner(new OrbRunHeadlessProbe({ project: bus.snapshot().project })).run(
+    await loadManifest("hud"),
+  );
+  assert.equal(report.passed, false);
+  const failed = report.steps.find((step) => !step.passed)!;
+  assert.equal(failed.type, "assert.equal");
+  assert.equal(failed.expected, "0:20");
+  assert.equal(failed.actual, "0:08");
+});
+
+test("the HUD manifest notices a rebalanced clock: an 8 s limit fails the first timer check", async () => {
+  const bus = new CommandBus(createOrbRunProject());
+  bus.execute({
+    requestId: "short-clock",
+    command: "component.patch",
+    payload: { entityId: ORB_RUN_ENTITY.manager, component: ORB_RUN_RULES_COMPONENT, patch: { timeLimitSeconds: 8 } },
+  });
+  const report = await new AcceptanceRunner(new OrbRunHeadlessProbe({ project: bus.snapshot().project })).run(
+    await loadManifest("hud"),
+  );
+  assert.equal(report.passed, false);
+  const failed = report.steps.find((step) => !step.passed)!;
+  assert.equal(failed.type, "assert.equal");
+  assert.equal(failed.expected, "0:20");
+  assert.equal(failed.actual, "0:08");
 });
