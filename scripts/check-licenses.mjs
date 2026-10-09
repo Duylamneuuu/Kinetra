@@ -2,57 +2,15 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createLicenseClassifier } from "./license-policy.mjs";
+
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 const storeRoot = join(repoRoot, "node_modules", ".pnpm");
 const policy = JSON.parse(
   await readFile(join(repoRoot, ".kinetra", "license-policy.json"), "utf8"),
 );
 
-const allowed = new Set(policy.allowed ?? []);
-const allowedWithNotice = new Set(policy.allowedWithNotice ?? []);
-const referenceOnly = new Set(policy.referenceOnly ?? []);
-
-function splitExpression(expression) {
-  if (
-    allowed.has(expression) ||
-    allowedWithNotice.has(expression) ||
-    referenceOnly.has(expression)
-  ) {
-    return [expression];
-  }
-
-  if (/\bWITH\b/i.test(expression)) {
-    return [expression];
-  }
-
-  return expression
-    .replace(/[()]/g, " ")
-    .split(/\s+(?:OR|AND)\s+/i)
-    .map((token) => token.trim())
-    .filter(Boolean);
-}
-
-function classify(expression) {
-  const tokens = splitExpression(expression);
-
-  if (tokens.some((token) => referenceOnly.has(token))) {
-    return { ok: false, reason: "reference-only", tokens, notice: false };
-  }
-
-  if (
-    tokens.length > 0 &&
-    tokens.every((token) => allowed.has(token) || allowedWithNotice.has(token))
-  ) {
-    return {
-      ok: true,
-      reason: "allowed",
-      tokens,
-      notice: tokens.some((token) => allowedWithNotice.has(token)),
-    };
-  }
-
-  return { ok: false, reason: "unreviewed", tokens, notice: false };
-}
+const { classify } = createLicenseClassifier(policy);
 
 function isInstalledPackageRoot(packageJsonPath, packageName) {
   const rel = relative(storeRoot, packageJsonPath);
