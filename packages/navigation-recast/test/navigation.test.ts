@@ -135,3 +135,60 @@ test("bake rejects malformed geometry before reaching WASM", async () => {
   await assert.rejects(() => RecastNavMesh.bake({ positions, indices: [0, 1, 9] }), /NavMesh bake input/);
   await assert.rejects(() => RecastNavMesh.bake({ positions: [Number.NaN, ...positions.slice(1)], indices }), /NavMesh bake input/);
 });
+
+test("queries reject non-finite positions and invalid halfExtents with RangeError instead of reaching WASM", async () => {
+  const nav = await RecastNavMesh.bake({ positions, indices });
+  try {
+    const ok = { x: 0, y: 0, z: 0 };
+    for (const bad of [
+      { x: Number.NaN, y: 0, z: 0 },
+      { x: 0, y: Number.POSITIVE_INFINITY, z: 0 },
+      { x: 0, y: 0, z: Number.NEGATIVE_INFINITY },
+      { x: "1", y: 0, z: 0 } as unknown as { x: number; y: number; z: number },
+      null as unknown as { x: number; y: number; z: number },
+    ]) {
+      assert.throws(() => nav.closestPoint(bad), RangeError, `closestPoint ${JSON.stringify(bad)}`);
+      assert.throws(() => nav.computePath(bad, ok), RangeError, `computePath start ${JSON.stringify(bad)}`);
+      assert.throws(() => nav.computePath(ok, bad), RangeError, `computePath end ${JSON.stringify(bad)}`);
+    }
+    for (const halfExtents of [
+      { x: Number.NaN, y: 4, z: 2 },
+      { x: 2, y: 0, z: 2 },
+      { x: 2, y: 4, z: -1 },
+      { x: Number.POSITIVE_INFINITY, y: 4, z: 2 },
+    ]) {
+      assert.throws(() => nav.closestPoint(ok, { halfExtents }), /halfExtents/);
+      assert.throws(() => nav.computePath(ok, { x: 1, y: 0, z: 1 }, { halfExtents }), /halfExtents/);
+    }
+    // Valid queries still work after rejected ones (no corrupted query state).
+    assert.equal(nav.computePath({ x: -3, y: 0, z: -3 }, { x: 3, y: 0, z: 3 }).status, "complete");
+  } finally {
+    nav.dispose();
+  }
+});
+
+test("fromBytes rejects empty, non-Uint8Array and garbage input with a descriptive error", async () => {
+  await assert.rejects(() => RecastNavMesh.fromBytes(new Uint8Array(0)), /non-empty Uint8Array/);
+  await assert.rejects(() => RecastNavMesh.fromBytes([1, 2, 3] as unknown as Uint8Array), /non-empty Uint8Array/);
+  await assert.rejects(() => RecastNavMesh.fromBytes(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])), /Failed to import NavMesh|non-empty/);
+  await assert.rejects(() => RecastNavMesh.fromBytes(new Uint8Array(512).fill(0xff)), /Failed to import NavMesh|non-empty/);
+
+  // A truncated valid navmesh must not import as a usable mesh.
+  const nav = await RecastNavMesh.bake({ positions, indices });
+  try {
+    const bytes = nav.toBytes();
+    await assert.rejects(() => RecastNavMesh.fromBytes(bytes.slice(0, Math.floor(bytes.byteLength / 2))), /Failed to import NavMesh|non-empty/);
+    // Right size but wrong magic / trailing bytes are refused too.
+    const wrongMagic = bytes.slice();
+    wrongMagic[0] = 0;
+    await assert.rejects(() => RecastNavMesh.fromBytes(wrongMagic), /bad magic/);
+    const trailing = new Uint8Array(bytes.byteLength + 3);
+    trailing.set(bytes);
+    await assert.rejects(() => RecastNavMesh.fromBytes(trailing), /trailing bytes/);
+    // And the original bytes still round-trip afterwards.
+    const again = await RecastNavMesh.fromBytes(bytes);
+    again.dispose();
+  } finally {
+    nav.dispose();
+  }
+});

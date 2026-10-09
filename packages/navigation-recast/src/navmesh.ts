@@ -75,6 +75,64 @@ function validateBakeInput(input: NavMeshBakeInput, positions: number[], indices
   }
 }
 
+function assertFiniteVec3(name: string, value: Vec3): void {
+  if (
+    typeof value !== "object" || value === null ||
+    typeof value.x !== "number" || typeof value.y !== "number" || typeof value.z !== "number" ||
+    !Number.isFinite(value.x) || !Number.isFinite(value.y) || !Number.isFinite(value.z)
+  ) {
+    throw new RangeError(`NavMesh query "${name}" must be a Vec3 of finite numbers, got ${JSON.stringify(value)}`);
+  }
+}
+
+function resolveHalfExtents(params: NavMeshQueryParams | undefined): Vec3 {
+  const halfExtents = params?.halfExtents ?? DEFAULT_QUERY_HALF_EXTENTS;
+  assertFiniteVec3("halfExtents", halfExtents);
+  if (halfExtents.x <= 0 || halfExtents.y <= 0 || halfExtents.z <= 0) {
+    throw new RangeError(`NavMesh query "halfExtents" components must be > 0, got ${JSON.stringify(halfExtents)}`);
+  }
+  return halfExtents;
+}
+
+/** 'MSET' as written by exportNavMesh (little-endian int32), followed by version 1. */
+const NAVMESH_SET_MAGIC = 0x4d534554;
+const NAVMESH_SET_VERSION = 1;
+/** int32 magic, int32 version, int32 numTiles, then dtNavMeshParams (7 x 4 bytes). */
+const NAVMESH_SET_HEADER_BYTES = 40;
+/** Per tile: uint32 tileRef, int32 dataSize, then dataSize bytes. */
+const NAVMESH_TILE_HEADER_BYTES = 8;
+
+/**
+ * Detour does not reject garbage: importing it yields a mesh that traps ("memory access out of
+ * bounds") on destroy or hangs on query. Check the exported container structure up front so
+ * callers get a structured error before any WASM call.
+ */
+function assertNavMeshBytes(bytes: Uint8Array): void {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+    throw new RangeError("NavMesh bytes must be a non-empty Uint8Array");
+  }
+  const fail = (reason: string): never => {
+    throw new RangeError(`Failed to import NavMesh from binary bytes: ${reason}`);
+  };
+  if (bytes.byteLength < NAVMESH_SET_HEADER_BYTES) fail(`${bytes.byteLength} bytes is shorter than the ${NAVMESH_SET_HEADER_BYTES}-byte header`);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getInt32(0, true) !== NAVMESH_SET_MAGIC) fail("not a navmesh export (bad magic)");
+  if (view.getInt32(4, true) !== NAVMESH_SET_VERSION) fail(`unsupported navmesh export version ${view.getInt32(4, true)}`);
+  const numTiles = view.getInt32(8, true);
+  if (numTiles < 1 || numTiles > (bytes.byteLength - NAVMESH_SET_HEADER_BYTES) / NAVMESH_TILE_HEADER_BYTES) {
+    fail(`invalid tile count ${numTiles}`);
+  }
+  let offset = NAVMESH_SET_HEADER_BYTES;
+  for (let tile = 0; tile < numTiles; tile += 1) {
+    if (offset + NAVMESH_TILE_HEADER_BYTES > bytes.byteLength) fail(`truncated before tile ${tile}`);
+    const dataSize = view.getInt32(offset + 4, true);
+    offset += NAVMESH_TILE_HEADER_BYTES;
+    if (dataSize <= 0 || offset + dataSize > bytes.byteLength) fail(`tile ${tile} data size ${dataSize} exceeds the available bytes`);
+    offset += dataSize;
+  }
+  if (offset !== bytes.byteLength) fail(`${bytes.byteLength - offset} unexpected trailing bytes`);
+}
+
 export const DEFAULT_QUERY_HALF_EXTENTS: Vec3 = { x: 2, y: 4, z: 2 };
 
 export class RecastNavMesh {
@@ -126,7 +184,13 @@ export class RecastNavMesh {
 
   static async fromBytes(bytes: Uint8Array): Promise<RecastNavMesh> {
     await initNavigation();
-    const imported = importNavMesh(bytes);
+    assertNavMeshBytes(bytes);
+    let imported: ReturnType<typeof importNavMesh>;
+    try {
+      imported = importNavMesh(bytes);
+    } catch (error) {
+      throw new Error(`Failed to import NavMesh from binary bytes: ${error instanceof Error ? error.message : String(error)}`);
+    }
     if (!imported.navMesh) {
       throw new Error("Failed to import NavMesh from binary bytes");
     }
@@ -140,7 +204,8 @@ export class RecastNavMesh {
 
   closestPoint(position: Vec3, params: NavMeshQueryParams = {}): Vec3 {
     this.#assertNotDisposed();
-    const halfExtents = params.halfExtents ?? DEFAULT_QUERY_HALF_EXTENTS;
+    assertFiniteVec3("position", position);
+    const halfExtents = resolveHalfExtents(params);
     const result = this.#query.findClosestPoint(position, { halfExtents });
     if (!result.success) {
       throw new Error(
@@ -156,7 +221,9 @@ export class RecastNavMesh {
     params: NavMeshQueryParams = {},
   ): PathResult {
     this.#assertNotDisposed();
-    const halfExtents = params.halfExtents ?? DEFAULT_QUERY_HALF_EXTENTS;
+    assertFiniteVec3("start", start);
+    assertFiniteVec3("end", end);
+    const halfExtents = resolveHalfExtents(params);
     const result = this.#query.computePath(start, end, { halfExtents });
     if (!result.success || result.path.length === 0) {
       return {
