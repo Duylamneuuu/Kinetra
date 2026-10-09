@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -109,6 +109,8 @@ export interface BlenderGlbImporterOptions {
   timeoutMs?: number;
   fileSystem?: {
     readFile(path: string): Promise<Uint8Array>;
+    /** Removes a staging sidecar; a missing file is not an error. Defaults to node's `rm(force)`. */
+    unlink?(path: string): Promise<void>;
   };
 }
 
@@ -126,6 +128,7 @@ export class BlenderGlbImporter implements AssetImporter {
   readonly #pythonScript: string;
   readonly #runner: ProcessRunner;
   readonly #fs: { readFile(path: string): Promise<Uint8Array> };
+  readonly #unlink: (path: string) => Promise<void>;
 
   constructor(options: BlenderGlbImporterOptions = {}) {
     this.#blenderExecutable =
@@ -141,9 +144,36 @@ export class BlenderGlbImporter implements AssetImporter {
         return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
       },
     };
+    const unlinkOption = options.fileSystem?.unlink;
+    this.#unlink = unlinkOption
+      ? (p) => unlinkOption.call(options.fileSystem, p)
+      : options.fileSystem
+        ? async () => {} // a custom read-only adapter (tests, in-memory) owns its own files
+        : (p) => rm(p, { force: true });
   }
 
   async import(context: AssetImporterContext): Promise<AssetImporterResult> {
+    try {
+      return await this.#importStaged(context);
+    } finally {
+      // export_glb.py leaves "<staging>.manifest.json" (and Blender may leave "<staging>.glb") next to
+      // the staging file. The reimport service only removes the staging file itself, so without this
+      // every reimport leaves a uniquely named manifest behind in the asset directory.
+      await this.#removeStagingSidecars(context.targetPath);
+    }
+  }
+
+  async #removeStagingSidecars(targetPath: string): Promise<void> {
+    for (const path of [`${targetPath}.manifest.json`, `${targetPath}.glb`]) {
+      try {
+        await this.#unlink(path);
+      } catch {
+        // best effort: a sidecar that never existed (or is locked) must not fail the import
+      }
+    }
+  }
+
+  async #importStaged(context: AssetImporterContext): Promise<AssetImporterResult> {
     const settings = context.recipe.settings as Record<string, unknown> | undefined;
     const blenderExecutable = readStringSetting(settings, "blenderExecutable") ?? this.#blenderExecutable;
     const pythonScript = readStringSetting(settings, "pythonScript") ?? this.#pythonScript;
