@@ -4,7 +4,7 @@ Kinetra is pre-alpha and architecture-sensitive.
 
 Before opening an implementation PR:
 
-1. read \`VISION.md\`, \`AGENTS.md\` and \`ARCHITECTURE.md\`;
+1. read `VISION.md`, `AGENTS.md` and `ARCHITECTURE.md`;
 2. identify the roadmap phase and acceptance gate;
 3. keep the change inside existing package boundaries unless an ADR justifies a new one;
 4. preserve the agent-first command/query model;
@@ -24,18 +24,24 @@ A good PR explains:
 
 Avoid giant mixed PRs. A feature that changes project data, runtime behavior and agent tools should ideally establish the data/runtime contract first, then expose MCP/UI adapters.
 
+## Tests and coverage
+
+- `pnpm check` runs foundation/license/test-registration checks, build, typecheck and every package test.
+- Each package's `test` script must run every `test/*.test.ts` file (`pnpm check:test-registration` enforces it).
+- `pnpm build && pnpm coverage` prints unit-test line/branch/function coverage per package (Node's built-in `--experimental-test-coverage`, measured on each package's compiled `dist` sources, excluding `dist/test`) and writes `coverage/summary.md`, `coverage/summary.json` and one lcov file per package. Real-Electron `real-*.test.js` acceptance tests are skipped unless you pass `-- --include-real` (needs a display or `xvfb-run`); `-- --package @kinetra/animation` limits the run. The report never fails on a threshold.
+
 ## Commit style
 
 Conventional prefixes are preferred:
 
-- \`feat:\`
-- \`fix:\`
-- \`refactor:\`
-- \`test:\`
-- \`docs:\`
-- \`chore:\`
-- \`build:\`
-- \`ci:\`
+- `feat:`
+- `fix:`
+- `refactor:`
+- `test:`
+- `docs:`
+- `chore:`
+- `build:`
+- `ci:`
 
 ## Early project rule
 
