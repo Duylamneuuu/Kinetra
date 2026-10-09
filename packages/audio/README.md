@@ -17,7 +17,7 @@ Platform-free audio model: a bus tree with gain and mute, the state shapes the r
 - `effectiveGain(id)` multiplies the gain up the parent chain. A muted bus anywhere on the chain makes it `0`.
 - The constructor throws on an empty or duplicate bus id, a missing parent, a cycle, or a gain that is not finite and `>= 0`. `setGain` applies the same gain rule with a `RangeError`; an unknown bus id throws.
 - `getBus` / `getBuses` return clones; mutate buses only through `setGain` and `setMuted`.
-- `createSyntheticWav` throws `RangeError` for a non-integer or non-positive `sampleRate`, or a negative or non-finite `durationSeconds` / `frequency`.
+- `createSyntheticWav` throws `RangeError` for a non-integer or non-positive `sampleRate`, or a negative or non-finite `durationSeconds` / `frequency`, or when the PCM payload would exceed `MAX_SYNTHETIC_WAV_DATA_BYTES` (64 MiB). `setMuted` and the constructor throw `TypeError` for a non-boolean `muted`.
 
 ## Example
 

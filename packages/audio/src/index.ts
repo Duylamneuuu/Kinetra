@@ -51,6 +51,9 @@ export class AudioMixerModel {
       if (this.#buses.has(bus.id)) throw new Error(`Duplicate audio bus "${bus.id}"`);
       // Same contract as setGain: a NaN/negative/infinite gain would poison effectiveGain for the whole subtree.
       assertValidGain(bus.gain, `Audio bus "${bus.id}"`);
+      if (bus.muted !== undefined && typeof bus.muted !== "boolean") {
+        throw new TypeError(`Audio bus "${bus.id}" muted must be a boolean when present, got ${String(bus.muted)}`);
+      }
       if (bus.parentId !== undefined && (typeof bus.parentId !== "string" || bus.parentId.length === 0)) {
         throw new Error(`Audio bus "${bus.id}" parentId must be a non-empty string when present`);
       }
@@ -98,7 +101,10 @@ export class AudioMixerModel {
   }
 
   setMuted(id: string, muted: boolean): void {
-    this.#require(id).muted = muted;
+    const bus = this.#require(id);
+    // A truthy string such as "false" would otherwise silence the bus without any error.
+    if (typeof muted !== "boolean") throw new TypeError(`Audio bus "${id}": muted must be a boolean, got ${String(muted)}`);
+    bus.muted = muted;
   }
 
   effectiveGain(id: string): number {
@@ -139,6 +145,9 @@ export interface SyntheticWavOptions {
   frequency?: number;
 }
 
+/** Largest PCM payload createSyntheticWav will allocate (64 MiB, about 12 minutes of 44.1 kHz mono). */
+export const MAX_SYNTHETIC_WAV_DATA_BYTES = 64 * 1024 * 1024;
+
 export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Array {
   const sampleRate = options.sampleRate ?? 44100;
   const durationSeconds = options.durationSeconds ?? 0.25;
@@ -160,6 +169,13 @@ export function createSyntheticWav(options: SyntheticWavOptions = {}): Uint8Arra
   const numSamples = Math.floor(sampleRate * durationSeconds);
   const bytesPerSample = bitsPerSample / 8;
   const subChunk2Size = numSamples * numChannels * bytesPerSample;
+  // Without a cap a huge duration either throws an opaque "Array buffer allocation failed" or
+  // overflows the uint32 chunk sizes in the header.
+  if (subChunk2Size > MAX_SYNTHETIC_WAV_DATA_BYTES) {
+    throw new RangeError(
+      `createSyntheticWav: ${subChunk2Size} PCM bytes exceeds the ${MAX_SYNTHETIC_WAV_DATA_BYTES} byte limit; reduce sampleRate or durationSeconds`,
+    );
+  }
   const buffer = new ArrayBuffer(44 + subChunk2Size);
   const view = new DataView(buffer);
 
