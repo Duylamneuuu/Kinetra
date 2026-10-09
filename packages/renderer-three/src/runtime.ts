@@ -1912,7 +1912,7 @@ export class ThreeSceneRuntime {
   }
 
   sampleRootMotion(entityId: string, deltaSeconds: number): RootMotionFrameDelta {
-    if (this.#disposed || deltaSeconds <= 0) {
+    if (this.#disposed || !(deltaSeconds > 0) || !Number.isFinite(deltaSeconds)) {
       return { translation: [0, 0, 0], yaw: 0 };
     }
     const session = this.#animatorSessions.get(entityId);
@@ -1997,7 +1997,8 @@ export class ThreeSceneRuntime {
   }
 
   updateAnimation(deltaSeconds: number): void {
-    if (this.#disposed || deltaSeconds <= 0) return;
+    // `!(x > 0)` also rejects NaN; a NaN/Infinity delta would poison every mixer time and bone transform.
+    if (this.#disposed || !(deltaSeconds > 0) || !Number.isFinite(deltaSeconds)) return;
 
     for (const [entityId, session] of this.#animatorSessions) {
       const metadata = this.#models.get(entityId);
