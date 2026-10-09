@@ -10,7 +10,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: HUD contract with acceptance manifests (slice 6) ([#188](https://github.com/Duylamneuuu/Kinetra/pull/188))
 - **orb-run**: HUD contract (objective, orbs, timer urgency, compass marker, banner) with `hud` acceptance manifests (slice 6)
+- **animation**: animation events contract (#90 part 1): validation + deterministic clip event tracker ([#180](https://github.com/Duylamneuuu/Kinetra/pull/180))
+- **orb-run**: audio cues with a headless audio service (slice 5) ([#179](https://github.com/Duylamneuuu/Kinetra/pull/179))
 - **orb-run**: foot placement with two-bone IK (slice 4) ([#160](https://github.com/Duylamneuuu/Kinetra/pull/160))
 - **physics**: raycast and shapeCast queries with layer filtering ([#155](https://github.com/Duylamneuuu/Kinetra/pull/155))
 - **orb-run**: locomotion blend space driven by speed (slice 3) ([#143](https://github.com/Duylamneuuu/Kinetra/pull/143))
@@ -27,6 +30,21 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **save-state**: v1→v2 migration keeps entity id "__proto__" and rejects malformed data with a descriptive error ([#192](https://github.com/Duylamneuuu/Kinetra/pull/192))
+- **project-model**: bound JSON nesting depth and make parent checks/cycle detection linear ([#193](https://github.com/Duylamneuuu/Kinetra/pull/193))
+- **verification**: cap pixelDiffThreshold at 765 in the manifest schema; surface VisualError code/details on step results; runner-level visual tests ([#169](https://github.com/Duylamneuuu/Kinetra/pull/169))
+- **animation**: skeleton/clip validators tolerate null bones and NaN times; locale-independent ordering ([#186](https://github.com/Duylamneuuu/Kinetra/pull/186))
+- **core**: PlayerControllerScript rejects negative/fractional counters; restoreScriptState rolls back a throwing commit ([#184](https://github.com/Duylamneuuu/Kinetra/pull/184))
+- **project-model**: canonical key order so a project serializes to the same bytes regardless of property assignment order ([#183](https://github.com/Duylamneuuu/Kinetra/pull/183))
+- **animation**: retarget cache key includes rest poses; dotted bone names; concurrent cache writes; metadata_mismatch reason ([#182](https://github.com/Duylamneuuu/Kinetra/pull/182))
+- **asset-pipeline,verification**: serialize overlapping reimports of one asset, release watcher resources on stop(), recover from a failed coordinator start, reject NaN in percentile maths ([#178](https://github.com/Duylamneuuu/Kinetra/pull/178))
+- **mcp-server**: roll back an applied command when persisting the project fails ([#177](https://github.com/Duylamneuuu/Kinetra/pull/177))
+- **blender-bridge**: kill hung Blender after a timeout and report blender.timeout ([#174](https://github.com/Duylamneuuu/Kinetra/pull/174))
+- **renderer-three**: close async races in template cache and attachModel/loadModels (stale overwrite, dispose-during-load, overlapping attaches) ([#175](https://github.com/Duylamneuuu/Kinetra/pull/175))
+- **save-state**: corrupt settings file falls back to defaults instead of blocking player start-up ([#168](https://github.com/Duylamneuuu/Kinetra/pull/168))
+- **physics**: validate body input, stop orphan rigid bodies and leaked worlds; +15 tests ([#167](https://github.com/Duylamneuuu/Kinetra/pull/167))
+- **command-bus**: component lookups use own properties so names like toString/constructor neither match every entity nor crash queries ([#162](https://github.com/Duylamneuuu/Kinetra/pull/162))
+- **player**: validate runtime.step steps/deltaSeconds; ignore non-finite animation deltas ([#123](https://github.com/Duylamneuuu/Kinetra/pull/123))
 - **mcp-server**: locale-independent scene/entity ordering + service/runtime contract tests ([#156](https://github.com/Duylamneuuu/Kinetra/pull/156))
 - **project-model**: keep JSON "__proto__" keys when serializing; add contract + round-trip fuzz tests ([#158](https://github.com/Duylamneuuu/Kinetra/pull/158))
 - **asset-pipeline**: canonical JSON hashing no longer collides on __proto__/NaN/Date; reject cycles ([#157](https://github.com/Duylamneuuu/Kinetra/pull/157))
@@ -54,16 +72,24 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **scripts**: extract doc-check parser and test it; malformed doc-check fences now fail instead of being skipped ([#194](https://github.com/Duylamneuuu/Kinetra/pull/194))
+- **physics-rapier**: determinism/fuzz replay, advance() slicing, step(dt) restore, dynamic material validation, controller release on remove ([#190](https://github.com/Duylamneuuu/Kinetra/pull/190))
+- **asset-pipeline**: edge cases for validateAssetRecord, inspectGlb and normalizeGlb (+17 tests) ([#181](https://github.com/Duylamneuuu/Kinetra/pull/181))
+- **scripts**: unit + fixture tests for the license gate (extract license-policy.mjs) ([#176](https://github.com/Duylamneuuu/Kinetra/pull/176))
+- **verification**: unit-test AcceptanceRunner screenshot, visual, critique and performance steps ([#164](https://github.com/Duylamneuuu/Kinetra/pull/164))
 - **verification**: unit-test KinetraRuntimeProbe fallbacks and runProcessSmoke ([#147](https://github.com/Duylamneuuu/Kinetra/pull/147))
 - **repo**: add dependency-free unit-test coverage report (`pnpm coverage`) ([#139](https://github.com/Duylamneuuu/Kinetra/pull/139))
 - **animation**: seeded property tests for blend space, IK and morph-target contracts ([#115](https://github.com/Duylamneuuu/Kinetra/pull/115))
 
 ### Documentation
 
+- **repo**: real READMEs for input, audio and save-state with doc-checked examples ([#191](https://github.com/Duylamneuuu/Kinetra/pull/191))
+- **docs**: READMEs for command-bus, project-model, core (executable examples); CHANGELOG through #160 ([#165](https://github.com/Duylamneuuu/Kinetra/pull/165))
 - **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
 
 ### Maintenance
 
+- **ci**: add report-only coverage workflow that uploads the coverage artifact ([#163](https://github.com/Duylamneuuu/Kinetra/pull/163))
 - **deps**: bump electron 38.8.6 -> 41.10.7, clearing every remaining Electron advisory in `pnpm audit` ([#161](https://github.com/Duylamneuuu/Kinetra/pull/161))
 - **player**: lazy-load Rapier and Recast, add initial-chunk bundle budget (perf) ([#148](https://github.com/Duylamneuuu/Kinetra/pull/148))
 - **ci**: add player bundle-size budget gate with tested evaluator ([#114](https://github.com/Duylamneuuu/Kinetra/pull/114))
