@@ -74,11 +74,33 @@ export function blendSpaceAxes(space:BlendSpaceDefinition):string[]{
   return space.kind==="1d"?[space.parameter]:[space.parameters[0],space.parameters[1]];
 }
 
-export function validateAnimationGraph(graph:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
+function isRecord(value:unknown):value is Record<string,unknown>{
+  return typeof value==="object" && value!==null && !Array.isArray(value);
+}
+
+export function validateAnimationGraph(input:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
   const diagnostics:AnimationGraphDiagnostic[]=[];
   const states=new Set<string>();
 
-  for(const [name,definition] of Object.entries(graph.parameters)){
+  // Graphs arrive from project files and IPC: a structurally broken graph must produce
+  // diagnostics, never a bare TypeError from iterating undefined/null.
+  if(!isRecord(input)){
+    return [{code:"anim.graph.invalid",message:"Animation graph must be an object",remediation:"Pass a { schemaVersion, entryState, parameters, states, transitions } graph."}];
+  }
+  let parameters=input.parameters;
+  if(!isRecord(parameters)){
+    diagnostics.push({code:"anim.graph.parameters.type",message:"graph.parameters must be an object mapping names to parameter definitions",remediation:"Set parameters to an object, e.g. {} when the graph has none."});
+    parameters={};
+  }
+  let stateList:unknown[]=[];
+  if(Array.isArray(input.states)) stateList=input.states;
+  else diagnostics.push({code:"anim.graph.states.type",message:"graph.states must be an array",remediation:"Set states to an array of { id, clipId } entries."});
+  let transitionList:unknown[]=[];
+  if(Array.isArray(input.transitions)) transitionList=input.transitions;
+  else diagnostics.push({code:"anim.graph.transitions.type",message:"graph.transitions must be an array",remediation:"Set transitions to an array (empty when the graph has none)."});
+  const graph:AnimationGraphDefinition={...input,parameters};
+
+  for(const [name,definition] of Object.entries(parameters)){
     if(!PARAMETER_TYPES.includes(definition?.type)){
       diagnostics.push({code:"anim.parameter.type",message:`Parameter "${name}" has unknown type "${String(definition?.type)}"`});
       continue;
@@ -108,7 +130,16 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     }
   }
 
-  for(const state of graph.states){
+  for(const rawState of stateList){
+    if(!isRecord(rawState)){
+      diagnostics.push({code:"anim.state.invalid",message:"Every state must be an object",remediation:"Use a { id, clipId } object for each state."});
+      continue;
+    }
+    const state=rawState as unknown as AnimationStateDefinition;
+    if(typeof state.id!=="string" || state.id.length===0){
+      diagnostics.push({code:"anim.state.id.invalid",message:`State id ${JSON.stringify(state.id)??"undefined"} must be a non-empty string`,remediation:"Give every state a stable string id."});
+      continue;
+    }
     if(states.has(state.id)){
       diagnostics.push({code:"anim.state.duplicate",message:`Duplicate state "${state.id}"`});
     }
@@ -161,7 +192,12 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     diagnostics.push({code:"anim.entry.missing",message:`Entry state "${graph.entryState}" does not exist`});
   }
 
-  for(const transition of graph.transitions){
+  for(const rawTransition of transitionList){
+    if(!isRecord(rawTransition)){
+      diagnostics.push({code:"anim.transition.invalid",message:"Every transition must be an object",remediation:"Use a { id, from, to, conditions } object for each transition."});
+      continue;
+    }
+    const transition=rawTransition as unknown as AnimationTransitionDefinition;
     if(transition.from !== "*" && !states.has(transition.from)){
       diagnostics.push({code:"anim.transition.from.missing",message:`Transition "${transition.id}" source is missing`});
     }
@@ -174,7 +210,16 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     if(transition.priority!==undefined && !isFiniteNumber(transition.priority)){
       diagnostics.push({code:"anim.transition.priority.invalid",message:`Transition "${transition.id}" has non-finite priority`});
     }
-    for(const condition of transition.conditions){
+    if(!Array.isArray(transition.conditions)){
+      diagnostics.push({code:"anim.transition.conditions.type",message:`Transition "${transition.id}" conditions must be an array`,remediation:"Set conditions to an array (empty for an unconditional transition)."});
+      continue;
+    }
+    for(const rawCondition of transition.conditions as unknown[]){
+      if(!isRecord(rawCondition)){
+        diagnostics.push({code:"anim.condition.invalid",message:`Transition "${transition.id}" has a condition that is not an object`,remediation:"Use a { parameter, op, value } object for each condition."});
+        continue;
+      }
+      const condition=rawCondition as unknown as AnimationCondition;
       if(!CONDITION_OPS.includes(condition.op)){
         diagnostics.push({code:"anim.condition.op.invalid",message:`Transition "${transition.id}" uses unknown operator "${String(condition.op)}"`});
         continue;
