@@ -332,8 +332,8 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 ### 21. Executable Documentation (docs)
 
 - `pnpm check:docs` (`scripts/check-doc-examples.mjs`, part of `pnpm check`) compiles every ```` ```ts doc-check ```` fence in the READMEs and guides with the owning package's tsconfig and runs it with Node, so a README example that no longer typechecks or asserts wrongly fails CI;
-- Package READMEs with checked examples: animation, asset-pipeline, command-bus, core, navigation-recast, physics-rapier, project-model, renderer-three, verification, plus `docs/guides/AI_AGENT_MCP.md` (tool table from `packages/mcp-server/src/server.ts`);
-- **Not done**: READMEs for audio, input, save-state, blender-bridge (short), desktop-build, apps/player and apps/editor; TSDoc on every public export.
+- Package READMEs with checked examples: animation, asset-pipeline, audio, command-bus, core, input, navigation-recast, physics-rapier, project-model, renderer-three, save-state, verification, plus `docs/guides/AI_AGENT_MCP.md` (tool table from `packages/mcp-server/src/server.ts`);
+- **Not done**: READMEs for blender-bridge (short), desktop-build, mcp-server (no checked example yet), apps/player and apps/editor; TSDoc on every public export.
 
 ## Completion definition
 
