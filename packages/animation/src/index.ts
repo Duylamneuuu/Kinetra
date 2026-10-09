@@ -7,3 +7,4 @@ export * from "./retarget.js";
 export * from "./retarget-cache.js";
 export * from "./morph-targets.js";
 export * from "./ik.js";
+export * from "./events.js";
