@@ -158,3 +158,37 @@ test("runProcessSmoke captures output, exit code, and times out", async () => {
     runProcessSmoke({ executable: "/nonexistent/bin-xyz" }),
   );
 });
+
+test("probe snapshot indexes entities named __proto__ as own keys", async () => {
+  const { host } = fakeHost({
+    query: async () => ({
+      running: true,
+      entities: [
+        { entityId: "__proto__", name: "__proto__", transform: { x: 1 } },
+        { entityId: "e2", name: "Rock" },
+      ],
+    }),
+  });
+  const probe = new KinetraRuntimeProbe({ host, project });
+  const state = (await probe.snapshot()).state as {
+    byName: Record<string, unknown>;
+    byEntityId: Record<string, unknown>;
+  };
+  for (const index of [state.byName, state.byEntityId]) {
+    assert.ok(Object.hasOwn(index, "__proto__"), "own __proto__ key present");
+    assert.equal(Object.getPrototypeOf(index), Object.prototype, "index prototype untouched");
+    assert.equal(Object.hasOwn(index, "transform"), false, "entity fields must not leak into the index");
+  }
+  assert.ok(Object.hasOwn(state.byName, "Rock"));
+});
+
+test("probe wait rejects NaN, Infinity and delays setTimeout cannot honour", async () => {
+  const { host } = fakeHost();
+  const probe = new KinetraRuntimeProbe({ host, project });
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648, 1e12]) {
+    await assert.rejects(() => probe.wait(bad), RangeError, `wait(${bad})`);
+  }
+  await probe.wait(0);
+  await probe.wait(-1);
+  await probe.wait(Number.NEGATIVE_INFINITY);
+});

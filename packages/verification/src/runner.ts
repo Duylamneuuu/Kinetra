@@ -671,6 +671,14 @@ async function executeStep(
         platform: process.platform,
       });
 
+      if (evaluation.error !== undefined && evaluation.violations.length === 0) {
+        throw new StepAssertionError(evaluation.error, step.budget, {
+          violations: [],
+          platform: evaluation.platform,
+          thresholdCount: evaluation.thresholdCount,
+        });
+      }
+
       if (!evaluation.passed) {
         const violationSummary = evaluation.violations
           .map((v) => `${v.metric} actual ${v.actual} exceeds ${v.comparison} ${v.limit}`)

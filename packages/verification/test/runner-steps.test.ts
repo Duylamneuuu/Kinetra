@@ -498,3 +498,18 @@ test("assert.performanceBudget fails when there is no evidence and the probe can
   assert.equal(report.passed, false);
   assert.match(failedStep(report).error ?? failedStep(report).message ?? "", /No performance evidence/);
 });
+
+test("assert.performanceBudget with no usable thresholds fails instead of passing vacuously", async () => {
+  for (const step of [
+    { type: "assert.performanceBudget" },
+    { type: "assert.performanceBudget", budgets: {} },
+    { type: "assert.performanceBudget", budget: { "frame.p95Ms": {} } },
+  ]) {
+    const report = await new AcceptanceRunner(new PerfProbe([textured()], PERF)).run(manifest([step]));
+    assert.equal(report.passed, false, `${JSON.stringify(step)} must not pass`);
+    assert.match(
+      failedStep(report).error ?? failedStep(report).message ?? "",
+      /performance\.budget(Empty|Invalid)/,
+    );
+  }
+});

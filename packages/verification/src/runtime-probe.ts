@@ -10,6 +10,9 @@ import type {
 } from "./types.js";
 import type { RuntimePerformanceEvidence } from "./performance.js";
 
+/** Largest delay setTimeout honours (2^31-1 ms); larger values fire after 1 ms. */
+const MAX_WAIT_MS = 2_147_483_647;
+
 export interface KinetraRuntimeProbeOptions {
   host: RuntimeProbeHost;
   project: ProjectDocument | (() => ProjectDocument | Promise<ProjectDocument>);
@@ -163,8 +166,16 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
   }
 
   async wait(milliseconds: number): Promise<void> {
+    // setTimeout coerces NaN / Infinity / anything above 2^31-1 ms to 1 ms, so a "wait" that
+    // should last a long time (or is garbage) would return immediately and the step would pass.
+    if (typeof milliseconds !== "number" || Number.isNaN(milliseconds)) {
+      throw new RangeError(`wait: milliseconds must be a finite number, got ${String(milliseconds)}`);
+    }
     if (milliseconds <= 0) {
       return;
+    }
+    if (milliseconds > MAX_WAIT_MS) {
+      throw new RangeError(`wait: ${milliseconds}ms exceeds the maximum of ${MAX_WAIT_MS}ms`);
     }
     await new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
@@ -341,9 +352,20 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     const byEntityId: Record<string, unknown> = {};
     const byName: Record<string, unknown> = {};
 
+    // defineProperty (not assignment): `obj["__proto__"] = entity` would swap the index's prototype
+    // instead of adding a key, so an entity named "__proto__" would be unreachable and its fields
+    // would leak into the index as if they were entity names.
+    const put = (index: Record<string, unknown>, key: string, entity: unknown): void => {
+      Object.defineProperty(index, key, {
+        value: entity,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    };
     for (const entity of query.entities) {
-      byEntityId[entity.entityId] = entity;
-      byName[entity.name] = entity;
+      put(byEntityId, entity.entityId, entity);
+      put(byName, entity.name, entity);
     }
 
     const sceneId = query.sceneId ?? this.#currentSceneId;
