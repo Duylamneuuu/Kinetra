@@ -131,7 +131,19 @@ export class AssetHotReloadCoordinator {
       this.#emit(event);
     });
 
-    await this.#watcher.start();
+    try {
+      await this.#watcher.start();
+    } catch (err) {
+      // A failed start must not leave the coordinator "started" with live subscriptions:
+      // start() would then return early forever and every watcher event would be processed
+      // by a coordinator that is not running.
+      this.#watcherUnsubscribe?.();
+      this.#serviceUnsubscribe?.();
+      this.#watcherUnsubscribe = undefined;
+      this.#serviceUnsubscribe = undefined;
+      this.#started = false;
+      throw err;
+    }
   }
 
   async stop(): Promise<void> {

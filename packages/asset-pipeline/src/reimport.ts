@@ -149,6 +149,8 @@ export class AssetReimportService {
   readonly #importers = new Map<string, AssetImporter>();
   readonly #listeners = new Set<(event: ReimportEvent) => void>();
   readonly #fs: FileSystemAdapter;
+  /** Tail of the reimport chain per asset: overlapping reimports of one asset run strictly in order. */
+  readonly #queues = new Map<string, Promise<void>>();
 
   constructor(options: AssetReimportServiceOptions) {
     this.#database = options.database;
@@ -189,7 +191,26 @@ export class AssetReimportService {
     return this.#database;
   }
 
-  async reimport(assetId: string): Promise<ReimportResult> {
+  /**
+   * Reimport one asset. Calls for the same asset are serialized: each one re-reads the record and the
+   * source only after the previous one finished, so a slow import of an older source can never overwrite
+   * the artifact and fingerprint of a newer one. Different assets still reimport concurrently.
+   */
+  reimport(assetId: string): Promise<ReimportResult> {
+    const previous = this.#queues.get(assetId) ?? Promise.resolve();
+    const run = previous.then(() => this.#reimportNow(assetId));
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#queues.set(assetId, tail);
+    void tail.then(() => {
+      if (this.#queues.get(assetId) === tail) this.#queues.delete(assetId);
+    });
+    return run;
+  }
+
+  async #reimportNow(assetId: string): Promise<ReimportResult> {
     const record = this.#database.get(assetId);
     if (!record) {
       const error = `Asset "${assetId}" does not exist in AssetDatabase`;
