@@ -499,6 +499,15 @@ export function extractRootMotionFromClip(
       yaw = euler.y;
     }
 
+    // Euler yaw lives in (-pi, pi]; a turn through 180 degrees would otherwise show up as a
+    // +/-2pi jump between two samples (a huge spurious yaw delta, and interpolation sweeping
+    // the long way round). Keep the sequence continuous by unwrapping against the previous sample.
+    if (samples.length > 0) {
+      const previousYaw = samples[samples.length - 1]!.yaw;
+      while (yaw - previousYaw > Math.PI) yaw -= 2 * Math.PI;
+      while (yaw - previousYaw < -Math.PI) yaw += 2 * Math.PI;
+    }
+
     samples.push({
       time,
       position: [px, py, pz],
