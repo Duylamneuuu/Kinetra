@@ -8,6 +8,7 @@ import type {
 } from "@kinetra/verification";
 
 import { createOrbRunProject } from "./authoring.js";
+import { buildOrbRunHud } from "./hud.js";
 import {
   captureOrbRunSave,
   restoreOrbRunSave,
@@ -34,6 +35,7 @@ import type { HeadlessSceneSimulation } from "./simulation.js";
  * - `state.game.<status|collectedCount|totalOrbs|exitUnlocked|elapsedSeconds|remainingSeconds|step>`
  * - `state.entities.<EntityName>.position.<0|1|2>` and `.script` (the entity's script state)
  * - `state.events.<orbCollected|exitUnlocked|won|lost>`: how many times each gameplay event fired
+ * - `state.hud.<objective|orbs|timer|exit|marker|banner>.*`: the HUD model of `computeOrbRunHud` (`marker` and `banner` are `null` when absent)
  * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
  *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
  * - `audio.play` / `audio.stop` / `audio.setBusGain` / `audio.setBusMuted` steps drive the same headless mixer;
@@ -179,6 +181,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
         game,
         entities,
         events,
+        hud: buildOrbRunHud(simulation),
         audio: {
           initialized: audioState.initialized,
           buses: Object.fromEntries(audioState.buses.map((bus) => [bus.id, bus])),
