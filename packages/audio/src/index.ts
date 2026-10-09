@@ -109,6 +109,7 @@ export class AudioMixerModel {
 
   effectiveGain(id: string): number {
     let gain = 1;
+    let silent = false;
     let current: AudioBusDefinition | undefined = this.#require(id);
     const visited = new Set<string>();
 
@@ -116,10 +117,16 @@ export class AudioMixerModel {
       if (visited.has(current.id)) throw new Error("Audio bus cycle detected");
       visited.add(current.id);
       if (current.muted) return 0;
+      // A zero anywhere silences the chain. It is remembered instead of multiplied in so a
+      // mid-chain overflow (Infinity) cannot turn `Infinity * 0` into NaN.
+      if (current.gain === 0) silent = true;
       gain *= current.gain;
       current = current.parentId ? this.#buses.get(current.parentId) : undefined;
     }
-    return gain;
+    if (silent) return 0;
+    // Individually finite gains can still overflow when multiplied; consumers (Web Audio
+    // GainNode) reject non-finite values.
+    return Number.isFinite(gain) ? gain : Number.MAX_VALUE;
   }
 
   #require(id: string): AudioBusDefinition {
