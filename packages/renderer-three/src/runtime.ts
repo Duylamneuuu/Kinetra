@@ -1331,6 +1331,13 @@ export class ThreeSceneRuntime {
     } = {},
   ): boolean {
     if (this.#disposed) return false;
+    // NaN would skip both branches below and Infinity would never finish fading, leaving the
+    // outgoing clip frozen at its start weight; a non-finite speed poisons every mixer time.
+    // Reject before anything playing is touched.
+    if (typeof blendSeconds !== "number" || !Number.isFinite(blendSeconds)) return false;
+    if (options.speed !== undefined && (typeof options.speed !== "number" || !Number.isFinite(options.speed))) {
+      return false;
+    }
     const mixer = this.#mixers.get(entityId);
     const clips = this.#clips.get(entityId);
     const metadata = this.#models.get(entityId);
