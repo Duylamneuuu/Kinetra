@@ -7,6 +7,7 @@ import {
 import type { JsonValue, ProjectDocument } from "@kinetra/project-model";
 
 import { ORB_RUN_DEFAULT_RULES, type OrbRunRules } from "./authoring.js";
+import { ORB_RUN_AUDIO_ASSET, ORB_RUN_AUDIO_BUS, pickupAssetForCount } from "./audio.js";
 import {
   ORB_RUN_ACTION,
   ORB_RUN_EVENT,
@@ -24,6 +25,22 @@ function horizontalDistance(a: Vec3, b: Vec3): number {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * Fire-and-forget SFX on the sfx bus. A refused or failed play is a warning log
+ * (never a thrown error that would put the script in the error state).
+ */
+function playCue(context: GameScriptContext | undefined, assetId: string, gain: number): void {
+  const audio = context?.audio;
+  if (!context || !audio) return;
+  const report = (error: string) => context.log?.("warning", "orbRun.audioFailed", { assetId, error });
+  audio.play({ assetId, bus: ORB_RUN_AUDIO_BUS.sfx, gain, entityId: context.entityId }).then(
+    (result) => {
+      if (!result.success) report(result.error ?? "play failed");
+    },
+    (error: unknown) => report(error instanceof Error ? error.message : String(error)),
+  );
 }
 
 function validity(error?: string): { valid: boolean; error?: string } {
@@ -219,6 +236,7 @@ export class OrbRunManager implements GameScript {
       this.exitUnlocked = true;
       context.log?.("info", "orbRun.exitUnlocked", { elapsedSeconds: this.elapsedSeconds });
       context.emit?.(ORB_RUN_EVENT.exitUnlocked, { elapsedSeconds: this.elapsedSeconds });
+      playCue(context, ORB_RUN_AUDIO_ASSET.exitUnlocked, 1);
     }
 
     if (this.exitUnlocked && this.#playerId && this.#exitId) {
@@ -235,14 +253,16 @@ export class OrbRunManager implements GameScript {
     }
   }
 
-  onEvent(event: string, payload?: unknown): void {
+  onEvent(event: string, payload?: unknown, context?: GameScriptContext): void {
     if (event !== ORB_RUN_EVENT.orbCollected || this.status !== "playing") return;
     const orbId =
       typeof payload === "object" && payload !== null && "orbId" in payload
         ? (payload as { orbId: unknown }).orbId
         : undefined;
-    if (typeof orbId === "string" && this.config.orbIds.includes(orbId)) {
+    if (typeof orbId === "string" && this.config.orbIds.includes(orbId) && !this.collectedOrbIds.has(orbId)) {
       this.collectedOrbIds.add(orbId);
+      // Pitch climbs with progress: the Nth orb plays the Nth note of the ladder.
+      playCue(context, pickupAssetForCount(this.collectedOrbIds.size), 0.8);
     }
   }
 
@@ -301,6 +321,7 @@ export class OrbRunManager implements GameScript {
     };
     context.log?.("info", status === "won" ? "orbRun.won" : "orbRun.lost", summary);
     context.emit?.(status === "won" ? ORB_RUN_EVENT.won : ORB_RUN_EVENT.lost, summary);
+    playCue(context, status === "won" ? ORB_RUN_AUDIO_ASSET.win : ORB_RUN_AUDIO_ASSET.lose, 1);
   }
 }
 

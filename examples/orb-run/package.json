@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@kinetra/animation": "workspace:*",
+    "@kinetra/audio": "workspace:*",
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/core": "workspace:*",
     "@kinetra/project-model": "workspace:*",

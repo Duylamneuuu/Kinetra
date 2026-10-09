@@ -1,5 +1,6 @@
 import {
   ScriptHost,
+  type GameScriptAudioService,
   type GameScriptContext,
   type ScriptExecutionState,
   type ScriptResolver,
@@ -44,6 +45,11 @@ export interface HeadlessSimulationOptions {
   scripts: ScriptResolver;
   /** Fixed simulation step in seconds. Defaults to 1/30. */
   fixedDeltaSeconds?: number;
+  /**
+   * Builds the audio service exposed to scripts as `context.audio`. Receives the
+   * simulation clock so a headless service can derive playback progress.
+   */
+  createAudio?: (clock: { now: () => number; step: () => number }) => GameScriptAudioService;
 }
 
 export interface UnresolvedScript {
@@ -72,6 +78,8 @@ export class HeadlessSceneSimulation {
   readonly sceneId: string;
   readonly fixedDeltaSeconds: number;
   readonly unresolvedScripts: UnresolvedScript[] = [];
+  /** The audio service handed to scripts (undefined when the game was started without audio). */
+  readonly audio: GameScriptAudioService | undefined;
 
   #project: ProjectDocument;
   #entities: Map<string, EntityDefinition>;
@@ -88,6 +96,7 @@ export class HeadlessSceneSimulation {
     this.#project = cloneProject(options.project);
     this.sceneId = options.sceneId;
     this.fixedDeltaSeconds = options.fixedDeltaSeconds ?? 1 / 30;
+    this.audio = options.createAudio?.({ now: () => this.elapsedSeconds, step: () => this.#step });
     if (!Number.isFinite(this.fixedDeltaSeconds) || this.fixedDeltaSeconds <= 0) {
       throw new RangeError("fixedDeltaSeconds must be finite and positive");
     }
@@ -274,6 +283,7 @@ export class HeadlessSceneSimulation {
           return undefined;
         },
       },
+      ...(this.audio ? { audio: this.audio } : {}),
       emit: (event, payload) => {
         this.#events.push({ step: this.#step, event, ...(payload !== undefined ? { payload: structuredClone(payload) } : {}) });
         this.#host.emit(event, payload);

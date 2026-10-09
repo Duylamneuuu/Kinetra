@@ -75,6 +75,9 @@ importers:
       '@kinetra/animation':
         specifier: workspace:*
         version: link:../../packages/animation
+      '@kinetra/audio':
+        specifier: workspace:*
+        version: link:../../packages/audio
       '@kinetra/command-bus':
         specifier: workspace:*
         version: link:../../packages/command-bus
