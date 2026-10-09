@@ -11,6 +11,7 @@ import { createOrbRunProject } from "./authoring.js";
 import {
   captureOrbRunSave,
   restoreOrbRunSave,
+  orbRunAudio,
   startOrbRunSimulation,
   summarizeOrbRun,
   type OrbRunSaveData,
@@ -33,6 +34,11 @@ import type { HeadlessSceneSimulation } from "./simulation.js";
  * - `state.game.<status|collectedCount|totalOrbs|exitUnlocked|elapsedSeconds|remainingSeconds|step>`
  * - `state.entities.<EntityName>.position.<0|1|2>` and `.script` (the entity's script state)
  * - `state.events.<orbCollected|exitUnlocked|won|lost>`: how many times each gameplay event fired
+ * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
+ *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
+ * - `audio.play` / `audio.stop` / `audio.setBusGain` / `audio.setBusMuted` steps drive the same headless mixer;
+ *   a refused `audio.play` (unknown bus/asset) throws so the manifest fails instead of passing silently
+ * - logs: every started cue also appears as an `audio.played` info log (same message the Electron player logs)
  */
 export class OrbRunHeadlessProbe implements RuntimeProbe {
   readonly #project: ProjectDocument;
@@ -97,6 +103,29 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     }
   }
 
+  async playAudio(params: {
+    assetId: string;
+    bus?: string;
+    loop?: boolean;
+    gain?: number;
+    entityId?: string;
+  }): Promise<void> {
+    const result = await orbRunAudio(this.#require()).play(params);
+    if (!result.success) throw new Error(result.error ?? `audio.play failed for "${params.assetId}"`);
+  }
+
+  async stopAudio(params: { playbackId?: string; entityId?: string } = {}): Promise<void> {
+    orbRunAudio(this.#require()).stop(params);
+  }
+
+  async setAudioBusGain(busId: string, gain: number): Promise<void> {
+    orbRunAudio(this.#require()).setBusGain(busId, gain);
+  }
+
+  async setAudioBusMuted(busId: string, muted: boolean): Promise<void> {
+    orbRunAudio(this.#require()).setBusMuted(busId, muted);
+  }
+
   async wait(milliseconds: number): Promise<void> {
     this.#advance(this.#stepsFor(milliseconds));
   }
@@ -138,10 +167,29 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       lost: simulation.events(ORB_RUN_EVENT.lost).length,
     };
     const { player: _player, ...game } = summarizeOrbRun(simulation);
+    const audio = orbRunAudio(simulation);
+    const audioState = audio.state();
+    const cues = audio.cues();
+    const played: Record<string, number> = {};
+    for (const cue of cues) played[cue.assetId] = (played[cue.assetId] ?? 0) + 1;
     return {
       running: true,
       sceneId: simulation.sceneId,
-      state: { game, entities, events, paused: this.#paused },
+      state: {
+        game,
+        entities,
+        events,
+        audio: {
+          initialized: audioState.initialized,
+          buses: Object.fromEntries(audioState.buses.map((bus) => [bus.id, bus])),
+          playbacks: audioState.activePlaybacks,
+          playedCount: cues.length,
+          played,
+          cues,
+          failedCount: audio.failures().length,
+        },
+        paused: this.#paused,
+      },
     };
   }
 
@@ -234,10 +282,22 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   }
 
   #mapLogs(simulation: HeadlessSceneSimulation): RuntimeLog[] {
-    return simulation.logs().map((entry) => ({
+    const logs: RuntimeLog[] = simulation.logs().map((entry) => ({
       level: entry.level,
       message: entry.category,
       data: { step: entry.step, ...(entry.data ?? {}) },
     }));
+    const audio = orbRunAudio(simulation);
+    for (const cue of audio.cues()) {
+      logs.push({
+        level: "info",
+        message: "audio.played",
+        data: { step: cue.step, assetId: cue.assetId, bus: cue.bus, playbackId: cue.playbackId },
+      });
+    }
+    for (const failure of audio.failures()) {
+      logs.push({ level: "warning", message: "audio.failed", data: { ...failure } });
+    }
+    return logs;
   }
 }

@@ -1,5 +1,6 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 
+import { HeadlessAudioService } from "./audio.js";
 import { ORB_RUN_DEFAULT_RULES, createOrbRunProject } from "./authoring.js";
 import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_SCENE_ID } from "./ids.js";
 import { createOrbRunScriptRegistry, type OrbRunStatus } from "./scripts.js";
@@ -12,9 +13,18 @@ export async function startOrbRunSimulation(
     project,
     sceneId: ORB_RUN_SCENE_ID,
     scripts: createOrbRunScriptRegistry(project, ORB_RUN_SCENE_ID),
+    createAudio: (clock) => new HeadlessAudioService(clock),
   });
   await simulation.start();
   return simulation;
+}
+
+/** The headless audio service of a simulation started by `startOrbRunSimulation`. */
+export function orbRunAudio(simulation: HeadlessSceneSimulation): HeadlessAudioService {
+  if (!(simulation.audio instanceof HeadlessAudioService)) {
+    throw new Error("This simulation was not started with Orb Run audio");
+  }
+  return simulation.audio;
 }
 
 export interface OrbRunSummary {

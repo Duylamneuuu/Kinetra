@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.audio",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.audio.initialized", "expected": true },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 0 },
+    { "type": "assert.near", "path": "state.audio.buses.sfx.effectiveGain", "expected": 0.9, "tolerance": 0.000001 },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 1 },
+    { "type": "assert.equal", "path": "state.audio.cues.0.assetId", "expected": "asset_orbrun_sfx_pickup_1" },
+    { "type": "assert.equal", "path": "state.audio.cues.0.bus", "expected": "sfx" },
+    { "type": "assert.near", "path": "state.audio.cues.0.effectiveGainAtStart", "expected": 0.72, "tolerance": 0.000001 },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "assert.equal", "path": "state.audio.cues.1.assetId", "expected": "asset_orbrun_sfx_pickup_2" },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 2 },
+    { "type": "assert.equal", "path": "state.game.exitUnlocked", "expected": false },
+
+    { "type": "input", "action": "player.moveLeft", "phase": "hold", "durationMs": 1000 },
+    { "type": "input", "action": "player.moveBackward", "phase": "hold", "durationMs": 1000 },
+    { "type": "wait", "milliseconds": 100 },
+    { "type": "assert.equal", "path": "state.audio.cues.2.assetId", "expected": "asset_orbrun_sfx_pickup_3" },
+    { "type": "assert.equal", "path": "state.audio.cues.3.assetId", "expected": "asset_orbrun_sfx_exit_unlocked" },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 4 },
+    { "type": "assert.equal", "path": "state.audio.played.asset_orbrun_sfx_exit_unlocked", "expected": 1 },
+
+    { "type": "audio.setBusMuted", "busId": "sfx", "muted": true },
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "wait", "milliseconds": 100 },
+    { "type": "assert.equal", "path": "state.game.status", "expected": "won" },
+    { "type": "assert.equal", "path": "state.audio.cues.4.assetId", "expected": "asset_orbrun_sfx_win" },
+    { "type": "assert.equal", "path": "state.audio.cues.4.effectiveGainAtStart", "expected": 0 },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 5 },
+    { "type": "assert.equal", "path": "state.audio.failedCount", "expected": 0 },
+
+    { "type": "wait", "milliseconds": 5000 },
+    { "type": "assert.equal", "path": "state.audio.playedCount", "expected": 5 },
+    { "type": "assert.equal", "path": "state.audio.playbacks.4.playing", "expected": false },
+    { "type": "assert.logAbsent", "minimumLevel": "warning" },
+    { "type": "runtime.stop" }
+  ]
+}
