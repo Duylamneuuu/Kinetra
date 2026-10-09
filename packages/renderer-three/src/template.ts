@@ -268,6 +268,8 @@ export class ModelTemplateCache {
   #templates = new Map<string, ModelAssetTemplate>();
   #templateRevisions = new Map<string, number>();
   #inFlightLoads = new Map<string, Promise<ModelAssetTemplate>>();
+  #generations = new Map<string, number>();
+  #disposed = false;
   #parseCount = 0;
 
   get parseCount(): number {
@@ -291,6 +293,9 @@ export class ModelTemplateCache {
   invalidate(assetId: string): void {
     this.#templates.delete(assetId);
     this.#inFlightLoads.delete(assetId);
+    // Loads already running belong to the previous generation: they still hand
+    // their template to the callers that awaited them, but must not install it.
+    this.#generations.set(assetId, (this.#generations.get(assetId) ?? 0) + 1);
   }
 
   async resolveNewTemplate(
@@ -317,7 +322,15 @@ export class ModelTemplateCache {
       return inFlight;
     }
 
-    const loadPromise = (async () => {
+    if (this.#disposed) {
+      throw new Error(
+        `[model.cache.disposed] Cannot load asset "${assetId}" through a disposed template cache`,
+      );
+    }
+
+    const generation = this.#generations.get(assetId) ?? 0;
+    let loadPromise: Promise<ModelAssetTemplate> | undefined;
+    loadPromise = (async () => {
       try {
         const resolved = await resolver.resolve(assetId);
         if (!resolved) {
@@ -325,6 +338,14 @@ export class ModelTemplateCache {
         }
 
         const createTemplate = (gltf: GLTF): ModelAssetTemplate => {
+          if (this.#disposed) {
+            // The owner went away while the asset was loading: free what the
+            // loader allocated instead of caching it behind a dead cache.
+            new ModelAssetTemplate(assetId, `tmpl_${assetId}_discarded`, gltf).dispose();
+            throw new Error(
+              `[model.cache.disposed] Template cache was disposed while loading asset "${assetId}"`,
+            );
+          }
           const revision = (this.#templateRevisions.get(assetId) ?? 0) + 1;
           this.#templateRevisions.set(assetId, revision);
           const fingerprint = resolver.getFingerprint ? resolver.getFingerprint(assetId) : undefined;
@@ -332,7 +353,10 @@ export class ModelTemplateCache {
             fingerprint,
             revision,
           });
-          this.#templates.set(assetId, template);
+          // A reload (invalidate) that started after this load must keep its own result.
+          if ((this.#generations.get(assetId) ?? 0) === generation) {
+            this.#templates.set(assetId, template);
+          }
           return template;
         };
 
@@ -395,7 +419,10 @@ export class ModelTemplateCache {
 
         return createTemplate(gltf);
       } finally {
-        this.#inFlightLoads.delete(assetId);
+        // Only clear our own entry: a newer load may have replaced it.
+        if (this.#inFlightLoads.get(assetId) === loadPromise) {
+          this.#inFlightLoads.delete(assetId);
+        }
       }
     })();
 
@@ -404,6 +431,7 @@ export class ModelTemplateCache {
   }
 
   dispose(): void {
+    this.#disposed = true;
     this.#inFlightLoads.clear();
     for (const template of this.#templates.values()) {
       template.dispose();
