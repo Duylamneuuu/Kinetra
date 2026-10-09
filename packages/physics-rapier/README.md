@@ -7,7 +7,7 @@ Rapier integration, collision layers, fixed-step physics and authoritative chara
 `RapierPhysicsWorld` exposes engine-owned queries. Results are plain `PhysicsHit` structs with
 no Rapier handles, so they are safe to serialize over the runtime bridge.
 
-```ts
+```ts doc-check
 import { RapierPhysicsWorld } from "@kinetra/physics-rapier";
 
 const physics = await RapierPhysicsWorld.create();

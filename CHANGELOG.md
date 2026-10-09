@@ -10,6 +10,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: foot placement with two-bone IK (slice 4) ([#160](https://github.com/Duylamneuuu/Kinetra/pull/160))
+- **physics**: raycast and shapeCast queries with layer filtering ([#155](https://github.com/Duylamneuuu/Kinetra/pull/155))
+- **orb-run**: locomotion blend space driven by speed (slice 3) ([#143](https://github.com/Duylamneuuu/Kinetra/pull/143))
+- **animation**: graph states that play a blend space, with crossfades into and out of it ([#146](https://github.com/Duylamneuuu/Kinetra/pull/146))
 - **examples**: Orb Run acceptance manifests on the engine AcceptanceRunner (slice 2) ([#136](https://github.com/Duylamneuuu/Kinetra/pull/136))
 - **examples**: Orb Run dogfood sample, authored over MCP and playable headless ([#86](https://github.com/Duylamneuuu/Kinetra/pull/86))
 - **player**: expose IK chains/targets through the runtime bridge ([#75](https://github.com/Duylamneuuu/Kinetra/pull/75))
@@ -22,6 +26,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **mcp-server**: locale-independent scene/entity ordering + service/runtime contract tests ([#156](https://github.com/Duylamneuuu/Kinetra/pull/156))
+- **project-model**: keep JSON "__proto__" keys when serializing; add contract + round-trip fuzz tests ([#158](https://github.com/Duylamneuuu/Kinetra/pull/158))
+- **asset-pipeline**: canonical JSON hashing no longer collides on __proto__/NaN/Date; reject cycles ([#157](https://github.com/Duylamneuuu/Kinetra/pull/157))
+- **save-state**: remove temp file when write/sync fails ([#144](https://github.com/Duylamneuuu/Kinetra/pull/144))
+- **renderer-three**: re-bind IK chains after hot reimport and report rejected chains ([#78](https://github.com/Duylamneuuu/Kinetra/pull/78))
 - **verification**: fail optional-probe steps with UNSUPPORTED_STEP instead of passing silently ([#142](https://github.com/Duylamneuuu/Kinetra/pull/142))
 - **assets**: roll back rejected cyclic upserts, dedupe rebuild-order deps, release re-pointed watcher paths, validate polycount/texture size ([#141](https://github.com/Duylamneuuu/Kinetra/pull/141))
 - **mcp-server**: serialize project saves and use unique temp files ([#140](https://github.com/Duylamneuuu/Kinetra/pull/140))
@@ -44,11 +53,18 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **verification**: unit-test KinetraRuntimeProbe fallbacks and runProcessSmoke ([#147](https://github.com/Duylamneuuu/Kinetra/pull/147))
+- **repo**: add dependency-free unit-test coverage report (`pnpm coverage`) ([#139](https://github.com/Duylamneuuu/Kinetra/pull/139))
 - **animation**: seeded property tests for blend space, IK and morph-target contracts ([#115](https://github.com/Duylamneuuu/Kinetra/pull/115))
+
+### Documentation
+
+- **docs**: executable doc examples (`pnpm check:docs`), animation + MCP agent guides, CHANGELOG, HANDOFF through #75 ([#116](https://github.com/Duylamneuuu/Kinetra/pull/116))
 
 ### Maintenance
 
-- **deps**: bump electron 38.8.6 -> 41.10.7, clearing every remaining Electron advisory in `pnpm audit` (PR pending)
+- **deps**: bump electron 38.8.6 -> 41.10.7, clearing every remaining Electron advisory in `pnpm audit` ([#161](https://github.com/Duylamneuuu/Kinetra/pull/161))
+- **player**: lazy-load Rapier and Recast, add initial-chunk bundle budget (perf) ([#148](https://github.com/Duylamneuuu/Kinetra/pull/148))
 - **ci**: add player bundle-size budget gate with tested evaluator ([#114](https://github.com/Duylamneuuu/Kinetra/pull/114))
 - **deps**: bump transitive source-map-js to 1.2.2 (DoS advisory) ([#113](https://github.com/Duylamneuuu/Kinetra/pull/113))
 - **deps**: bump electron 38.0.0 -> 38.8.6 (security patches) and derive packager version from installed electron ([#112](https://github.com/Duylamneuuu/Kinetra/pull/112))
