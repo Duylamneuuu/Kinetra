@@ -46,8 +46,11 @@ test("extractRootMotionFromClip: yaw is sampled by time when the rotation track 
     { mode: "extract-xz-yaw", rootBoneName: "Hips" },
   );
   assert.equal(result.success, true);
-  const yaws = result.extracted!.samples.map((s) => s.yaw);
-  assert.ok(Math.abs(yaws[1]! - deg(0)) < 1e-4, `yaw@1 should be back at 0, got ${yaws[1]}`);
+  // Samples are taken at the union of position and rotation key times, so the swing out
+  // to 90 degrees is visible in the samples (not only the 0 -> 0 endpoints).
+  const byTime = (time: number): number => result.extracted!.samples.find((s) => s.time === time)!.yaw;
+  assert.ok(Math.abs(byTime(0.5) - deg(90)) < 1e-4, `yaw@0.5 should be 90deg, got ${byTime(0.5)}`);
+  assert.ok(Math.abs(byTime(1) - deg(0)) < 1e-4, `yaw@1 should be back at 0, got ${byTime(1)}`);
   assert.ok(Math.abs(result.extracted!.totalYaw) < 1e-4, `totalYaw ${result.extracted!.totalYaw}`);
 });
 
@@ -57,10 +60,10 @@ test("extractRootMotionFromClip: rotation keys offset in time are interpolated a
     mode: "extract-xz-yaw",
     rootBoneName: "Hips",
   });
-  const yaws = result.extracted!.samples.map((s) => s.yaw);
-  assert.ok(Math.abs(yaws[0]! - deg(20)) < 1e-4, `before the first key holds it, got ${yaws[0]}`);
-  assert.ok(Math.abs(yaws[1]! - deg(40)) < 1e-4, `midway between keys, got ${yaws[1]}`);
-  assert.ok(Math.abs(yaws[2]! - deg(60)) < 1e-4, `after the last key holds it, got ${yaws[2]}`);
+  const byTime = (time: number): number => result.extracted!.samples.find((s) => s.time === time)!.yaw;
+  assert.ok(Math.abs(byTime(0) - deg(20)) < 1e-4, `before the first key holds it, got ${byTime(0)}`);
+  assert.ok(Math.abs(byTime(1) - deg(40)) < 1e-4, `midway between keys, got ${byTime(1)}`);
+  assert.ok(Math.abs(byTime(2) - deg(60)) < 1e-4, `after the last key holds it, got ${byTime(2)}`);
 });
 
 test("inspectClipRootMotion: netYaw reports the real turn of the root bone", () => {

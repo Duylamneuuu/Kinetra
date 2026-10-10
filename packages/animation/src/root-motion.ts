@@ -405,7 +405,7 @@ export function stripVisualRootDisplacement(
 }
 
 /**
- * Yaw (rotation about +Y, Euler YXZ) of a quaternion track at `time`: the two
+ * Yaw (twist about +Y, see twistYaw) of a quaternion track at `time`: the two
  * keys around `time` are slerped, and the first/last key are held outside the
  * track's range. Sampling by time (not by key index) keeps the yaw correct when
  * the rotation track has different key times than the position track.
@@ -439,7 +439,62 @@ function yawOfTrackAt(track: THREE.QuaternionKeyframeTrack, time: number): numbe
     keyQuat(high, q1);
     q.slerp(q1, alpha);
   }
-  return new THREE.Euler(0, 0, 0, "YXZ").setFromQuaternion(q, "YXZ").y;
+  return twistYaw(q);
+}
+
+/**
+ * Heading (rotation about +Y) of a unit quaternion as its twist about the Y axis:
+ * the (y, w) components of q define the twist exactly (q = swing * twist), so the
+ * angle is 2 * atan2(y, w). Unlike an Euler YXZ decomposition this stays stable when
+ * the pitch approaches +/-90 degrees (gimbal lock, where Euler y/z become ambiguous and
+ * the yaw jumps). Returns a value in [-pi, pi]; a rotation that is a pure 180-degree
+ * swing (y = w = 0) has no twist and reports 0.
+ */
+function twistYaw(q: THREE.Quaternion): number {
+  // q and -q are the same rotation: pick the w >= 0 hemisphere so the angle is in [-pi, pi].
+  const sign = q.w < 0 ? -1 : 1;
+  const y = q.y * sign;
+  const w = q.w * sign;
+  if (Math.hypot(y, w) < 1e-9) return 0;
+  return 2 * Math.atan2(y, w);
+}
+
+/**
+ * Sorted, de-duplicated union of the key times of the root position track and the
+ * root rotation track. Root-motion samples are taken at every one of them so a rotation
+ * key between two position keys is not skipped.
+ */
+function mergedKeyTimes(
+  posTrack: THREE.VectorKeyframeTrack,
+  rotTrack: THREE.QuaternionKeyframeTrack | undefined,
+): number[] {
+  const times = Array.from(posTrack.times);
+  if (rotTrack) {
+    for (const t of rotTrack.times) {
+      if (typeof t === "number" && Number.isFinite(t)) times.push(t);
+    }
+  }
+  times.sort((a, b) => a - b);
+  return times.filter((t, i) => i === 0 || t !== times[i - 1]);
+}
+
+function positionOfTrackAt(track: THREE.VectorKeyframeTrack, time: number): [number, number, number] {
+  const count = track.times.length;
+  const at = (index: number): [number, number, number] => [
+    track.values[index * 3 + 0] ?? 0,
+    track.values[index * 3 + 1] ?? 0,
+    track.values[index * 3 + 2] ?? 0,
+  ];
+  if (count === 1 || time <= track.times[0]!) return at(0);
+  if (time >= track.times[count - 1]!) return at(count - 1);
+  let high = 1;
+  while (high < count - 1 && track.times[high]! <= time) high++;
+  const low = high - 1;
+  const span = track.times[high]! - track.times[low]!;
+  const alpha = span > 1e-9 ? (time - track.times[low]!) / span : 0;
+  const a = at(low);
+  const b = at(high);
+  return [a[0] + (b[0] - a[0]) * alpha, a[1] + (b[1] - a[1]) * alpha, a[2] + (b[2] - a[2]) * alpha];
 }
 
 /**
@@ -520,15 +575,14 @@ export function extractRootMotionFromClip(
 
   const samples: RootMotionSample[] = [];
 
-  for (let i = 0; i < posTrack.times.length; i++) {
-    const time = posTrack.times[i]!;
-    const offsetPos = i * 3;
-    const px = posTrack.values[offsetPos + 0] ?? 0;
-    const py = posTrack.values[offsetPos + 1] ?? 0;
-    const pz = posTrack.values[offsetPos + 2] ?? 0;
+  // Sample at the union of position and rotation key times: a turn that happens between two
+  // position keys (a denser rotation track) must not be skipped, and a turn of more than half
+  // a revolution between two position keys must unwrap correctly.
+  for (const time of mergedKeyTimes(posTrack, rotTrack)) {
+    const [px, py, pz] = positionOfTrackAt(posTrack, time);
 
-    // Sample the rotation track at this position key's TIME (not its index): the two tracks
-    // may have different key counts / times.
+    // Sample the rotation track at this TIME (not its index): the two tracks may have
+    // different key counts / times.
     let yaw = rotTrack ? yawOfTrackAt(rotTrack, time) : 0;
 
     // Euler yaw lives in (-pi, pi]; a turn through 180 degrees would otherwise show up as a
@@ -642,10 +696,11 @@ export function inspectClipRootMotion(
   if (rotTrack && rotTrack.times.length > 0) {
     // Unwrap along the position keys like extractRootMotionFromClip, so a turn
     // through 180 degrees is not reported as a spurious +/-2pi.
-    let previous = yawOfTrackAt(rotTrack, posTrack.times[0]!);
+    const keyTimes = mergedKeyTimes(posTrack, rotTrack);
+    let previous = yawOfTrackAt(rotTrack, keyTimes[0]!);
     const firstYaw = previous;
-    for (let i = 1; i < count; i++) {
-      let yaw = yawOfTrackAt(rotTrack, posTrack.times[i]!);
+    for (let i = 1; i < keyTimes.length; i++) {
+      let yaw = yawOfTrackAt(rotTrack, keyTimes[i]!);
       while (yaw - previous > Math.PI) yaw -= 2 * Math.PI;
       while (yaw - previous < -Math.PI) yaw += 2 * Math.PI;
       previous = yaw;
