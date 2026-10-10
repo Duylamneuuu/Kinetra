@@ -209,14 +209,15 @@ test("moveCharacter reports free movement as not collided and slides along a wal
   );
 });
 
-test("moveCharacter on the very first call does not integrate other bodies twice", async () => {
+test("moveCharacter never runs a simulation step, not even on the very first call", async () => {
   await withWorld((physics) => {
     physics.addDynamicBody({ id: "ball", position: { x: 0, y: 50, z: 0 }, shape: "sphere" });
     physics.addKinematicCharacter({ id: "hero", position: { x: 10, y: 1, z: 0 }, halfHeight: 0.5, radius: 0.4 });
     physics.moveCharacter("hero", { x: 0, y: 0, z: 0 });
-    assert.equal(physics.stats().fixedSteps, 1, "the warm-up step is counted exactly once");
+    assert.equal(physics.stats().fixedSteps, 0, "a character move is not a fixed step");
+    assert.equal(physics.state("ball").position.y, 50, "a character move does not integrate other bodies");
     physics.moveCharacter("hero", { x: 0, y: 0, z: 0 });
-    assert.equal(physics.stats().fixedSteps, 1, "later moves never step again");
+    assert.equal(physics.stats().fixedSteps, 0, "later moves never step either");
   });
 });
 
