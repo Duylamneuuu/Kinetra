@@ -21,6 +21,7 @@ import {
   type OrbRunSaveData,
 } from "./game.js";
 import { ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_SCENE_ID } from "./ids.js";
+import { digestOrbRunState } from "./replay.js";
 import type { HeadlessSceneSimulation } from "./simulation.js";
 
 /** Upper bound for one `step`/`wait`/`hold` (matches the player's `runtime.step`: ~10 minutes at 60 Hz). */
@@ -55,6 +56,7 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  * - `asset.register` (also `runtime.start.assets`) hands the probe new source bytes for an existing asset: the pipeline reimports it
  *   (revision + fingerprint change; a corrupt file fails the import, keeps the last good artifact and logs an `asset.reimportFailed` warning);
  *   an unknown asset id throws. The catalog lives as long as the probe (until `close()`), across runtime restarts.
+ * - `state.replay.digest` / `.step`: `digestOrbRunState` (SHA-256 of the gameplay state) so a manifest can pin a whole run to a recorded digest
  * - logs: every started cue also appears as an `audio.played` info log (same message the Electron player logs)
  */
 export class OrbRunHeadlessProbe implements RuntimeProbe {
@@ -244,6 +246,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
           cues,
           failedCount: audio.failures().length,
         },
+        replay: { step: simulation.step, digest: digestOrbRunState(simulation) },
         paused: this.#paused,
       },
     };
