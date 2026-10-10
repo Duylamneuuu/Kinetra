@@ -347,11 +347,23 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Proof**: `apps/player/test/bridge-protocol.test.ts` (plain Node, run by `pnpm --filter @kinetra/player test`);
 - **Not done**: no real-Electron test sends a malformed line through the pipe or stdio transport.
 
-### 24. Dogfood Sample: Orb Run (P10, slices 1-7)
+### 24. Dogfood Sample: Orb Run (P10, slices 1-9)
 
-- **Where**: `examples/orb-run` is its own workspace package authored over the real MCP server and played headless (project, gameplay scripts, acceptance manifests, locomotion blend space, two-bone foot IK, audio cues, HUD contract, asset-pipeline content); the per-slice proof and the 82-test count are in `docs/STATUS.md` ("Dogfood sample: Orb Run") and `examples/orb-run/README.md`;
-- **Proof**: `examples/orb-run/test/*.test.ts` (authoring, gameplay, acceptance, locomotion, foot-ik, audio, hud, assets), run by `pnpm --filter @kinetra/example-orb-run test`;
+- **Where**: `examples/orb-run` is its own workspace package authored over the real MCP server and played headless (project, gameplay scripts, acceptance manifests, locomotion blend space, two-bone foot IK, audio cues, HUD contract, asset-pipeline content, gameplay-driven locomotion/IK in slice 8 (PR #238), content in the acceptance gate in slice 9 (PR #250)); the per-slice proof and test counts are in `docs/STATUS.md` ("Dogfood sample: Orb Run") and `examples/orb-run/README.md`;
+- **Proof**: `examples/orb-run/test/*.test.ts` (authoring, gameplay, acceptance, locomotion, foot-ik, audio, hud, assets, animation), run by `pnpm --filter @kinetra/example-orb-run test`;
 - **Not done**: rendering (nothing draws the HUD, imported assets are never loaded by a renderer), the Electron player and packaged builds.
+
+### 25. Visual Baseline Management (P8, PR #248, issue #100)
+
+- **Contract**: `packages/verification/src/visual-baseline.ts` stores sha256 + dHash + size per named frame; `check` reports `identical` / `similar` / `mismatch` / `missing` per frame and writes a diff artifact; `update` needs `--confirm` and refuses when `CI` or `GITHUB_ACTIONS` is set; CLI: `pnpm --filter @kinetra/verification visual-baseline check|update <baselines.json> <frames-dir>`;
+- **Proof**: `packages/verification/test/visual-baseline.test.ts` and `visual-baseline-cli.test.ts` (Node; both are in the package `test` script);
+- **Not done**: no baseline file is committed and no CI job feeds real Electron frames into `check`.
+
+### 26. Animation Events Runtime Wiring (P5, PR #236, issue #90 part 2)
+
+- **Contract**: `ThreeSceneRuntime` (`@kinetra/renderer-three`) drives the `ClipEventTracker` from its mixers: `setAnimationEvents` registers definitions per clip, `onAnimationEvent` subscribes, fired events land in a bounded log exposed through diagnostics; the contract itself is item 20;
+- **Proof**: `packages/renderer-three/test/animation-events.test.ts` (Node; in the package `test` script);
+- **Not done**: blend-space actions, script `context.animation.onEvent`, a bridge/MCP command and an Electron proof (issue #90 stays open).
 
 ## Completion definition
 
