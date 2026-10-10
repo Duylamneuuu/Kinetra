@@ -15,6 +15,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **command-bus**: `entity.reparent` with an empty `parentId` is a structured INVALID_COMMAND instead of silently detaching the entity (detach = omit `parentId`)
 - **animation**: root-motion step/sample return a zero delta / first sample for non-finite time, deltaTime, speed or loopDuration instead of NaN ([#304](https://github.com/Duylamneuuu/Kinetra/pull/304))
 - **command-bus**: queryEntities selectComponents returns a '__proto__' component as data instead of re-prototyping the result ([#301](https://github.com/Duylamneuuu/Kinetra/pull/301))
 
