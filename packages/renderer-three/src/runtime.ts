@@ -2360,6 +2360,10 @@ export class ThreeSceneRuntime {
         playing: false,
         time: 0,
       };
+    } else {
+      // A reload into an asset without clips must not keep advertising the previous asset's clips,
+      // active clip and graph state: there is no animator session behind them any more.
+      delete metadata.animation;
     }
 
     const morph = MorphTargetController.fromScene(modelScene);
