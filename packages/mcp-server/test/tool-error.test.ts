@@ -138,7 +138,7 @@ test("MCP rejects invalid built-in component payloads at the authoring boundary 
     });
     assert.equal(bad.isError, true);
     const body = JSON.parse(bad.content[0]?.text ?? "") as ErrorBody;
-    assert.match(body.message, /validation failed/i);
+    assert.match(body.message, /invalid project/i);
     const kind = body.issues.find((issue) => issue.code === "component.Primitive.kind.invalid");
     assert.ok(kind, "expected a Primitive.kind issue");
     assert.match(kind.path, /components\.Primitive\.kind$/);
