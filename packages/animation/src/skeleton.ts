@@ -82,11 +82,25 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
   return diagnostics;
 }
 
+/**
+ * `semantic=name` lines joined by newlines are only unambiguous while no key or bone name
+ * contains the separators: {hips:"x\nspine=y"} would hash like {hips:"x",spine:"y"}. Profiles
+ * that contain a separator (or the marker below) are hashed from a JSON encoding instead;
+ * ordinary profiles keep the original canonical text, so existing signatures and caches stay valid.
+ */
+const JSON_CANONICAL_MARKER="\u0001json\u0001";
+
+function needsJsonCanonical(entries:Array<[string,string]>):boolean{
+  return entries.some(([semantic,name])=>
+    semantic.includes("\n")||semantic.includes("=")||semantic.includes("\u0001")
+    ||name.includes("\n")||name.includes("\u0001"));
+}
+
 export function skeletonSignature(profile:SkeletonProfile):string{
-  const canonical=boneEntries(profile)
-    .sort(([a],[b])=>compareCodePoints(a,b))
-    .map(([semantic,name])=>`${semantic}=${name}`)
-    .join("\n");
+  const entries=boneEntries(profile).sort(([a],[b])=>compareCodePoints(a,b));
+  const canonical=needsJsonCanonical(entries)
+    ?`${JSON_CANONICAL_MARKER}${JSON.stringify(entries)}`
+    :entries.map(([semantic,name])=>`${semantic}=${name}`).join("\n");
   return createHash("sha256").update(canonical).digest("hex");
 }
 
@@ -138,11 +152,17 @@ export function retargetCacheKey(input:{
   settings?:Record<string,unknown>;
 }):string{
   const stable=(value:unknown):unknown=>{
+    // JSON.stringify turns NaN/Infinity into null, which would make {v:NaN} and {v:null} share a key.
+    if(typeof value==="number" && !Number.isFinite(value)) return {"$kinetra:number":String(value)};
     if(Array.isArray(value)) return value.map(stable);
     if(value && typeof value==="object"){
       const result:Record<string,unknown>={};
       for(const key of Object.keys(value as Record<string,unknown>).sort()){
-        result[key]=stable((value as Record<string,unknown>)[key]);
+        // defineProperty: a plain assignment to "__proto__" would set the prototype and drop the entry.
+        Object.defineProperty(result,key,{
+          value:stable((value as Record<string,unknown>)[key]),
+          enumerable:true,writable:true,configurable:true,
+        });
       }
       return result;
     }
