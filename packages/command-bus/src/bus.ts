@@ -264,7 +264,14 @@ function filterComponents(
   for (const name of selectComponents) {
     const value = ownComponent(entity, name);
     if (value !== undefined) {
-      components[name] = structuredClone(value);
+      // defineProperty, not assignment: a JSON.parse'd "__proto__" component is an own data
+      // property, and `components["__proto__"] = ...` would re-prototype the result and drop it.
+      Object.defineProperty(components, name, {
+        value: structuredClone(value),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
     }
   }
 
