@@ -11,6 +11,16 @@ export interface PlayerInputEventLike {
   value?: number | [number, number] | undefined;
 }
 
+/** Structured error for an input event whose value cannot be used (machine-readable `code`). */
+export class PlayerInputError extends Error {
+  readonly code = "runtime.input.nonFinite";
+  readonly hint = "Send a finite number (or a vector whose first component is finite) as the input value.";
+  constructor(message: string) {
+    super(message);
+    this.name = "PlayerInputError";
+  }
+}
+
 export type PlayerInputDecision =
   | { kind: "apply"; magnitude: number }
   /** A release is always delivered, even while paused, so an action never stays "pressed" after resume. */
@@ -33,7 +43,7 @@ export function resolveInputMagnitude(value: PlayerInputEventLike["value"], acti
     return 1;
   }
   if (!Number.isFinite(magnitude)) {
-    throw new Error(`Input "${action}" has a non-finite value (${String(magnitude)}); expected a finite number`);
+    throw new PlayerInputError(`Input "${action}" has a non-finite value (${String(magnitude)}); expected a finite number`);
   }
   return magnitude;
 }
@@ -41,6 +51,10 @@ export function resolveInputMagnitude(value: PlayerInputEventLike["value"], acti
 export function decidePlayerInput(event: PlayerInputEventLike, paused: boolean): PlayerInputDecision {
   if (paused) {
     return event.phase === "release" ? { kind: "release-only" } : { kind: "blocked" };
+  }
+  // A release carries no magnitude: it must always land, even with a junk value, or the action stays "pressed".
+  if (event.phase === "release") {
+    return { kind: "apply", magnitude: 0 };
   }
   return { kind: "apply", magnitude: resolveInputMagnitude(event.value, event.action) };
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decidePlayerInput, resolveInputMagnitude } from "../src/input-event.js";
+import { PlayerInputError, decidePlayerInput, resolveInputMagnitude } from "../src/input-event.js";
 import { KeyTracker } from "../src/key-tracker.js";
 
 test("resolveInputMagnitude reads a number, a vector's first component, or defaults to 1", () => {
@@ -36,6 +36,25 @@ test("an input while running yields its magnitude and validates it", () => {
     magnitude: 0.75,
   });
   assert.throws(() => decidePlayerInput({ action: "jump", phase: "press", value: Number.NaN }, false), /non-finite/);
+});
+
+test("a release while running is never rejected for its value and carries magnitude 0", () => {
+  for (const value of [Number.NaN, Number.POSITIVE_INFINITY, 0.5, undefined]) {
+    assert.deepEqual(decidePlayerInput({ action: "jump", phase: "release", value }, false), {
+      kind: "apply",
+      magnitude: 0,
+    });
+  }
+});
+
+test("a non-finite value is a structured PlayerInputError with a code and a hint", () => {
+  assert.throws(
+    () => resolveInputMagnitude(Number.NaN, "player.moveLeft"),
+    (error: unknown) =>
+      error instanceof PlayerInputError &&
+      error.code === "runtime.input.nonFinite" &&
+      typeof error.hint === "string",
+  );
 });
 
 test("KeyTracker records keys, clears them on blur, and removes its listeners on dispose", () => {
