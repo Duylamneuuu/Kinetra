@@ -24,6 +24,14 @@ import { ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_SCENE_ID } from "./ids.js";
 import { digestOrbRunState } from "./replay.js";
 import type { HeadlessSceneSimulation } from "./simulation.js";
 
+function assetFailureLogs(catalog: OrbRunAssetCatalog): RuntimeLog[] {
+  return catalog.failures().map((failure) => ({
+    level: "warning",
+    message: "asset.reimportFailed",
+    data: { ...failure },
+  }));
+}
+
 /** Upper bound for one `step`/`wait`/`hold` (matches the player's `runtime.step`: ~10 minutes at 60 Hz). */
 export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
 
@@ -55,7 +63,10 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  *   `byId.<assetId>.{kind|importStatus|revision|fingerprint|sourceHash|importedPath|bytes|polycount|dimensions.<n>|sampleRateHz|durationSeconds|error}`
  * - `asset.register` (also `runtime.start.assets`) hands the probe new source bytes for an existing asset: the pipeline reimports it
  *   (revision + fingerprint change; a corrupt file fails the import, keeps the last good artifact and logs an `asset.reimportFailed` warning);
- *   an unknown asset id throws. The catalog lives as long as the probe (until `close()`), across runtime restarts.
+ *   an unknown asset id throws. The catalog is rebuilt from the shipped content by every `runtime.start` except one that follows an
+ *   `asset.register` / `runtime.start.assets` made while the game was not running (those edits are meant for that start), so one probe can run
+ *   several manifests in a row and each `state.assets.*` check begins from pristine content. Failure warnings of a discarded catalog
+ *   stay in `logs()` (like the simulation's) until `close()`.
  * - `state.replay.digest` / `.step`: `digestOrbRunState` (SHA-256 of the gameplay state) so a manifest can pin a whole run to a recorded digest
  * - logs: every started cue also appears as an `audio.played` info log (same message the Electron player logs)
  */
@@ -67,6 +78,8 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   #slots = new Map<string, OrbRunSaveData>();
   #previousLogs: RuntimeLog[] = [];
   #catalog: OrbRunAssetCatalog | undefined;
+  /** Asset edits made since the last `start()`; they belong to the next start and must survive it. */
+  #editsForNextStart = false;
 
   constructor(options: { project?: ProjectDocument; animation?: OrbRunAnimatorOptions } = {}) {
     this.#project = options.project ?? createOrbRunProject();
@@ -83,6 +96,8 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       throw new Error(`Orb Run probe can only start scene "${ORB_RUN_SCENE_ID}", got "${sceneId}"`);
     }
     await this.stop();
+    if (!this.#editsForNextStart) this.#discardCatalog();
+    this.#editsForNextStart = false;
     await this.#assets();
     this.#simulation = await startOrbRunSimulation(this.#project, this.#animation);
     this.#paused = false;
@@ -98,6 +113,8 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
       throw new TypeError(`Asset "${assetId}": dataBase64 is not valid base64`);
     }
     const catalog = await this.#assets();
+    // Only an edit made while nothing runs is meant for the next start; a mid-run edit dies with that run.
+    if (!this.#simulation) this.#editsForNextStart = true;
     await catalog.replaceSource(assetId, new Uint8Array(Buffer.from(dataBase64, "base64")));
   }
 
@@ -254,11 +271,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
 
   async logs(): Promise<RuntimeLog[]> {
     const current = this.#simulation ? this.#mapLogs(this.#simulation) : [];
-    const assetLogs: RuntimeLog[] = (this.#catalog?.failures() ?? []).map((failure) => ({
-      level: "warning",
-      message: "asset.reimportFailed",
-      data: { ...failure },
-    }));
+    const assetLogs = this.#catalog ? assetFailureLogs(this.#catalog) : [];
     return [...this.#previousLogs, ...current, ...assetLogs];
   }
 
@@ -330,6 +343,14 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
 
   async close(): Promise<void> {
     await this.stop();
+    this.#discardCatalog();
+    this.#editsForNextStart = false;
+  }
+
+  /** Drops the asset catalog (the next use rebuilds it from the shipped content) but keeps its failure warnings visible. */
+  #discardCatalog(): void {
+    if (!this.#catalog) return;
+    this.#previousLogs.push(...assetFailureLogs(this.#catalog));
     this.#catalog = undefined;
   }
 

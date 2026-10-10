@@ -329,6 +329,9 @@ export interface OrbRunAssetsState {
   byId: Record<string, OrbRunAssetState>;
 }
 
+/** The catalog keeps only the most recent import failures (a long-lived probe must not grow without bound). */
+export const ORB_RUN_ASSET_FAILURE_LOG_LIMIT = 256;
+
 export interface OrbRunAssetFailure {
   assetId: string;
   error: string;
@@ -446,6 +449,9 @@ export class OrbRunAssetCatalog {
       const error = result.error ?? "import failed";
       this.#pendingErrors.set(result.assetId, error);
       this.#failureLog.push({ assetId: result.assetId, error });
+      if (this.#failureLog.length > ORB_RUN_ASSET_FAILURE_LOG_LIMIT) {
+        this.#failureLog.splice(0, this.#failureLog.length - ORB_RUN_ASSET_FAILURE_LOG_LIMIT);
+      }
       return;
     }
     this.#pendingErrors.delete(result.assetId);
