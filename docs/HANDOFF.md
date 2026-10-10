@@ -1,4 +1,4 @@
-# Kinetra handoff — 2026-09-19 (updated 2026-10-09 through PR #75)
+# Kinetra handoff — 2026-09-19 (updated 2026-10-11 through PR #336)
 
 This document exists so the next coding agent can continue without reconstructing the entire development history.
 
@@ -370,6 +370,12 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Contract**: `validateBuiltInComponent(name, value)` in `@kinetra/project-model` checks the known fields of `Transform`, `Primitive`, `Camera`, `Light`, `Model` and `Script` and returns `{ field, code, message, remediation }` issues (`component.<Name>.<field>.invalid`, or `component.<Name>.invalid` for a non-object); `validateProject` / `assertValidProject` call it for every entity, so `entity.create` / `entity.patch` through the command bus and MCP fail with structured `issues` and leave the revision unchanged; unknown fields and components without a schema (`Collider`, `RigidBody`, custom ones) stay free-form;
 - **Proof**: `packages/project-model/test/builtin-components.test.ts`, `packages/command-bus/test/builtin-components.test.ts` and `packages/mcp-server/test/tool-error.test.ts` (Node; all three are in their package `test` scripts);
 - **Not done**: no schema for `Collider`/`RigidBody` or other not-yet-schematised components; the runtime still falls back to defaults for malformed payloads that bypass the authoring boundary.
+
+### 28. Hardening Batch After Built-in Validation (P2–P6, PRs #314–#336)
+
+- **Contract**: the bus turns a schema-invalid resulting project into `INVALID_COMMAND` with `issues` (#324, MCP still returns them); `entity.reparent` rejects an empty `parentId` (#327); `CommandBus.maxUndoDepth` is readable and `EditorSession.maxHistory` defaults to it (#325); `mcp-server` keeps a failed post-`undo()` save pending and flushes it on the next call (#315); overlapping `ScriptHost.startAll`/`stopAll`/`destroyAll` share one pass (#326); audio gain is capped at `MAX_AUDIO_GAIN = 4` (#323); GLB importers (`GlbDirectImporter`, `BlenderGlbImporter`) report measured dimensions (#323, #332); kinematic bodies keep a box/sphere `Collider` shape (#330); input sums saturate at ±1 (#322) and non-finite player input raises `PlayerInputError` (#319, #314); `renderer-three` drops stale animation metadata when reloading into a clipless asset (#335); animation root yaw is sampled at the union of key times (#333); `orb-run` has no `node:crypto` in its entry and caches the state digest per revision (#317), and its probe resets the asset catalog per run (#334); player script transforms are validated before the object lookup (#294, #336);
+- **Proof**: each PR carries its own Node tests (see `CHANGELOG.md` for the list); these are package-level and edge-case tests, not new Electron or packaged proofs;
+- **Not done**: `component.remove` plus schemas for `Collider`/`RigidBody`/`CharacterBody`/`NavMesh` (issue #321), `asset.reload` reporting dropped fields (#310), script `context.animation.onEvent` and a bridge/MCP command for animation events (#244), and PR #185 (pluggable game modules for the player) is still open.
 
 ## Completion definition
 

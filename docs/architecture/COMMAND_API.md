@@ -42,7 +42,7 @@ interface CommandResult {
 
 ## Implemented semantics (`@kinetra/command-bus`)
 
-- A rejected command or transaction never mutates the project and never bumps the revision. Rejections are `CommandError`s with a `code` and a `remediation`, except whole-document schema failures, which surface as `ProjectValidationError` with structured `issues`.
+- A rejected command or transaction never mutates the project and never bumps the revision. Rejections are `CommandError`s with a `code` and a `remediation`. A command or transaction whose *resulting* project fails the schema (a `Date` value, an empty `parentId`, a malformed built-in component, ...) is an `INVALID_COMMAND` whose `issues` carry the offending `path`/`code`/`remediation` (the message shows at most the first three). Only whole-document validation outside the bus (loading or constructing a `ProjectDocument` directly) still raises `ProjectValidationError`.
 - `entity.reparent` rejects a parent that is the entity itself or one of its descendants with `PARENT_CYCLE`.
 - Undo is last-in, first-out. Only the most recent un-undone execution can be undone; an older token returns `UNDO_CONFLICT` instead of silently discarding newer changes. Undoing a change is itself a new revision. Dry runs and failed transactions produce no undo token.
 - `component.patch` rejects the reserved component names `__proto__`, `constructor` and `prototype`.

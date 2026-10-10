@@ -15,12 +15,29 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
-- **command-bus**: `entity.reparent` with an empty `parentId` is a structured INVALID_COMMAND instead of silently detaching the entity (detach = omit `parentId`)
+- **orb-run**: probe resets the asset catalog per run, bounded failure log, README slice labels (#262) ([#334](https://github.com/Duylamneuuu/Kinetra/pull/334))
+- **renderer-three**: reloading into an asset without clips drops the stale animation metadata ([#335](https://github.com/Duylamneuuu/Kinetra/pull/335))
+- **animation**: root yaw sampled at the union of position+rotation keys as Y-twist (#313); `ClipEventTracker` constructor is safe and warns on `beyondDuration` (#189) ([#333](https://github.com/Duylamneuuu/Kinetra/pull/333))
+- **blender-bridge**: `BlenderGlbImporter` reports measured bounding-box dimensions instead of stamping `[1, 1, 1]` ([#332](https://github.com/Duylamneuuu/Kinetra/pull/332))
+- **physics-rapier**: kinematic bodies with a box/sphere `Collider` keep their shape (`addKinematicBody`/`moveKinematicBody`) instead of becoming a capsule (#311) ([#330](https://github.com/Duylamneuuu/Kinetra/pull/330))
+- **command-bus**: `entity.reparent` rejects an empty `parentId` instead of silently detaching (detach = omit `parentId`) ([#327](https://github.com/Duylamneuuu/Kinetra/pull/327))
+- **core**: overlapping `ScriptHost.startAll`/`stopAll`/`destroyAll` share one pass instead of re-running script hooks ([#326](https://github.com/Duylamneuuu/Kinetra/pull/326))
+- **editor,command-bus**: `CommandBus.maxUndoDepth` getter; `EditorSession.maxHistory` defaults to the bus's depth so `canUndo` never claims forgotten edits (#312) ([#325](https://github.com/Duylamneuuu/Kinetra/pull/325))
+- **command-bus**: a transaction that would produce an invalid project is a structured `INVALID_COMMAND` (with issues), not a raw `ProjectValidationError` ([#324](https://github.com/Duylamneuuu/Kinetra/pull/324))
+- **asset-pipeline,audio,player**: `GlbDirectImporter` measures real dimensions and passthrough copies any bytes; audio gain ceiling `MAX_AUDIO_GAIN=4` (#216, #298) ([#323](https://github.com/Duylamneuuu/Kinetra/pull/323))
+- **input**: overflowing binding sums and infinite semantic values saturate at ±1 instead of reading as 0 ([#322](https://github.com/Duylamneuuu/Kinetra/pull/322))
+- **verification**: `runProcessSmoke` decodes multi-byte output across chunks, waits for stdio to drain, releases pipes; +8 tests ([#320](https://github.com/Duylamneuuu/Kinetra/pull/320))
+- **player**: release input is never rejected for its value; non-finite input raises a structured `PlayerInputError` ([#319](https://github.com/Duylamneuuu/Kinetra/pull/319))
+- **orb-run**: drop `node:crypto` from the package entry (pure-JS SHA-256) and cache the state digest per revision (#309) ([#317](https://github.com/Duylamneuuu/Kinetra/pull/317))
+- **mcp-server**: a failed save after `undo()` stays pending and is flushed by the next call, so memory and disk converge (#281) ([#315](https://github.com/Duylamneuuu/Kinetra/pull/315))
+- **player**: realtime `frame()` applies root motion, release survives pause, non-finite input rejected, controller listeners removable ([#314](https://github.com/Duylamneuuu/Kinetra/pull/314))
 - **animation**: root-motion step/sample return a zero delta / first sample for non-finite time, deltaTime, speed or loopDuration instead of NaN ([#304](https://github.com/Duylamneuuu/Kinetra/pull/304))
 - **command-bus**: queryEntities selectComponents returns a '__proto__' component as data instead of re-prototyping the result ([#301](https://github.com/Duylamneuuu/Kinetra/pull/301))
 
 ### Tests
 
+- **player**: script-transform service extracted and tested; `translate` validates before the object lookup (#294) ([#336](https://github.com/Duylamneuuu/Kinetra/pull/336))
+- **mcp-server**: `LocalRuntimeHost` and `formatToolError` edge cases (+12 tests) ([#331](https://github.com/Duylamneuuu/Kinetra/pull/331))
 - **physics-rapier**: moveCharacter sees remove()d walls immediately and never integrates dynamic bodies (#286) ([#305](https://github.com/Duylamneuuu/Kinetra/pull/305))
 - **navigation-recast**: unit-test toCells ceil/floor snapping + property test; tiny agentHeight still bakes (#288) ([#308](https://github.com/Duylamneuuu/Kinetra/pull/308))
 
