@@ -82,10 +82,13 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
     }
 
     const rbType = stringValue(rigidBody?.type, "fixed").toLowerCase();
+    // Every kinematic flavour declared by RigidBodyType is driven through the character
+    // controller; "kinematicVelocityBased" used to fall through to a fixed box.
     const isCharacter =
       Boolean(character) ||
       rbType === "kinematic" ||
-      rbType === "kinematicpositionbased";
+      rbType === "kinematicpositionbased" ||
+      rbType === "kinematicvelocitybased";
 
     if (isCharacter) {
       const radius = numberValue(
@@ -131,6 +134,11 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         typeof rigidBody?.gravityScale === "number"
           ? rigidBody.gravityScale
           : undefined;
+      // RigidBodyComponent.mass was declared but never forwarded to the collider.
+      // A present-but-invalid mass is rejected by addDynamicBody (RangeError), like gravityScale.
+      const mass =
+        typeof rigidBody?.mass === "number" ? rigidBody.mass : undefined;
+      const massOption = mass !== undefined ? { mass } : {};
 
       if (shape === "sphere" || shape === "ball") {
         const radius = numberValue(
@@ -145,6 +153,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...massOption,
           ...layerOption,
         });
       } else if (shape === "capsule") {
@@ -159,6 +168,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...massOption,
           ...layerOption,
         });
       } else {
@@ -186,6 +196,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
           ...(restitution !== undefined ? { restitution } : {}),
           ...(friction !== undefined ? { friction } : {}),
           ...(gravityScale !== undefined ? { gravityScale } : {}),
+          ...massOption,
           ...layerOption,
         });
       }
