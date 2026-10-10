@@ -5,6 +5,7 @@ import {
   type JsonObject,
   type JsonValue,
   type ProjectDocument,
+  ProjectValidationError,
   type SceneDefinition,
 } from "@kinetra/project-model";
 
@@ -304,6 +305,29 @@ function undoTokenNumber(token: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+const MAX_REPORTED_ISSUES = 3;
+
+/**
+ * Validate the project a transaction would produce. A project-model
+ * `ProjectValidationError` here means the *command* asked for something the
+ * schema forbids (a Date value, an empty parentId, ...), so surface it as the
+ * bus's structured `INVALID_COMMAND` with the offending paths rather than a
+ * raw model error that callers cannot branch on.
+ */
+function assertResultingProjectValid(working: ProjectDocument): void {
+  try {
+    assertValidProject(working);
+  } catch (error) {
+    if (!(error instanceof ProjectValidationError)) throw error;
+    const shown = error.issues
+      .slice(0, MAX_REPORTED_ISSUES)
+      .map((issue) => `${issue.path}: ${issue.message}`)
+      .join("; ");
+    const more = error.issues.length > MAX_REPORTED_ISSUES ? ` (+${error.issues.length - MAX_REPORTED_ISSUES} more)` : "";
+    throw new CommandError("INVALID_COMMAND", `Command would produce an invalid project: ${shown}${more}`);
+  }
+}
+
 export class CommandBus {
   #project: ProjectDocument;
   #revision: number;
@@ -399,7 +423,7 @@ export class CommandBus {
       changes.push(...applyCommand(working, command));
     }
 
-    assertValidProject(working);
+    assertResultingProjectValid(working);
 
     const proposedRevision = this.#revision + 1;
     const dryRun = options.dryRun === true || commands.some((command) => command.dryRun === true);
