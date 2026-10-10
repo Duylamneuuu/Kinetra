@@ -12,14 +12,26 @@ export class AssetDatabase {
   #records = new Map<string, AssetRecord>();
 
   constructor(document: AssetDatabaseDocument = { schemaVersion: 1, assets: [] }) {
-    if (document.schemaVersion !== 1) {
-      throw new Error(`Unsupported asset database schema ${String(document.schemaVersion)}`);
+    if (typeof document !== "object" || document === null || document.schemaVersion !== 1) {
+      throw new Error(
+        `Unsupported asset database schema ${String((document as { schemaVersion?: unknown } | null)?.schemaVersion)}`,
+      );
+    }
+    // The document usually comes from a file on disk that a person or an agent may have edited.
+    if (!Array.isArray(document.assets)) {
+      throw new Error("Asset database document must have an assets array");
     }
     for (const asset of document.assets) this.upsert(asset);
   }
 
   upsert(record: AssetRecord): void {
-    if (!record.id) throw new Error("Asset id is required");
+    if (typeof record !== "object" || record === null) throw new Error("Asset record must be an object");
+    if (typeof record.id !== "string" || record.id.length === 0) throw new Error("Asset id is required");
+    // A string would pass `.includes` and `new Set(...)` below as if it were a list of one-letter
+    // dependencies, and a missing list would die with a bare TypeError; reject both up front.
+    if (!Array.isArray(record.dependencies) || record.dependencies.some((dep) => typeof dep !== "string")) {
+      throw new Error(`Asset "${record.id}" dependencies must be an array of asset id strings`);
+    }
     if (record.dependencies.includes(record.id)) {
       throw new Error(`Asset "${record.id}" cannot depend on itself`);
     }
