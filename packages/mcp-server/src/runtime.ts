@@ -94,14 +94,20 @@ export class LocalRuntimeHost implements RuntimeHost {
     sceneId: string,
     projectRevision: number,
   ): Promise<void> {
-    await this.stop();
-
+    // Stop the old runtime and build the new one in one synchronous step. An `await` between
+    // the two let overlapping start() calls both pass the stop and then overwrite (and leak,
+    // without dispose) each other's runtime. A failed start still leaves the host stopped.
+    this.#stopNow();
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
     this.#projectRevision = projectRevision;
     this.#log("info", "runtime.started", { sceneId, projectRevision });
   }
 
   async stop(): Promise<void> {
+    this.#stopNow();
+  }
+
+  #stopNow(): void {
     if (!this.#runtime) {
       return;
     }
