@@ -1,4 +1,5 @@
 export * from "./clone.js";
+export * from "./components.js";
 export * from "./factory.js";
 export * from "./id.js";
 export * from "./migration.js";

@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/command-bus.test.js dist/test/regressions.test.js dist/test/property.test.js dist/test/inherited-keys.test.js dist/test/input-bounds.test.js dist/test/bounded-history.test.js dist/test/initial-revision.test.js dist/test/edge-contracts.test.js dist/test/proto-component-query.test.js"
+    "test": "node --test dist/test/command-bus.test.js dist/test/regressions.test.js dist/test/property.test.js dist/test/inherited-keys.test.js dist/test/input-bounds.test.js dist/test/bounded-history.test.js dist/test/initial-revision.test.js dist/test/edge-contracts.test.js dist/test/proto-component-query.test.js dist/test/builtin-components.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*"
