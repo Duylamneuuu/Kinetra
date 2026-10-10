@@ -398,6 +398,44 @@ export function stripVisualRootDisplacement(
 }
 
 /**
+ * Yaw (rotation about +Y, Euler YXZ) of a quaternion track at `time`: the two
+ * keys around `time` are slerped, and the first/last key are held outside the
+ * track's range. Sampling by time (not by key index) keeps the yaw correct when
+ * the rotation track has different key times than the position track.
+ */
+function yawOfTrackAt(track: THREE.QuaternionKeyframeTrack, time: number): number {
+  const count = track.times.length;
+  if (count === 0) return 0;
+  const keyQuat = (index: number, out: THREE.Quaternion): THREE.Quaternion =>
+    out
+      .set(
+        track.values[index * 4 + 0] ?? 0,
+        track.values[index * 4 + 1] ?? 0,
+        track.values[index * 4 + 2] ?? 0,
+        track.values[index * 4 + 3] ?? 1,
+      )
+      .normalize();
+
+  const q = new THREE.Quaternion();
+  if (count === 1 || time <= track.times[0]!) {
+    keyQuat(0, q);
+  } else if (time >= track.times[count - 1]!) {
+    keyQuat(count - 1, q);
+  } else {
+    let high = 1;
+    while (high < count - 1 && track.times[high]! <= time) high++;
+    const low = high - 1;
+    const span = track.times[high]! - track.times[low]!;
+    const alpha = span > 1e-9 ? (time - track.times[low]!) / span : 0;
+    const q1 = new THREE.Quaternion();
+    keyQuat(low, q);
+    keyQuat(high, q1);
+    q.slerp(q1, alpha);
+  }
+  return new THREE.Euler(0, 0, 0, "YXZ").setFromQuaternion(q, "YXZ").y;
+}
+
+/**
  * Extracts root motion data from a THREE.AnimationClip with strict validation.
  */
 export function extractRootMotionFromClip(
@@ -474,8 +512,6 @@ export function extractRootMotionFromClip(
   ) as THREE.QuaternionKeyframeTrack | undefined;
 
   const samples: RootMotionSample[] = [];
-  const q = new THREE.Quaternion();
-  const euler = new THREE.Euler(0, 0, 0, "YXZ");
 
   for (let i = 0; i < posTrack.times.length; i++) {
     const time = posTrack.times[i]!;
@@ -484,20 +520,9 @@ export function extractRootMotionFromClip(
     const py = posTrack.values[offsetPos + 1] ?? 0;
     const pz = posTrack.values[offsetPos + 2] ?? 0;
 
-    let yaw = 0;
-    if (rotTrack && rotTrack.times.length > 0) {
-      // Find nearest or interpolated quaternion
-      const rotTimeIdx = Math.min(i, rotTrack.times.length - 1);
-      const offsetRot = rotTimeIdx * 4;
-      q.set(
-        rotTrack.values[offsetRot + 0] ?? 0,
-        rotTrack.values[offsetRot + 1] ?? 0,
-        rotTrack.values[offsetRot + 2] ?? 0,
-        rotTrack.values[offsetRot + 3] ?? 1,
-      ).normalize();
-      euler.setFromQuaternion(q, "YXZ");
-      yaw = euler.y;
-    }
+    // Sample the rotation track at this position key's TIME (not its index): the two tracks
+    // may have different key counts / times.
+    let yaw = rotTrack ? yawOfTrackAt(rotTrack, time) : 0;
 
     // Euler yaw lives in (-pi, pi]; a turn through 180 degrees would otherwise show up as a
     // +/-2pi jump between two samples (a huge spurious yaw delta, and interpolation sweeping
@@ -603,6 +628,24 @@ export function inspectClipRootMotion(
 
   const netXZ = Math.hypot(netDisplacement[0], netDisplacement[2]);
 
+  const rotTrack = clip.tracks.find(
+    (t) => t.name === `${resolvedBone}.quaternion` && t instanceof THREE.QuaternionKeyframeTrack,
+  ) as THREE.QuaternionKeyframeTrack | undefined;
+  let netYaw = 0;
+  if (rotTrack && rotTrack.times.length > 0) {
+    // Unwrap along the position keys like extractRootMotionFromClip, so a turn
+    // through 180 degrees is not reported as a spurious +/-2pi.
+    let previous = yawOfTrackAt(rotTrack, posTrack.times[0]!);
+    const firstYaw = previous;
+    for (let i = 1; i < count; i++) {
+      let yaw = yawOfTrackAt(rotTrack, posTrack.times[i]!);
+      while (yaw - previous > Math.PI) yaw -= 2 * Math.PI;
+      while (yaw - previous < -Math.PI) yaw += 2 * Math.PI;
+      previous = yaw;
+    }
+    netYaw = previous - firstYaw;
+  }
+
   // A clip is locomotion if net forward travel over the clip exceeds 0.1m
   // or if max deviation exceeds 0.5m.
   const isLocomotion = netXZ > 0.1 || maxDisplacementXZ > 0.5;
@@ -620,7 +663,7 @@ export function inspectClipRootMotion(
     lastPosition: pLast,
     netDisplacement,
     maxDisplacementXZ,
-    netYaw: 0,
+    netYaw,
     isLocomotion,
     classification,
     reason,
