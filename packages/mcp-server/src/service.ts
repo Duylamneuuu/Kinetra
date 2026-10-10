@@ -84,6 +84,8 @@ export class KinetraAgentService {
   readonly bus: CommandBus;
   readonly runtime: RuntimeHost;
   readonly store: ProjectStore | undefined;
+  /** True while the in-memory project may be ahead of what the store last accepted. */
+  #unsaved = false;
 
   constructor(
     project: ProjectDocument,
@@ -254,8 +256,19 @@ export class KinetraAgentService {
 
   async undo(undoToken: string, expectedProjectRevision?: number): Promise<CommandResult> {
     const before = this.bus.revision;
-    const result = this.bus.undo(undoToken, expectedProjectRevision);
-    await this.#persistIfMutated(before, result);
+    let result: CommandResult;
+    try {
+      result = this.bus.undo(undoToken, expectedProjectRevision);
+    } catch (error) {
+      // A refused undo changes nothing, but a retry of an undo whose save failed lands here
+      // (its token is spent): flush the pending state so disk catches up with memory.
+      await this.#flushUnsaved();
+      throw error;
+    }
+    // The undo token is single-use, so when this save fails the in-memory project stays undone
+    // and cannot be redone. Track that memory is ahead of disk so the next call saves the whole
+    // project again.
+    await this.#persistIfMutated(before, result, true);
     return result;
   }
 
@@ -374,6 +387,7 @@ export class KinetraAgentService {
 
   async #execute(command: EngineCommand): Promise<CommandResult> {
     const before = this.bus.revision;
+    const wasUnsaved = this.#unsaved;
     const result = this.bus.execute(command);
     try {
       await this.#persistIfMutated(before, result);
@@ -385,6 +399,9 @@ export class KinetraAgentService {
       if (result.undoToken !== undefined && this.bus.revision === result.revision) {
         try {
           this.bus.undo(result.undoToken, result.revision);
+          // Memory is back to what it was before the command, so it is exactly as (un)saved
+          // as it was then.
+          this.#unsaved = wasUnsaved;
         } catch {
           // Keep the original persistence error as the one reported.
         }
@@ -397,11 +414,30 @@ export class KinetraAgentService {
   async #persistIfMutated(
     beforeRevision: number,
     result: CommandResult,
+    flushPending = false,
   ): Promise<void> {
-    if (!this.store || result.revision === beforeRevision) {
+    if (!this.store) {
+      return;
+    }
+    if (result.revision !== beforeRevision) {
+      this.#unsaved = true;
+    } else if (!(flushPending && this.#unsaved)) {
       return;
     }
 
     await this.store.save(this.bus.snapshot().project);
+    this.#unsaved = false;
+  }
+
+  async #flushUnsaved(): Promise<void> {
+    if (!this.store || !this.#unsaved) {
+      return;
+    }
+    try {
+      await this.store.save(this.bus.snapshot().project);
+      this.#unsaved = false;
+    } catch {
+      // Still unsaved; the caller reports the original error.
+    }
   }
 }
