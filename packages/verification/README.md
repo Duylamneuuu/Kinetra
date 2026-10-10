@@ -209,7 +209,7 @@ visual-baseline check  <baselines.json> <frames-dir> [--report-dir <dir>] [--tol
 visual-baseline update <baselines.json> <frames-dir> --confirm [--only <name,name>]
 ```
 
-`<frames-dir>` holds PNG files; each file name without `.png` is the frame name. `check` exits 1 on any failing frame and, with `--report-dir`, writes the report plus diff artifacts; `update` is the only command that changes baselines. The baselines are not yet wired into `AcceptanceRunner` or CI with frames captured from the real Electron player (#100 still open).
+`<frames-dir>` holds PNG files; each file name without `.png` is the frame name. `check` exits 1 on any failing frame and, with `--report-dir`, writes the report plus diff artifacts. Exit 2 means usage, I/O or validation trouble, including a frames directory with no `.png` files (`baseline.noFrames`: an empty directory never reads as a pass), an undecodable PNG (`visual.decodeFailed`) and an empty `--only`; directories named `*.png` are skipped; `update` is the only command that changes baselines. The baselines are not yet wired into `AcceptanceRunner` or CI with frames captured from the real Electron player (#100 still open).
 
 ## Proof level
 
@@ -217,7 +217,7 @@ visual-baseline update <baselines.json> <frames-dir> --confirm [--only <name,nam
 | --- | --- |
 | Runner semantics, step failures, unsupported steps | `verification.test.ts`, `runner-steps.test.ts`, `unsupported-step.test.ts` (no Electron needed) |
 | Visual analysis, critique, performance maths | `visual.test.ts`, `visual-property.test.ts`, `critique.test.ts`, `performance.test.ts` |
-| Visual baselines (library and CLI) | `visual-baseline.test.ts`, `visual-baseline-cli.test.ts` (no Electron needed; both listed in the package `test` script) |
+| Visual baselines (library and CLI) | `visual-baseline.test.ts`, `visual-baseline-cli.test.ts`, `visual-baseline-cli-edges.test.ts` (no Electron needed; both listed in the package `test` script) |
 | Probe over a host, packaged resolver, transport | `runtime-probe.test.ts`, `packaged-resolver.test.ts`, `electron-transport.test.ts` |
 | Real Electron player (runtime, physics, navigation, models, animation, audio, save/load, IK, hot reimport, performance, visual) | `real-*.test.ts`, listed in the package `test` script; they need Electron (`xvfb-run -a` on Linux) and skip themselves where Electron cannot launch |
 | Packaged executables | Linux packaged player smoke and Windows package in CI; the acceptance gate against the packaged build is `target: "packaged"` |
