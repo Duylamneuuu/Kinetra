@@ -33,7 +33,7 @@ import {
   type ScriptLifecycleState,
   type PreparedScriptRestore,
 } from "@kinetra/core";
-import { assertFiniteVec3, translatedPosition } from "./finite-vec3.js";
+import { createScriptTransformService } from "./script-transform.js";
 import { decidePlayerInput } from "./input-event.js";
 import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
 import { KeyTracker } from "./key-tracker.js";
@@ -760,45 +760,13 @@ export class PlayerRuntimeController {
                 getAction: (actionId: string) => this.#inputRouter.getActionValue(actionId),
                 isPressed: (actionId: string) => this.#inputRouter.isActionPressed(actionId),
               },
-              transform: {
-                getPosition: () => {
-                  const obj = this.#runtime?.getObject(entityId);
-                  return obj ? [obj.position.x, obj.position.y, obj.position.z] : [0, 0, 0];
+              // `this.#physics` is read lazily: it can be (re)created after the script registers.
+              transform: createScriptTransformService(entityId, {
+                getObject: (id) => this.#runtime?.getObject(id),
+                get physics() {
+                  return self.#physics;
                 },
-                setPosition: (rawPos: [number, number, number]) => {
-                  // Validate before touching the Three.js object so a rejected call changes nothing.
-                  const pos = assertFiniteVec3(rawPos, "transform.setPosition position");
-                  const obj = this.#runtime?.getObject(entityId);
-                  if (obj) {
-                    obj.position.set(pos[0], pos[1], pos[2]);
-                  }
-                  if (this.#physics?.hasBody(entityId)) {
-                    this.#physics.setBodyTranslation(
-                      entityId,
-                      { x: pos[0], y: pos[1], z: pos[2] },
-                      true,
-                    );
-                  }
-                },
-                translate: (rawDelta: [number, number, number]) => {
-                  const obj = this.#runtime?.getObject(entityId);
-                  if (obj) {
-                    const next = translatedPosition(
-                      [obj.position.x, obj.position.y, obj.position.z],
-                      rawDelta,
-                      "transform.translate delta",
-                    );
-                    obj.position.set(next[0], next[1], next[2]);
-                    if (this.#physics?.hasBody(entityId)) {
-                      this.#physics.setBodyTranslation(
-                        entityId,
-                        { x: next[0], y: next[1], z: next[2] },
-                        true,
-                      );
-                    }
-                  }
-                },
-              },
+              }),
               scene: {
                 getEntityTransform: (targetId: string) => {
                   const obj = this.#runtime?.getObject(targetId);
