@@ -273,6 +273,7 @@ What has meaningful proof:
 - fixed-step accumulator and simulation independent of render delta partition;
 - dynamic body gravity fall and static floor collision without tunneling;
 - kinematic character controller driven by semantic input (`player.moveRight`) with obstacle collision clipping (`actual displacement < requested displacement`);
+- a fixed (default) body whose `Collider.shape` / `Primitive.kind` is `sphere`/`ball` or `capsule` keeps that shape (`addFixedSphere` / `addFixedCapsule`, radius / halfHeight from the Collider, falling back to the Primitive radius); it used to become a 1x1x1 cuboid whatever was declared, so a radius-3 static sphere was hit at x=0.5. `box` and undeclared shapes are unchanged (`packages/physics-rapier/test/fixed-shapes.test.ts`, 5 tests);
 - a kinematic `RigidBody` (`kinematic`/`kinematicPositionBased`/`kinematicVelocityBased`) with an explicit box or sphere `Collider` and no `CharacterBody` keeps that shape (`addKinematicBody`, driven by `moveKinematicBody` via `setNextKinematicTranslation`, so dynamic bodies on it are carried); capsule or undeclared shapes stay character bodies. Known limit: `kinematicVelocityBased` is driven by target position, not by an authored velocity (#311);
 - real-time transform synchronization from physics world into Three.js scene graph;
 - deterministic stepping command (`runtime.step`) exposed over the runtime bridge;

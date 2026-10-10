@@ -176,6 +176,75 @@ export class RapierPhysicsWorld {
     });
   }
 
+  /** Adds an immovable sphere collider (a fixed body that keeps its radius). */
+  addFixedSphere(input: {
+    id: string;
+    position: Vec3;
+    radius: number;
+    friction?: number;
+    restitution?: number;
+    layer?: number;
+  }): void {
+    this.#assertNewId(input.id);
+    const layer = assertLayer(input.layer, "addFixedSphere layer");
+    assertFiniteVec3(input.position, "addFixedSphere position");
+    const radius = assertPositive(input.radius, "addFixedSphere radius");
+    if (input.friction !== undefined)
+      assertNonNegative(input.friction, "addFixedSphere friction");
+    if (input.restitution !== undefined)
+      assertNonNegative(input.restitution, "addFixedSphere restitution");
+
+    const colDesc = RAPIER.ColliderDesc.ball(radius);
+    if (input.friction !== undefined) colDesc.setFriction(input.friction);
+    if (input.restitution !== undefined)
+      colDesc.setRestitution(input.restitution);
+    this.#addFixed(input.id, input.position, colDesc, layer);
+  }
+
+  /** Adds an immovable capsule collider (a fixed body that keeps its half height and radius). */
+  addFixedCapsule(input: {
+    id: string;
+    position: Vec3;
+    halfHeight: number;
+    radius: number;
+    friction?: number;
+    restitution?: number;
+    layer?: number;
+  }): void {
+    this.#assertNewId(input.id);
+    const layer = assertLayer(input.layer, "addFixedCapsule layer");
+    assertFiniteVec3(input.position, "addFixedCapsule position");
+    const halfHeight = assertPositive(input.halfHeight, "addFixedCapsule halfHeight");
+    const radius = assertPositive(input.radius, "addFixedCapsule radius");
+    if (input.friction !== undefined)
+      assertNonNegative(input.friction, "addFixedCapsule friction");
+    if (input.restitution !== undefined)
+      assertNonNegative(input.restitution, "addFixedCapsule restitution");
+
+    const colDesc = RAPIER.ColliderDesc.capsule(halfHeight, radius);
+    if (input.friction !== undefined) colDesc.setFriction(input.friction);
+    if (input.restitution !== undefined)
+      colDesc.setRestitution(input.restitution);
+    this.#addFixed(input.id, input.position, colDesc, layer);
+  }
+
+  #addFixed(
+    id: string,
+    position: Vec3,
+    colDesc: RAPIER.ColliderDesc,
+    layer: number,
+  ): void {
+    const body = this.world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(
+        position.x,
+        position.y,
+        position.z,
+      ),
+    );
+    const collider = this.#createCollider(colDesc, body);
+    this.#register({ id, body, collider, isCharacter: false, layer });
+  }
+
   addDynamicBody(input: {
     id: string;
     position: Vec3;
