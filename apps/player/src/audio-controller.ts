@@ -217,8 +217,19 @@ export class PlayerAudioController {
 
     let audioBuffer = this.#decodedBuffers.get(options.assetId);
     if (!audioBuffer) {
-      const rawAsset = this.#assetResolver.resolve(options.assetId);
-      const arrayBuffer = await toArrayBuffer(rawAsset);
+      let arrayBuffer: ArrayBuffer | undefined;
+      try {
+        arrayBuffer = await toArrayBuffer(this.#assetResolver.resolve(options.assetId));
+      } catch (loadErr) {
+        // A throwing resolver or a malformed base64 payload must surface as a failed result like
+        // every other audio failure, not as a rejected promise the caller never expects.
+        if (generation !== this.#generation) return this.#resetWhileLoading(options.assetId);
+        const message = loadErr instanceof Error ? loadErr.message : String(loadErr);
+        return {
+          success: false,
+          error: `Failed to load audio asset "${options.assetId}": ${message}`,
+        };
+      }
       if (generation !== this.#generation) return this.#resetWhileLoading(options.assetId);
       if (!arrayBuffer) {
         return {
