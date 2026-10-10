@@ -91,7 +91,9 @@ export function validateSkeletonProfile(profile:SkeletonProfile):SkeletonProfile
 const JSON_CANONICAL_MARKER="\u0001json\u0001";
 
 function needsJsonCanonical(entries:Array<[string,string]>):boolean{
-  return entries.some(([semantic,name])=>/[\n=\u0001]/.test(semantic)||/[\n\u0001]/.test(name));
+  return entries.some(([semantic,name])=>
+    semantic.includes("\n")||semantic.includes("=")||semantic.includes("\u0001")
+    ||name.includes("\n")||name.includes("\u0001"));
 }
 
 export function skeletonSignature(profile:SkeletonProfile):string{
