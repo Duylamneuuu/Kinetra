@@ -20,6 +20,8 @@ export interface RetargetDiagnostic {
 
 export type HipsTranslationPolicy = "ignore" | "preserve" | "relative" | "scale";
 
+const HIPS_TRANSLATION_POLICIES: readonly HipsTranslationPolicy[] = ["ignore", "preserve", "relative", "scale"];
+
 export interface RetargetSettings {
   hipsTranslationPolicy?: HipsTranslationPolicy | undefined;
   scaleFactor?: number | undefined;
@@ -329,6 +331,38 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
     sourceRestPoses: options.sourceRestPoses,
     targetRestPoses: options.targetRestPoses,
   });
+
+  // Settings arrive from JSON/MCP callers: an unknown policy used to fall through to "preserve" and
+  // a NaN/0/negative scaleFactor baked NaN or collapsed hips translation without any diagnostic.
+  const settingProblems: string[] = [];
+  const policy: unknown = settings.hipsTranslationPolicy;
+  if (policy !== undefined && !HIPS_TRANSLATION_POLICIES.includes(policy as HipsTranslationPolicy)) {
+    settingProblems.push(
+      `hipsTranslationPolicy "${String(policy)}" is not one of ${HIPS_TRANSLATION_POLICIES.join(", ")}`,
+    );
+  }
+  const factor: unknown = settings.scaleFactor;
+  if (factor !== undefined && !(typeof factor === "number" && Number.isFinite(factor) && factor > 0)) {
+    settingProblems.push(`scaleFactor must be a finite number > 0, got ${String(factor)}`);
+  }
+  if (settingProblems.length > 0) {
+    const errorMsg = `Invalid retarget settings: ${settingProblems.join("; ")}`;
+    diagnostics.push({
+      severity: "error",
+      code: "retarget.settings.invalid",
+      message: errorMsg,
+      hint: "Use hipsTranslationPolicy ignore|preserve|relative|scale and a positive finite scaleFactor",
+    });
+    return {
+      success: false,
+      cacheKey,
+      plan,
+      diagnostics,
+      trackCount: 0,
+      duration: options.sourceClip.duration,
+      error: errorMsg,
+    };
+  }
 
   // Verify essential bone mapping: hips is required for humanoid retargeting
   if (!mappedBone(options.targetProfile, "hips")) {
