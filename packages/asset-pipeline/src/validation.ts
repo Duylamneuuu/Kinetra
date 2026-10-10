@@ -80,8 +80,20 @@ export function validateAssetRecord(record: AssetRecord): AssetDiagnostic[] {
       });
     }
 
+    // NaN, Infinity and negative costs are not a number of credits anyone was charged; `> 0` alone
+    // lets NaN and negatives slip past the synthetic no-external-cost rule below.
+    const cost = provenance.creativeUnitsCost;
+    const costInvalid = typeof cost === "number" && (!Number.isFinite(cost) || cost < 0);
+    if (costInvalid) {
+      diagnostics.push({
+        severity: "error",
+        code: "asset.provenance.creativeUnitsCost.invalid",
+        message: `Provenance creativeUnitsCost ${String(cost)} must be a finite number >= 0`,
+      });
+    }
+
     if (isSyntheticProvider || isSyntheticGenerator) {
-      if (typeof provenance.creativeUnitsCost === "number" && provenance.creativeUnitsCost > 0) {
+      if (typeof cost === "number" && !costInvalid && cost > 0) {
         diagnostics.push({
           severity: "error",
           code: "asset.provenance.synthetic.externalCost",

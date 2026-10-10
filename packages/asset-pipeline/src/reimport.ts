@@ -457,23 +457,11 @@ export class AssetReimportService {
       };
     }
 
-    if (rootResult.status === "noop") {
-      return {
-        rootAssetId,
-        status: "noop",
-        oldSourceHash: rootRecordBefore?.source.contentHash,
-        newSourceHash: rootRecordBefore?.source.contentHash,
-        oldFingerprint: rootRecordBefore?.fingerprint,
-        newFingerprint: rootRecordBefore?.fingerprint,
-        rebuildOrder: [rootAssetId],
-        rebuiltAssetIds: [],
-        blockedAssetIds: [],
-        unaffectedAssetIds: unaffected,
-      };
-    }
-
-    // 2. Root succeeded - process dependents in topological order
-    const rebuiltAssetIds: string[] = [rootAssetId];
+    // 2. Process dependents in topological order. A noop root still has its dependents checked: an
+    // earlier run may have rebuilt the root and then failed on a dependent, which stays stale until
+    // some later run retries it.
+    const rootNoop = rootResult.status === "noop";
+    const rebuiltAssetIds: string[] = rootNoop ? [] : [rootAssetId];
     const failedAssetIds: string[] = [];
     const blockedAssetIds: string[] = [];
 
@@ -536,6 +524,20 @@ export class AssetReimportService {
     }
 
     const hasFailed = failedAssetIds.length > 0;
+    if (rootNoop && !hasFailed && rebuiltAssetIds.length === 0 && blockedAssetIds.length === 0) {
+      return {
+        rootAssetId,
+        status: "noop",
+        oldSourceHash: rootRecordBefore?.source.contentHash,
+        newSourceHash: rootRecordBefore?.source.contentHash,
+        oldFingerprint: rootRecordBefore?.fingerprint,
+        newFingerprint: rootRecordBefore?.fingerprint,
+        rebuildOrder: [rootAssetId],
+        rebuiltAssetIds: [],
+        blockedAssetIds: [],
+        unaffectedAssetIds: unaffected,
+      };
+    }
     return {
       rootAssetId,
       status: hasFailed ? "partial_failure" : "reimported",
