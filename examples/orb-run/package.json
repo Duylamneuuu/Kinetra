@@ -13,7 +13,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test dist/test/*.test.js",
-    "snapshot": "node dist/src/write-snapshot.js"
+    "snapshot": "node dist/src/write-snapshot.js",
+    "acceptance": "node dist/src/acceptance-cli.js"
   },
   "dependencies": {
     "@kinetra/animation": "workspace:*",

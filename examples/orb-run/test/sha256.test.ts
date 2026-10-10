@@ -35,9 +35,11 @@ test("sha256Hex handles a multi-megabyte input and stays deterministic", () => {
   assert.equal(sha256Hex(big), first);
 });
 
-test("the package entry never imports node:* (it is bundled for the web player); only write-snapshot.ts may", async () => {
+test("the package entry never imports node:* (it is bundled for the web player); only write-snapshot.ts and acceptance-suite.ts (the Node-only CLI side) may", async () => {
   const dir = new URL("../src/", import.meta.url);
-  const files = (await readdir(dir)).filter((name) => name.endsWith(".js") && name !== "write-snapshot.js");
+  const files = (await readdir(dir)).filter(
+    (name) => name.endsWith(".js") && name !== "write-snapshot.js" && name !== "acceptance-suite.js",
+  );
   assert.ok(files.includes("replay.js") && files.includes("sha256.js") && files.includes("index.js"));
   for (const file of files) {
     const source = await readFile(new URL(file, dir), "utf8");
@@ -46,6 +48,7 @@ test("the package entry never imports node:* (it is bundled for the web player);
   }
   const index = await readFile(new URL("index.js", dir), "utf8");
   assert.doesNotMatch(index, /write-snapshot/, "index must not re-export write-snapshot");
+  assert.doesNotMatch(index, /acceptance-suite/, "index must not re-export the Node-only acceptance suite");
 });
 
 test("digestOrbRunState is cached per state revision and refreshed by steps and restores", async () => {
