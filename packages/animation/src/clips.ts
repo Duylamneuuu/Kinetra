@@ -14,6 +14,8 @@ export interface AnimationClipMetadata {
   events:AnimationEventDefinition[];
 }
 
+const ROOT_MOTION_MODES:readonly string[]=["none","extract-xz","extract-xyz","extract-xz-yaw"];
+
 export function validateClipMetadata(clip:AnimationClipMetadata):string[]{
   const issues:string[]=[];
   if(typeof clip!=="object"||clip===null){
@@ -24,6 +26,10 @@ export function validateClipMetadata(clip:AnimationClipMetadata):string[]{
   const durationOk=typeof clip.duration==="number"&&Number.isFinite(clip.duration)&&clip.duration>0;
   if(!durationOk) issues.push("clip duration must be a finite positive number");
 
+  if(clip.rootMotionMode!==undefined&&!ROOT_MOTION_MODES.includes(clip.rootMotionMode as string)){
+    issues.push(`clip rootMotionMode "${String(clip.rootMotionMode)}" must be one of ${ROOT_MOTION_MODES.join(", ")}`);
+  }
+
   if(!Array.isArray(clip.events)){
     issues.push("clip events must be an array");
     return issues;
@@ -31,6 +37,9 @@ export function validateClipMetadata(clip:AnimationClipMetadata):string[]{
 
   let previous=-Infinity;
   for(const event of clip.events){
+    if(typeof event?.name!=="string"||event.name.length===0){
+      issues.push("every event needs a non-empty string name");
+    }
     if(typeof event?.time!=="number"||!Number.isFinite(event.time)){
       issues.push(`event "${event?.name}" has a non-finite time`);
       continue;

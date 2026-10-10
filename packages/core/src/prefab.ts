@@ -42,10 +42,13 @@ export function instantiatePrefab(input:{
 
   const parentOf=new Map<string,string>();
   for(const entity of input.prefab.entities){
-    if(entity.parentLocalId&&!localIds.has(entity.parentLocalId)){
+    // "" is a (bogus) parent reference, not "no parent": treating it as a root would silently
+    // detach the entity, the same mistake entity.reparent used to make. Only undefined/null mean root.
+    if(entity.parentLocalId===undefined||entity.parentLocalId===null) continue;
+    if(!localIds.has(entity.parentLocalId)){
       throw new Error(`Prefab parent "${entity.parentLocalId}" does not exist`);
     }
-    if(entity.parentLocalId) parentOf.set(entity.localId,entity.parentLocalId);
+    parentOf.set(entity.localId,entity.parentLocalId);
   }
   for(const entity of input.prefab.entities){
     const seen=new Set<string>([entity.localId]);
@@ -61,7 +64,7 @@ export function instantiatePrefab(input:{
   const result=input.prefab.entities.map(template=>({
     id:idFor(template.localId),
     name:template.name,
-    ...(template.parentLocalId?{parentId:idFor(template.parentLocalId)}:{}),
+    ...(template.parentLocalId!==undefined&&template.parentLocalId!==null?{parentId:idFor(template.parentLocalId)}:{}),
     components:structuredClone(template.components),
   }));
 

@@ -423,7 +423,8 @@ export function solveIkChain(
  * For each bone (joint i -> joint i+1) returns the world-space shortest-arc
  * rotation that turns its `before` direction into its `after` direction.
  * A runtime adapter pre-multiplies these onto each bone's world rotation.
- * Returns one quaternion per bone (`before.length - 1`).
+ * Returns one quaternion per bone (`before.length - 1`); a bone whose direction is degenerate or
+ * non-finite (zero length, NaN, Infinity) gets the identity rotation.
  */
 export function computeBoneAimRotations(before: readonly IkVec3[], after: readonly IkVec3[]): IkQuat[] {
   if (before.length !== after.length) {
@@ -431,8 +432,16 @@ export function computeBoneAimRotations(before: readonly IkVec3[], after: readon
   }
   const rotations: IkQuat[] = [];
   for (let i = 0; i + 1 < before.length; i++) {
-    const from = normalizeOr(sub(before[i + 1]!, before[i]!), [0, 0, 0]);
-    const to = normalizeOr(sub(after[i + 1]!, after[i]!), [0, 0, 0]);
+    const rawFrom = sub(before[i + 1]!, before[i]!);
+    const rawTo = sub(after[i + 1]!, after[i]!);
+    // A non-finite bone (NaN/Infinity position) has no direction; scaling Infinity by 1/Infinity
+    // would otherwise yield a NaN quaternion that poisons the whole pose.
+    if (!isFiniteVec3(rawFrom) || !isFiniteVec3(rawTo)) {
+      rotations.push([0, 0, 0, 1]);
+      continue;
+    }
+    const from = normalizeOr(rawFrom, [0, 0, 0]);
+    const to = normalizeOr(rawTo, [0, 0, 0]);
     if (length(from) < 0.5 || length(to) < 0.5) {
       rotations.push([0, 0, 0, 1]);
       continue;
