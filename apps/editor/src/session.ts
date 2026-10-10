@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MAX_UNDO_DEPTH,
   CommandError,
   type ChangeRecord,
   type CommandBus,
@@ -23,6 +24,13 @@ export interface InspectedEntity {
 export interface EditorSessionOptions {
   /** Prefix of the requestId the editor stamps on every command it sends. Default "editor". */
   requestIdPrefix?: string;
+  /**
+   * Most edits the session remembers for undo. The bus keeps only its own bounded undo history
+   * (DEFAULT_MAX_UNDO_DEPTH by default), so remembering more here would only leak memory and make
+   * `canUndo` claim edits the bus has already forgotten. Set it to the bus's `maxUndoDepth` when
+   * the bus was built with a non-default one. Default: DEFAULT_MAX_UNDO_DEPTH.
+   */
+  maxHistory?: number;
 }
 
 interface HistoryEntry {
@@ -44,6 +52,7 @@ const MAX_SELECTION = 500;
 export class EditorSession {
   readonly #bus: CommandBus;
   readonly #prefix: string;
+  readonly #maxHistory: number;
   #requestCounter = 0;
   #undoStack: HistoryEntry[] = [];
   #redoStack: EngineCommand[][] = [];
@@ -53,6 +62,11 @@ export class EditorSession {
   constructor(bus: CommandBus, options: EditorSessionOptions = {}) {
     this.#bus = bus;
     this.#prefix = options.requestIdPrefix ?? "editor";
+    const maxHistory = options.maxHistory ?? DEFAULT_MAX_UNDO_DEPTH;
+    if (maxHistory !== Infinity && !(Number.isInteger(maxHistory) && maxHistory >= 1)) {
+      throw new RangeError(`maxHistory must be a positive integer (or Infinity), received ${String(maxHistory)}`);
+    }
+    this.#maxHistory = maxHistory;
     this.#knownRevision = bus.revision;
   }
 
@@ -255,6 +269,10 @@ export class EditorSession {
   #recordUndo(result: CommandResult, commands: EngineCommand[]): void {
     if (result.undoToken !== undefined) {
       this.#undoStack.push({ undoToken: result.undoToken, commands: structuredClone(commands) });
+      // Oldest first: the bus evicts its own oldest snapshots the same way.
+      if (this.#undoStack.length > this.#maxHistory) {
+        this.#undoStack.splice(0, this.#undoStack.length - this.#maxHistory);
+      }
     }
   }
 
