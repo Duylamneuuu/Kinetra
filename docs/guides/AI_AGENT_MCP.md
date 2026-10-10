@@ -105,8 +105,18 @@ Command-bus codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`,
 `PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`,
 `UNDO_CONFLICT`, `UNDO_EXPIRED` (the undo token fell out of the bounded undo history,
 `maxUndoDepth` default 100). Project validation
-failures add an `issues` array of `{ path, code, message }`. Always follow the
-`remediation` text before retrying; never retry the same call unchanged.
+failures add an `issues` array of `{ path, code, message, remediation? }`.
+Always follow the `remediation` text before retrying; never retry the same call
+unchanged.
+
+Built-in components are validated when you author them. `entity.create` and
+`entity.patch` reject a bad payload for `Transform`, `Primitive`, `Camera`,
+`Light`, `Model` or `Script` (for example a `Transform.position` that is not
+three finite numbers, or `Primitive.kind: "cylinder"`) with `issues` such as
+`component.Primitive.kind.invalid`, each with a `remediation`, and the revision
+does not change. Unknown fields and other components (`Collider`, `RigidBody`,
+custom ones) are free-form. The rules live in `validateBuiltInComponent` in
+`@kinetra/project-model`.
 
 ## The same loop in TypeScript
 
@@ -164,4 +174,18 @@ await service.stopRuntime();
 const undone = await service.undo(created.undoToken!, 1);
 assert.equal(undone.revision, 2);
 assert.equal(service.queryScenes(sceneId)[0]?.entityCount, 0);
+
+// A bad built-in component payload is rejected with field-level issues, and the revision stays put.
+await assert.rejects(
+  service.createEntity({ sceneId, name: "Cylinder", components: { Primitive: { kind: "cylinder" } }, expectedProjectRevision: 2 }),
+  (error: unknown) => {
+    const body = JSON.parse(formatToolError(error)) as {
+      issues: Array<{ code: string; remediation?: string }>;
+    };
+    const issue = body.issues.find((entry) => entry.code === "component.Primitive.kind.invalid");
+    assert.match(issue?.remediation ?? "", /box, sphere, plane/);
+    return true;
+  },
+);
+assert.equal(service.inspectProject().revision, 2);
 ```

@@ -17,6 +17,8 @@ A Kinetra project is a plain JSON `ProjectDocument` (`schemaVersion`, `projectId
 | `serializeProject(project)` / `parseProject(text)` | functions | Canonical, diff-friendly JSON text (2-space indent, trailing newline), and the inverse including migration. JSON `"__proto__"` keys survive the round trip. |
 | `migrateProject(input)` / `CURRENT_SCHEMA_VERSION` | function / const | Upgrades older documents step by step (schema 0 to 1 today); rejects documents newer than the engine supports. |
 | `cloneProject(project)` | function | Deep copy. |
+| `validateBuiltInComponent(name, value)` / `SCHEMATISED_COMPONENTS` | function / const | Checks one built-in component payload (`Transform`, `Primitive`, `Camera`, `Light`, `Model`, `Script`) and returns `ComponentIssue[]` (`field`, `code`, `message`, `remediation`); components without a schema and unknown fields are never inspected. `validateProject` runs it for every entity, so a bad payload surfaces as a `ValidationIssue` with a `remediation`. |
+| `PRIMITIVE_KINDS`, `LIGHT_KINDS`, `CAMERA_TYPES` | consts | The values the schemas accept for `Primitive.kind`, `Light.kind` and `Camera.type`. |
 
 ## Example
 
@@ -65,8 +67,48 @@ assert.ok(validateProject(broken).length > 0);
 assert.throws(() => assertValidProject(broken), ProjectValidationError);
 ```
 
+Built-in component payloads are checked as well (the runtime would otherwise silently fall back to defaults):
+
+```ts doc-check
+import assert from "node:assert/strict";
+import {
+  PRIMITIVE_KINDS,
+  SCHEMATISED_COMPONENTS,
+  createProject,
+  createScene,
+  validateBuiltInComponent,
+  validateProject,
+} from "@kinetra/project-model";
+
+assert.ok(SCHEMATISED_COMPONENTS.includes("Transform"));
+assert.deepEqual([...PRIMITIVE_KINDS], ["box", "sphere", "plane"]);
+
+// One component on its own: a structured issue with a remediation.
+const [issue] = validateBuiltInComponent("Primitive", { kind: "cylinder" });
+assert.equal(issue?.code, "component.Primitive.kind.invalid");
+assert.equal(issue?.field, "kind");
+assert.match(issue?.remediation ?? "", /box, sphere, plane/);
+
+// Unknown fields and components without a schema stay free-form.
+assert.deepEqual(validateBuiltInComponent("Transform", { position: [0, 1, 2], tag: "free" }), []);
+assert.deepEqual(validateBuiltInComponent("Collider", { shape: 12 }), []);
+
+// validateProject reports the same problem at the field path.
+const project = createProject({ name: "Demo" });
+const scene = createScene("Main");
+scene.entities.push({
+  id: "entity_one",
+  name: "One",
+  components: { Transform: { position: [0, 1] } },
+});
+project.scenes.push(scene);
+const [projectIssue] = validateProject(project);
+assert.equal(projectIssue?.path, "scenes[0].entities[0].components.Transform.position");
+assert.equal(projectIssue?.code, "component.Transform.position.invalid");
+```
+
 ## Proof level
 
-Covered by `test/project-model.test.ts`, `test/untrusted-input.test.ts`, `test/contracts.test.ts` and `test/canonical-order.test.ts` (all in the package `test` script): schema validation of untrusted documents, locale-independent ordering, migration, and serialization round trips. See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
+Covered by `test/project-model.test.ts`, `test/untrusted-input.test.ts`, `test/contracts.test.ts`, `test/canonical-order.test.ts`, `test/validation-scale.test.ts`, `test/migration-edge.test.ts` and `test/builtin-components.test.ts` (all in the package `test` script): schema validation of untrusted documents, locale-independent ordering, migration, serialization round trips, and built-in component payload rules (PR #172). See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
 
 Not here: prefab/build/input/test data are defined by the packages that consume them; this package owns the document envelope, ids and migrations.
