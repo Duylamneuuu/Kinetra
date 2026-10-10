@@ -10,11 +10,17 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: replay/determinism gate (slice 10) ([#290](https://github.com/Duylamneuuu/Kinetra/pull/290))
 - **editor**: `@kinetra/editor` headless observer core (#104 part 1): `buildHierarchy` + `EditorSession` that edits only through the command bus, with editor-vs-MCP parity tests ([#258](https://github.com/Duylamneuuu/Kinetra/pull/258))
 - **orb-run**: content is part of the acceptance gate (slice 9) ([#250](https://github.com/Duylamneuuu/Kinetra/pull/250))
 
 ### Fixed
 
+- **editor,asset-pipeline**: `EditorSession` bounds its undo history; `AssetDatabase` rejects malformed records ([#302](https://github.com/Duylamneuuu/Kinetra/pull/302))
+- **physics-rapier,navigation-recast**: scene factory forwards `RigidBody.mass` and treats `kinematicVelocityBased` as kinematic; bake rejects sparse positions arrays ([#300](https://github.com/Duylamneuuu/Kinetra/pull/300))
+- **animation**: `bakeRetargetedClip` rejects an unknown `hipsTranslationPolicy` and a non-finite/non-positive `scaleFactor` with a diagnostic ([#297](https://github.com/Duylamneuuu/Kinetra/pull/297))
+- **renderer-three**: `loadModels` no longer stacks a second model on loaded entities; enabling root motion keeps the playing clip's loop mode; `reloadAsset` keeps root motion enabled ([#295](https://github.com/Duylamneuuu/Kinetra/pull/295))
+- **animation**: root-motion yaw is sampled from the rotation track by time, not by key index; `inspectClipRootMotion` reports a real `netYaw` ([#292](https://github.com/Duylamneuuu/Kinetra/pull/292))
 - **player**: script `transform.setPosition`/`translate` validate finite vectors before mutating the Three.js object ([#287](https://github.com/Duylamneuuu/Kinetra/pull/287))
 - **asset-pipeline**: `reimportWithDependents` staleness check fingerprints dependencies like `reimport()` (skips missing ones), no orphan `dependentReimportStarted` ([#285](https://github.com/Duylamneuuu/Kinetra/pull/285))
 - **navigation-recast,save-state**: bake rounds agent metres to voxel cells without float drift; `SaveMigrator` rejects a migration that returns undefined ([#284](https://github.com/Duylamneuuu/Kinetra/pull/284))
@@ -40,6 +46,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **command-bus**: edge contracts — cross-scene ids, `scene.create` validation, non-JSON values, undo token strictness, defensive copies (+13 tests) ([#293](https://github.com/Duylamneuuu/Kinetra/pull/293))
+- **mcp-server,save-state**: `initialRevision` validation and `JsonDocumentStore.save` unserializable values (#266) ([#289](https://github.com/Duylamneuuu/Kinetra/pull/289))
 - **verification**: runtime-probe delegation edge cases ([#283](https://github.com/Duylamneuuu/Kinetra/pull/283))
 - **reference-game**: encounter edge cases (frame sanitising, lockdown win/lose, damage payloads, player input) ([#265](https://github.com/Duylamneuuu/Kinetra/pull/265))
 - **navigation-recast**: geometry/property coverage + bake rejects non-array geometry with RangeError ([#260](https://github.com/Duylamneuuu/Kinetra/pull/260))
