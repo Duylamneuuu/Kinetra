@@ -37,7 +37,11 @@ export class SaveMigrator {
     while(version<this.currentVersion){
       const migration=this.#migrations.get(version);
       if(!migration) throw new Error(`Missing save migration from schema ${version}`);
-      data=migration(data);
+      const migrated=migration(data);
+      // A migration that mutates its input but forgets `return` would otherwise yield an
+      // envelope whose data is undefined, which JSON.stringify drops: the slot loads back empty.
+      if(migrated===undefined) throw new Error(`Save migration from schema ${version} returned undefined; a migration must return the migrated data`);
+      data=migrated;
       version+=1;
     }
 
