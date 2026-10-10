@@ -70,8 +70,12 @@ function validateBakeInput(input: NavMeshBakeInput, positions: number[], indices
   if (positions.length === 0 || positions.length % 3 !== 0) {
     throw new RangeError(`NavMesh bake input "positions" length must be a positive multiple of 3, got ${positions.length}`);
   }
-  if (!positions.every((value) => Number.isFinite(value))) {
-    throw new RangeError('NavMesh bake input "positions" must contain only finite numbers');
+  // A plain loop, not Array.prototype.every: every() skips the holes of a sparse array,
+  // so `[0, , 0, ...]` used to pass validation and reach Recast as undefined/NaN.
+  for (let i = 0; i < positions.length; i += 1) {
+    if (typeof positions[i] !== "number" || !Number.isFinite(positions[i])) {
+      throw new RangeError('NavMesh bake input "positions" must contain only finite numbers');
+    }
   }
   if (indices.length === 0 || indices.length % 3 !== 0) {
     throw new RangeError(`NavMesh bake input "indices" length must be a positive multiple of 3, got ${indices.length}`);
