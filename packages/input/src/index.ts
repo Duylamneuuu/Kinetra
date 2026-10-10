@@ -209,11 +209,60 @@ export function describeInvalidInputBinding(binding: unknown): string | undefine
   }
 }
 
+/**
+ * Structural check for a whole input map from an untrusted source (settings files,
+ * IPC, MCP). Returns a human-readable problem, or undefined when the map is valid.
+ * Checks the container shapes, unique non-empty action ids, the action type, and every
+ * binding with {@link describeInvalidInputBinding}.
+ */
+export function describeInvalidInputMap(map: unknown): string | undefined {
+  if (typeof map !== "object" || map === null || Array.isArray(map)) {
+    return "input map must be an object";
+  }
+  const candidate = map as Record<string, unknown>;
+  if (candidate.schemaVersion !== 1) {
+    return `unsupported schemaVersion ${JSON.stringify(candidate.schemaVersion)}`;
+  }
+  if (!Array.isArray(candidate.actions)) {
+    return "actions must be an array";
+  }
+  const seen = new Set<string>();
+  for (let index = 0; index < candidate.actions.length; index += 1) {
+    const action: unknown = candidate.actions[index];
+    if (typeof action !== "object" || action === null || Array.isArray(action)) {
+      return `actions[${index}] must be an object`;
+    }
+    const entry = action as Record<string, unknown>;
+    if (typeof entry.id !== "string" || entry.id.length === 0) {
+      return `actions[${index}] needs a non-empty string id`;
+    }
+    if (seen.has(entry.id)) {
+      return `duplicate action id "${entry.id}"`;
+    }
+    seen.add(entry.id);
+    if (entry.type !== "button" && entry.type !== "axis") {
+      return `action "${entry.id}" type must be "button" or "axis"`;
+    }
+    if (!Array.isArray(entry.bindings)) {
+      return `action "${entry.id}" bindings must be an array`;
+    }
+    for (let bindingIndex = 0; bindingIndex < entry.bindings.length; bindingIndex += 1) {
+      const problem = describeInvalidInputBinding(entry.bindings[bindingIndex] as unknown);
+      if (problem) return `action "${entry.id}" binding ${bindingIndex}: ${problem}`;
+    }
+  }
+  return undefined;
+}
+
 export class InputRouter {
   #map: InputMap;
   #semanticActions = new Map<string, { phase: InputPhase; value: number }>();
 
   constructor(map: InputMap = DEFAULT_PLAYER_INPUT_MAP) {
+    // A malformed map used to be accepted and only blew up later (hasAction/value threw
+    // TypeErrors, duplicate ids silently shadowed each other); fail at construction.
+    const problem = describeInvalidInputMap(map);
+    if (problem) throw new Error(`Invalid input map: ${problem}`);
     this.#map = structuredClone(map);
   }
 
