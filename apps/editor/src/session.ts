@@ -191,7 +191,22 @@ export class EditorSession {
       throw new CommandError("INVALID_COMMAND", "Nothing to undo");
     }
     this.#dropStaleRedo();
-    const result = this.#bus.undo(entry.undoToken);
+    let result: CommandResult;
+    try {
+      result = this.#bus.undo(entry.undoToken);
+    } catch (error) {
+      if (error instanceof CommandError) {
+        if (error.code === "UNDO_EXPIRED") {
+          // Tokens are evicted oldest-first, so every older entry is gone too.
+          this.#undoStack = [];
+        } else if (error.code === "INVALID_COMMAND") {
+          // Another client already consumed this token (e.g. an MCP undo). Keeping the dead
+          // entry on top would block the editor's older, still-valid edits forever.
+          this.#undoStack.pop();
+        }
+      }
+      throw error;
+    }
     this.#undoStack.pop();
     this.#redoStack.push(entry.commands);
     this.#knownRevision = this.#bus.revision;

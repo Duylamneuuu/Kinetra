@@ -202,6 +202,33 @@ test("reparent to root and cascade delete behave like the bus commands", () => {
   assert.equal(editor.scenes()[0]!.entityCount, 2);
 });
 
+test("an undo token another client already consumed is dropped, not left blocking the editor's older edits", () => {
+  const { bus, editor } = setup();
+  editor.patchComponent("root", "Stats", { hp: 1 });
+  const second = editor.patchComponent("root", "Stats", { hp: 2 });
+  // An MCP client undoes the editor's latest edit through the bus.
+  bus.undo(second.undoToken!);
+  assert.equal(codeOf(() => editor.undo()), "INVALID_COMMAND");
+  assert.equal(editor.canUndo, true, "the editor's older edit is still undoable");
+  editor.undo();
+  assert.deepEqual(editor.inspect("root")?.entity.components, { Stats: { hp: 10 } });
+  assert.equal(editor.canUndo, false);
+});
+
+test("evicted undo tokens (maxUndoDepth) clear the editor history instead of failing forever", () => {
+  const bus = new CommandBus(fixture(), 0, { maxUndoDepth: 2 });
+  const editor = new EditorSession(bus);
+  for (let hp = 1; hp <= 4; hp += 1) {
+    editor.patchComponent("root", "Stats", { hp });
+  }
+  editor.undo();
+  editor.undo();
+  assert.equal(codeOf(() => editor.undo()), "UNDO_EXPIRED");
+  assert.equal(editor.canUndo, false, "older tokens were evicted too, so nothing is left to undo");
+  assert.equal(codeOf(() => editor.undo()), "INVALID_COMMAND");
+  assert.deepEqual(editor.inspect("root")?.entity.components, { Stats: { hp: 2 } });
+});
+
 test("createScene then populate it, all undoable", () => {
   const { editor } = setup();
   editor.createScene({ id: "scene_two", name: "Two" });
