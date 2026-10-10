@@ -39,14 +39,30 @@ const remediationByCode: Record<CommandErrorCode, string> = {
     "This undo token fell out of the bounded undo history. Re-apply the intended state with new commands, or construct the CommandBus with a larger maxUndoDepth.",
 };
 
+/** One schema problem behind an `INVALID_COMMAND` (mirrors project-model's ValidationIssue). */
+export interface CommandIssue {
+  readonly path: string;
+  readonly code: string;
+  readonly message: string;
+  readonly remediation?: string;
+}
+
 export class CommandError extends Error {
   readonly code: CommandErrorCode;
   readonly remediation: string;
+  /** Present when the command would have produced an invalid project: every offending path with its stable issue code. */
+  readonly issues?: readonly CommandIssue[];
 
-  constructor(code: CommandErrorCode, message: string, remediation?: string) {
+  constructor(
+    code: CommandErrorCode,
+    message: string,
+    remediation?: string,
+    issues?: readonly CommandIssue[],
+  ) {
     super(message);
     this.name = "CommandError";
     this.code = code;
     this.remediation = remediation ?? remediationByCode[code];
+    if (issues !== undefined) this.issues = issues;
   }
 }

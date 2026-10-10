@@ -347,10 +347,10 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Proof**: `apps/player/test/bridge-protocol.test.ts` (plain Node, run by `pnpm --filter @kinetra/player test`);
 - **Not done**: no real-Electron test sends a malformed line through the pipe or stdio transport.
 
-### 24. Dogfood Sample: Orb Run (P10, slices 1-9)
+### 24. Dogfood Sample: Orb Run (P10, slices 1-11)
 
-- **Where**: `examples/orb-run` is its own workspace package authored over the real MCP server and played headless (project, gameplay scripts, acceptance manifests, locomotion blend space, two-bone foot IK, audio cues, HUD contract, asset-pipeline content, gameplay-driven locomotion/IK in slice 8 (PR #238), content in the acceptance gate in slice 9 (PR #250)); the per-slice proof and test counts are in `docs/STATUS.md` ("Dogfood sample: Orb Run") and `examples/orb-run/README.md`;
-- **Proof**: `examples/orb-run/test/*.test.ts` (authoring, gameplay, acceptance, locomotion, foot-ik, audio, hud, assets, animation), run by `pnpm --filter @kinetra/example-orb-run test`;
+- **Where**: `examples/orb-run` is its own workspace package authored over the real MCP server and played headless (project, gameplay scripts, acceptance manifests, locomotion blend space, two-bone foot IK, audio cues, HUD contract, asset-pipeline content, gameplay-driven locomotion/IK in slice 8 (PR #238), content in the acceptance gate in slice 9 (PR #250), replay/determinism gate in slice 10 (PR #290) and replays as `AcceptanceManifest`s in slice 11 (PR #307)); the per-slice proof and test counts are in `docs/STATUS.md` ("Dogfood sample: Orb Run") and `examples/orb-run/README.md`;
+- **Proof**: `examples/orb-run/test/*.test.ts` (authoring, gameplay, acceptance, locomotion, foot-ik, audio, hud, assets, animation, replay and replay-manifest; the script globs `dist/test/*.test.js`), run by `pnpm --filter @kinetra/example-orb-run test`;
 - **Not done**: rendering (nothing draws the HUD, imported assets are never loaded by a renderer), the Electron player and packaged builds.
 
 ### 25. Visual Baseline Management (P8, PR #248, issue #100)
@@ -364,6 +364,12 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Contract**: `ThreeSceneRuntime` (`@kinetra/renderer-three`) drives the `ClipEventTracker` from its mixers: `setAnimationEvents` registers definitions per clip, `onAnimationEvent` subscribes, fired events land in a bounded log exposed through diagnostics; the contract itself is item 20;
 - **Proof**: `packages/renderer-three/test/animation-events.test.ts` (Node; in the package `test` script);
 - **Not done**: blend-space actions, script `context.animation.onEvent`, a bridge/MCP command and an Electron proof (issue #90 stays open).
+
+### 27. Built-in Component Payload Validation (P0/P1, PR #172, issue #81)
+
+- **Contract**: `validateBuiltInComponent(name, value)` in `@kinetra/project-model` checks the known fields of `Transform`, `Primitive`, `Camera`, `Light`, `Model` and `Script` and returns `{ field, code, message, remediation }` issues (`component.<Name>.<field>.invalid`, or `component.<Name>.invalid` for a non-object); `validateProject` / `assertValidProject` call it for every entity, so `entity.create` / `entity.patch` through the command bus and MCP fail with structured `issues` and leave the revision unchanged; unknown fields and components without a schema (`Collider`, `RigidBody`, custom ones) stay free-form;
+- **Proof**: `packages/project-model/test/builtin-components.test.ts`, `packages/command-bus/test/builtin-components.test.ts` and `packages/mcp-server/test/tool-error.test.ts` (Node; all three are in their package `test` scripts);
+- **Not done**: no schema for `Collider`/`RigidBody` or other not-yet-schematised components; the runtime still falls back to defaults for malformed payloads that bypass the authoring boundary.
 
 ## Completion definition
 

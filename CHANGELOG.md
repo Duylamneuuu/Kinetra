@@ -6,15 +6,40 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-11
+
+### Added
+
+- **orb-run**: replays as acceptance manifests, digest over every entity position, non-blocking replay playback (slice 11) ([#307](https://github.com/Duylamneuuu/Kinetra/pull/307))
+- **project-model**: validate built-in component payloads at the authoring boundary (#81) ([#172](https://github.com/Duylamneuuu/Kinetra/pull/172))
+
+### Fixed
+
+- **animation**: root-motion step/sample return a zero delta / first sample for non-finite time, deltaTime, speed or loopDuration instead of NaN ([#304](https://github.com/Duylamneuuu/Kinetra/pull/304))
+- **command-bus**: queryEntities selectComponents returns a '__proto__' component as data instead of re-prototyping the result ([#301](https://github.com/Duylamneuuu/Kinetra/pull/301))
+
+### Tests
+
+- **physics-rapier**: moveCharacter sees remove()d walls immediately and never integrates dynamic bodies (#286) ([#305](https://github.com/Duylamneuuu/Kinetra/pull/305))
+- **navigation-recast**: unit-test toCells ceil/floor snapping + property test; tiny agentHeight still bakes (#288) ([#308](https://github.com/Duylamneuuu/Kinetra/pull/308))
+
 ## 2026-10-10
 
 ### Added
 
+- **orb-run**: replay/determinism gate (slice 10) ([#290](https://github.com/Duylamneuuu/Kinetra/pull/290))
 - **editor**: `@kinetra/editor` headless observer core (#104 part 1): `buildHierarchy` + `EditorSession` that edits only through the command bus, with editor-vs-MCP parity tests ([#258](https://github.com/Duylamneuuu/Kinetra/pull/258))
 - **orb-run**: content is part of the acceptance gate (slice 9) ([#250](https://github.com/Duylamneuuu/Kinetra/pull/250))
 
 ### Fixed
 
+- **mcp-server**: LocalRuntimeHost.start stops and rebuilds synchronously so overlapping starts cannot leak a runtime ([#299](https://github.com/Duylamneuuu/Kinetra/pull/299))
+- **player**: PlayerAudioController.play() reports a throwing resolver / invalid base64 as a failed result; +12 edge tests ([#303](https://github.com/Duylamneuuu/Kinetra/pull/303))
+- **physics-rapier,navigation-recast**: scene factory forwards RigidBody.mass and treats kinematicVelocityBased as kinematic; bake rejects sparse positions arrays ([#300](https://github.com/Duylamneuuu/Kinetra/pull/300))
+- **editor,asset-pipeline**: EditorSession bounds its undo history; AssetDatabase rejects malformed records ([#302](https://github.com/Duylamneuuu/Kinetra/pull/302))
+- **animation**: bakeRetargetedClip rejects an unknown hipsTranslationPolicy and a non-finite/non-positive scaleFactor with a diagnostic ([#297](https://github.com/Duylamneuuu/Kinetra/pull/297))
+- **renderer-three**: loadModels no longer stacks a second model on loaded entities, enabling root motion keeps the playing clip's loop mode, reloadAsset keeps root motion enabled ([#295](https://github.com/Duylamneuuu/Kinetra/pull/295))
+- **animation**: root-motion yaw is sampled from the rotation track by time, not by key index; inspectClipRootMotion reports a real netYaw ([#292](https://github.com/Duylamneuuu/Kinetra/pull/292))
 - **player**: script `transform.setPosition`/`translate` validate finite vectors before mutating the Three.js object ([#287](https://github.com/Duylamneuuu/Kinetra/pull/287))
 - **asset-pipeline**: `reimportWithDependents` staleness check fingerprints dependencies like `reimport()` (skips missing ones), no orphan `dependentReimportStarted` ([#285](https://github.com/Duylamneuuu/Kinetra/pull/285))
 - **navigation-recast,save-state**: bake rounds agent metres to voxel cells without float drift; `SaveMigrator` rejects a migration that returns undefined ([#284](https://github.com/Duylamneuuu/Kinetra/pull/284))
@@ -40,6 +65,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **command-bus**: edge contracts — cross-scene ids, scene.create validation, non-JSON values, undo token strictness, defensive copies (+13 tests) ([#293](https://github.com/Duylamneuuu/Kinetra/pull/293))
+- **mcp-server,save-state**: initialRevision validation and JsonDocumentStore.save unserializable values (#266) ([#289](https://github.com/Duylamneuuu/Kinetra/pull/289))
 - **verification**: runtime-probe delegation edge cases ([#283](https://github.com/Duylamneuuu/Kinetra/pull/283))
 - **reference-game**: encounter edge cases (frame sanitising, lockdown win/lose, damage payloads, player input) ([#265](https://github.com/Duylamneuuu/Kinetra/pull/265))
 - **navigation-recast**: geometry/property coverage + bake rejects non-array geometry with RangeError ([#260](https://github.com/Duylamneuuu/Kinetra/pull/260))
