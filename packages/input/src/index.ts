@@ -161,6 +161,16 @@ function finiteOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/**
+ * Clamp to the [-1, 1] input range. NaN is "no signal" (0), but +/-Infinity is a
+ * saturated signal and must clamp to +/-1 (a finite sum of finite terms can still
+ * overflow to Infinity, e.g. scale 1e308 on a held key twice).
+ */
+function clampUnit(value: number): number {
+  if (Number.isNaN(value)) return 0;
+  return Math.max(-1, Math.min(1, value));
+}
+
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
@@ -308,14 +318,14 @@ export class InputRouter {
 
     let rawValue: number;
     if (hasSemantic) {
-      rawValue = finiteOr(semantic.value, 0);
+      rawValue = typeof semantic.value === "number" ? semantic.value : 0;
     } else if (snapshot && action) {
       rawValue = this.value(actionId, snapshot);
     } else {
       rawValue = 0;
     }
 
-    const clamped = Math.max(-1, Math.min(1, rawValue));
+    const clamped = clampUnit(rawValue);
     if (action?.type === "button") {
       return clamped > 0.5 ? 1 : 0;
     }
@@ -357,7 +367,7 @@ export class InputRouter {
       }
     }
 
-    value = Math.max(-1, Math.min(1, finiteOr(value, 0)));
+    value = clampUnit(value);
     return action.type === "button" ? (value > 0.5 ? 1 : 0) : value;
   }
 
