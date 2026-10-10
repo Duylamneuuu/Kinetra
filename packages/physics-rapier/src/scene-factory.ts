@@ -90,6 +90,47 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       rbType === "kinematicpositionbased" ||
       rbType === "kinematicvelocitybased";
 
+    // A kinematic body that declares a box/sphere collider (a moving platform, a door) and is not
+    // a CharacterBody must keep that shape; only capsule / undeclared shapes are character bodies.
+    const declaredShape = stringValue(collider?.shape ?? primitive?.kind, "");
+    if (
+      isCharacter &&
+      !character &&
+      (declaredShape === "box" || declaredShape === "sphere" || declaredShape === "ball")
+    ) {
+      const friction =
+        typeof collider?.friction === "number" ? collider.friction : undefined;
+      const restitution =
+        typeof collider?.restitution === "number"
+          ? collider.restitution
+          : undefined;
+      const common = {
+        id: entity.id,
+        position,
+        ...(friction !== undefined ? { friction } : {}),
+        ...(restitution !== undefined ? { restitution } : {}),
+        ...layerOption,
+      };
+      if (declaredShape === "box") {
+        let halfExtents: Vec3;
+        if (Array.isArray(collider?.halfExtents)) {
+          const ext = vec3Value(collider.halfExtents, [0.5, 0.5, 0.5]);
+          halfExtents = { x: ext[0], y: ext[1], z: ext[2] };
+        } else {
+          const size = vec3Value(collider?.size ?? primitive?.size, [1, 1, 1]);
+          halfExtents = { x: size[0] / 2, y: size[1] / 2, z: size[2] / 2 };
+        }
+        world.addKinematicBody({ ...common, shape: "box", halfExtents });
+      } else {
+        world.addKinematicBody({
+          ...common,
+          shape: "sphere",
+          radius: numberValue(collider?.radius ?? primitive?.radius, 0.5),
+        });
+      }
+      continue;
+    }
+
     if (isCharacter) {
       const radius = numberValue(
         collider?.radius ?? primitive?.radius,

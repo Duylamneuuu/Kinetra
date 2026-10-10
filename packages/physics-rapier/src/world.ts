@@ -323,6 +323,85 @@ export class RapierPhysicsWorld {
     this.#controllers.set(input.id, controller);
   }
 
+  /**
+   * Adds a kinematic (position-driven) body that keeps the declared collider shape, for moving
+   * platforms and doors. Unlike `addKinematicCharacter` it is not a capsule and has no character
+   * controller; drive it with `moveKinematicBody` so dynamic bodies resting on it are carried.
+   */
+  addKinematicBody(input: {
+    id: string;
+    position: Vec3;
+    shape: "box" | "sphere";
+    halfExtents?: Vec3;
+    radius?: number;
+    friction?: number;
+    restitution?: number;
+    layer?: number;
+  }): void {
+    this.#assertNewId(input.id);
+    const layer = assertLayer(input.layer, "addKinematicBody layer");
+    assertFiniteVec3(input.position, "addKinematicBody position");
+    if (input.friction !== undefined)
+      assertNonNegative(input.friction, "addKinematicBody friction");
+    if (input.restitution !== undefined)
+      assertNonNegative(input.restitution, "addKinematicBody restitution");
+
+    // Validate the shape before touching the world so a bad shape cannot leave an orphan body.
+    let colDesc: RAPIER.ColliderDesc;
+    switch (input.shape) {
+      case "box": {
+        const ext = input.halfExtents ?? { x: 0.5, y: 0.5, z: 0.5 };
+        assertFiniteVec3(ext, "addKinematicBody halfExtents");
+        colDesc = RAPIER.ColliderDesc.cuboid(
+          assertPositive(ext.x, "addKinematicBody halfExtents.x"),
+          assertPositive(ext.y, "addKinematicBody halfExtents.y"),
+          assertPositive(ext.z, "addKinematicBody halfExtents.z"),
+        );
+        break;
+      }
+      case "sphere":
+        colDesc = RAPIER.ColliderDesc.ball(
+          assertPositive(input.radius ?? 0.5, "addKinematicBody radius"),
+        );
+        break;
+      default:
+        throw new Error(`Unsupported kinematic body shape "${String(input.shape)}"`);
+    }
+    if (input.friction !== undefined) colDesc.setFriction(input.friction);
+    if (input.restitution !== undefined)
+      colDesc.setRestitution(input.restitution);
+
+    const body = this.world.createRigidBody(
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
+        input.position.x,
+        input.position.y,
+        input.position.z,
+      ),
+    );
+    const collider = this.#createCollider(colDesc, body);
+    this.#register({
+      id: input.id,
+      body,
+      collider,
+      isCharacter: false,
+      layer,
+    });
+  }
+
+  /**
+   * Sets where a kinematic body should be after the next step (Rapier derives its velocity from
+   * the displacement, so dynamic bodies standing on it are carried and pushed).
+   */
+  moveKinematicBody(id: string, target: Vec3): void {
+    const entry = this.#require(id);
+    assertFiniteVec3(target, "moveKinematicBody target");
+    if (!entry.body.isKinematic()) {
+      throw new Error(`Body "${id}" is not kinematic`);
+    }
+    entry.body.setNextKinematicTranslation(target);
+    this.#queriesStale = true;
+  }
+
   moveCharacter(id: string, desired: Vec3): CharacterMoveResult {
     const entry = this.#require(id);
     if (!entry.collider) {
