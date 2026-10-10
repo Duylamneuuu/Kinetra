@@ -65,3 +65,57 @@ test("a failed save of a dry run or a later successful save is unaffected", asyn
     ["scene-a", "scene-b"],
   );
 });
+
+test("a failed save after undo() can be retried: the spent token still flushes memory to disk", async () => {
+  const store = new FlakyStore();
+  const service = new KinetraAgentService(emptyProject(), { store });
+
+  const created = await service.createScene({ name: "Main", id: "scene-main" });
+  assert.ok(created.undoToken);
+  assert.equal(store.saved.at(-1)?.scenes.length, 1);
+
+  store.failNext = 1;
+  await assert.rejects(() => service.undo(created.undoToken as string), /disk full/);
+  // The undo itself was applied and its token is spent, so it cannot be redone.
+  assert.deepEqual(service.inspectProject().scenes, []);
+  assert.equal(store.saved.at(-1)?.scenes.length, 1, "disk still holds the scene until a save succeeds");
+
+  // Retrying the spent token is refused by the bus, but disk must catch up with memory.
+  await assert.rejects(() => service.undo(created.undoToken as string));
+  assert.equal(store.saved.at(-1)?.scenes.length, 0, "the retry flushed the undone project");
+  const writes = store.saved.length;
+
+  // Nothing is pending any more: a refused undo must not write again.
+  await assert.rejects(() => service.undo(created.undoToken as string));
+  assert.equal(store.saved.length, writes);
+});
+
+test("a command whose own save fails is rolled back but keeps an earlier failed undo save pending", async () => {
+  const store = new FlakyStore();
+  const service = new KinetraAgentService(emptyProject(), { store });
+
+  const created = await service.createScene({ name: "Main", id: "scene-main" });
+  store.failNext = 1;
+  await assert.rejects(() => service.undo(created.undoToken as string), /disk full/);
+
+  store.failNext = 1;
+  await assert.rejects(() => service.createScene({ name: "B", id: "scene-b" }), /disk full/);
+  assert.deepEqual(service.inspectProject().scenes, []);
+  assert.equal(store.saved.length, 1);
+
+  // The pending save from the undo is still owed: a refused undo flushes it.
+  await assert.rejects(() => service.undo(created.undoToken as string));
+  assert.equal(store.saved.length, 2);
+  assert.equal(store.saved.at(-1)?.scenes.length, 0);
+});
+
+test("a successful undo() save writes once and leaves nothing pending", async () => {
+  const store = new FlakyStore();
+  const service = new KinetraAgentService(emptyProject(), { store });
+
+  const created = await service.createScene({ name: "Main", id: "scene-main" });
+  await service.undo(created.undoToken as string);
+  assert.equal(store.saved.length, 2);
+  await assert.rejects(() => service.undo(created.undoToken as string));
+  assert.equal(store.saved.length, 2);
+});
