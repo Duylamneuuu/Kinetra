@@ -246,7 +246,38 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       continue;
     }
 
-    // Default to fixed / static collider
+    // Default to fixed / static collider. A declared sphere or capsule keeps its shape; the fixed
+    // path used to build a (default 1x1x1) cuboid whatever the Collider / Primitive declared.
+    const fixedShape = stringValue(collider?.shape ?? primitive?.kind, "box");
+    if (fixedShape === "sphere" || fixedShape === "ball" || fixedShape === "capsule") {
+      const fixedFriction =
+        typeof collider?.friction === "number" ? collider.friction : undefined;
+      const fixedRestitution =
+        typeof collider?.restitution === "number"
+          ? collider.restitution
+          : undefined;
+      const fixedCommon = {
+        id: entity.id,
+        position,
+        ...(fixedFriction !== undefined ? { friction: fixedFriction } : {}),
+        ...(fixedRestitution !== undefined ? { restitution: fixedRestitution } : {}),
+        ...layerOption,
+      };
+      if (fixedShape === "capsule") {
+        world.addFixedCapsule({
+          ...fixedCommon,
+          radius: numberValue(collider?.radius, 0.4),
+          halfHeight: numberValue(collider?.halfHeight, 0.5),
+        });
+      } else {
+        world.addFixedSphere({
+          ...fixedCommon,
+          radius: numberValue(collider?.radius ?? primitive?.radius, 0.5),
+        });
+      }
+      continue;
+    }
+
     let halfExtents: Vec3;
     if (Array.isArray(collider?.halfExtents)) {
       const ext = vec3Value(collider.halfExtents, [0.5, 0.5, 0.5]);
