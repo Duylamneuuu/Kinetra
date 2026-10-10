@@ -142,6 +142,19 @@ function assertNavMeshBytes(bytes: Uint8Array): void {
   if (offset !== bytes.byteLength) fail(`${bytes.byteLength - offset} unexpected trailing bytes`);
 }
 
+/**
+ * Converts a world-space length to a whole number of voxel cells. `0.6 / 0.2` is
+ * 2.9999999999999996 in floating point, so a bare `Math.floor` loses a whole cell
+ * (a 0.6 step with cellHeight 0.2 would count as 2 cells of climb) and a bare
+ * `Math.ceil` of `1.05 / 0.15` (7.000000000000001) gains one. Quotients within a
+ * relative 1e-9 of an integer snap to it first.
+ */
+function toCells(length: number, cell: number, round: (value: number) => number): number {
+  const quotient = length / cell;
+  const nearest = Math.round(quotient);
+  return round(Math.abs(quotient - nearest) <= 1e-9 * Math.max(1, Math.abs(nearest)) ? nearest : quotient);
+}
+
 export const DEFAULT_QUERY_HALF_EXTENTS: Vec3 = { x: 2, y: 4, z: 2 };
 
 export class RecastNavMesh {
@@ -168,17 +181,11 @@ export class RecastNavMesh {
     if (input.cellSize !== undefined) config.cs = input.cellSize;
     if (input.cellHeight !== undefined) config.ch = input.cellHeight;
     if (input.agentHeight !== undefined)
-      config.walkableHeight = Math.ceil(
-        input.agentHeight / (input.cellHeight ?? 0.2),
-      );
+      config.walkableHeight = toCells(input.agentHeight, input.cellHeight ?? 0.2, Math.ceil);
     if (input.agentRadius !== undefined)
-      config.walkableRadius = Math.ceil(
-        input.agentRadius / (input.cellSize ?? 0.2),
-      );
+      config.walkableRadius = toCells(input.agentRadius, input.cellSize ?? 0.2, Math.ceil);
     if (input.agentMaxClimb !== undefined)
-      config.walkableClimb = Math.floor(
-        input.agentMaxClimb / (input.cellHeight ?? 0.2),
-      );
+      config.walkableClimb = toCells(input.agentMaxClimb, input.cellHeight ?? 0.2, Math.floor);
     if (input.agentMaxSlope !== undefined)
       config.walkableSlopeAngle = input.agentMaxSlope;
 
