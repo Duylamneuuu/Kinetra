@@ -169,6 +169,7 @@ interface ScriptEntry {
 
 export class ScriptHost {
   #entries = new Map<string, ScriptEntry>();
+  #inFlight = new Map<"start" | "stop" | "destroy", Promise<void>>();
 
   register(input: {
     id: string;
@@ -199,7 +200,36 @@ export class ScriptHost {
     });
   }
 
-  async startAll(): Promise<void> {
+  /**
+   * Creates and starts every registered script. A call made while another startAll() is still
+   * awaiting a script hook shares that run instead of starting a second pass, which would
+   * otherwise call onCreate/onStart twice for the same script (e.g. a double-clicked Start).
+   */
+  startAll(): Promise<void> {
+    return this.#shared("start", () => this.#startAll());
+  }
+
+  /** Stops every started script (reverse order); overlapping calls share one pass. */
+  stopAll(): Promise<void> {
+    return this.#shared("stop", () => this.#stopAll());
+  }
+
+  /** Stops then destroys every script; overlapping calls share one pass. */
+  destroyAll(): Promise<void> {
+    return this.#shared("destroy", () => this.#destroyAll());
+  }
+
+  #shared(pass: "start" | "stop" | "destroy", run: () => Promise<void>): Promise<void> {
+    const running = this.#inFlight.get(pass);
+    if (running) return running;
+    const next = run().finally(() => {
+      this.#inFlight.delete(pass);
+    });
+    this.#inFlight.set(pass, next);
+    return next;
+  }
+
+  async #startAll(): Promise<void> {
     for (const entry of this.#ordered()) {
       if (entry.lifecycleState === "error") continue;
 
@@ -283,7 +313,7 @@ export class ScriptHost {
     }
   }
 
-  async stopAll(): Promise<void> {
+  async #stopAll(): Promise<void> {
     for (const entry of this.#ordered().reverse()) {
       // onStop is applicable if onStart successfully completed and onStop has not yet executed
       if (entry.started && !entry.stopped) {
@@ -308,7 +338,7 @@ export class ScriptHost {
     }
   }
 
-  async destroyAll(): Promise<void> {
+  async #destroyAll(): Promise<void> {
     await this.stopAll();
     for (const entry of this.#ordered().reverse()) {
       // onDestroy is applicable if onCreate successfully completed and onDestroy has not yet executed
