@@ -330,12 +330,11 @@ export class RapierPhysicsWorld {
     }
     assertFiniteVec3(desired, "moveCharacter desired");
 
-    // Ensure spatial acceleration structure is populated before querying
-    if (this.#fixedSteps === 0) {
-      this.world.step();
-      this.#fixedSteps++;
-      this.#queriesStale = false;
-    }
+    // The character controller queries Rapier's broad phase, which is only rebuilt inside step().
+    // Refresh it (zero-timestep, no integration, no fixedSteps change) whenever anything moved,
+    // appeared or vanished since the last step - not just before the very first step. A real
+    // step here would also advance every other body and make a "move" non-deterministic.
+    this.#refreshQueries();
 
     let controller = this.#controllers.get(id);
     if (!controller) {
