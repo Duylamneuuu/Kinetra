@@ -8,6 +8,7 @@ import {
   AssetDatabase,
   AssetReimportService,
   GlbDirectImporter,
+  PassthroughImporter,
   createSyntheticGlb,
   hashBytes,
   importFingerprint,
@@ -130,7 +131,7 @@ test("registerImporter makes a previously failing asset importable, and getImpor
   assert.equal(service.getImporter("raw"), undefined);
   assert.ok(service.getImporter("glb") instanceof GlbDirectImporter);
   assert.ok(service.getImporter("direct-glb") instanceof GlbDirectImporter);
-  assert.ok(service.getImporter("passthrough") instanceof GlbDirectImporter);
+  assert.ok(service.getImporter("passthrough") instanceof PassthroughImporter);
   assert.equal((await service.reimport("hero")).status, "failed");
   service.registerImporter("raw", rawImporter);
   assert.equal(service.getImporter("raw"), rawImporter);
@@ -141,7 +142,7 @@ test("a caller-supplied importer can replace a built-in one", () => {
   const custom: AssetImporter = { import: async (c) => ({ artifactBytes: c.sourceBytes }) };
   const { service } = setup(makeRecord(), new Map([["glb", custom]]));
   assert.equal(service.getImporter("glb"), custom);
-  assert.ok(service.getImporter("passthrough") instanceof GlbDirectImporter);
+  assert.ok(service.getImporter("passthrough") instanceof PassthroughImporter);
 });
 
 test("a throwing importer removes its temp file and keeps the last known-good artifact", async () => {
