@@ -129,7 +129,7 @@ const nodeFileSystem: FileSystemAdapter = {
  * World-space bounding-box size of every scene in a GLB, or undefined when it cannot be measured
  * (unparseable body, no geometry, non-finite positions). Never throws.
  */
-async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, number, number] | undefined> {
+export async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, number, number] | undefined> {
   try {
     const document = await new NodeIO().readBinary(bytes);
     const min = [Infinity, Infinity, Infinity];
