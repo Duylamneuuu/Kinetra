@@ -152,10 +152,10 @@ test("component.patch merges shallowly: a nested object is replaced, not deep-me
   const bus = new CommandBus(project());
   const id = stableId("entity", "shallow");
   bus.execute(create(id));
-  bus.executeUnknown(patch(id, "Transform", { position: { x: 1, y: 2 }, visible: true }));
-  bus.executeUnknown(patch(id, "Transform", { position: { x: 9 } }));
+  bus.executeUnknown(patch(id, "Custom", { position: { x: 1, y: 2 }, visible: true }));
+  bus.executeUnknown(patch(id, "Custom", { position: { x: 9 } }));
 
-  const transform = bus.snapshot().project.scenes[0]!.entities[0]!.components["Transform"];
+  const transform = bus.snapshot().project.scenes[0]!.entities[0]!.components["Custom"];
   assert.deepEqual(transform, { position: { x: 9 }, visible: true });
 });
 
