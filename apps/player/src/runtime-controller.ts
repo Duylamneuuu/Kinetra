@@ -34,7 +34,9 @@ import {
   type PreparedScriptRestore,
 } from "@kinetra/core";
 import { assertFiniteVec3, translatedPosition } from "./finite-vec3.js";
+import { decidePlayerInput } from "./input-event.js";
 import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
+import { KeyTracker } from "./key-tracker.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
@@ -381,7 +383,10 @@ export class PlayerRuntimeController {
   #paused = false;
   #shellMode: GameShellMode = "mainMenu";
   #gamepadProvider: GamepadSnapshotProvider = new BrowserGamepadSnapshotProvider();
+  #keyTracker: KeyTracker | undefined;
   #activeKeys = new Set<string>();
+  #resizeListener: (() => void) | undefined;
+  #rootMotionUnsupportedLogged = new Set<string>();
   #lastPausePressed = false;
   readonly captureMode: "performance" | "visual";
   readonly preserveDrawingBuffer: boolean;
@@ -430,15 +435,22 @@ export class PlayerRuntimeController {
 
     this.#camera = this.#createFallbackCamera();
     if (typeof window !== "undefined") {
-      window.addEventListener("resize", () => this.resize());
-      window.addEventListener("keydown", (e) => {
-        this.#activeKeys.add(e.code);
-      });
-      window.addEventListener("keyup", (e) => {
-        this.#activeKeys.delete(e.code);
-      });
+      this.#resizeListener = () => this.resize();
+      window.addEventListener("resize", this.#resizeListener);
+      this.#keyTracker = new KeyTracker(window);
+      this.#activeKeys = this.#keyTracker.keys;
     }
     this.resize();
+  }
+
+  /** Removes the window listeners this controller installed. Idempotent. */
+  dispose(): void {
+    if (this.#resizeListener && typeof window !== "undefined") {
+      window.removeEventListener("resize", this.#resizeListener);
+    }
+    this.#resizeListener = undefined;
+    this.#keyTracker?.dispose();
+    this.#keyTracker = undefined;
   }
 
   pause(): void {
@@ -910,6 +922,7 @@ export class PlayerRuntimeController {
     await this.#scripts.destroyAll();
     this.#scripts = new ScriptHost();
     this.#unresolvedScripts.clear();
+    this.#rootMotionUnsupportedLogged.clear();
     this.#inputRouter.clearSemanticActions();
 
     if (this.#physics) {
@@ -2277,21 +2290,25 @@ export class PlayerRuntimeController {
       return;
     }
 
-    if (this.#paused) {
+    const decision = decidePlayerInput(event, this.#paused);
+    if (decision.kind === "blocked") {
       this.#log("debug", "runtime.inputBlockedWhilePaused", {
         action: event.action,
         phase: event.phase,
       });
       return;
     }
-
-    const rawValue = event.value;
-    const magnitude =
-      typeof rawValue === "number"
-        ? rawValue
-        : Array.isArray(rawValue) && typeof rawValue[0] === "number"
-          ? rawValue[0]
-          : 1;
+    if (decision.kind === "release-only") {
+      // A release must still land while paused, otherwise the action stays "pressed" after resume.
+      this.#inputRouter.setSemanticAction(event.action, "release");
+      this.#log("debug", "runtime.input", {
+        action: event.action,
+        phase: event.phase,
+        isPaused: true,
+      });
+      return;
+    }
+    const magnitude = decision.magnitude;
 
     this.#inputRouter.setSemanticAction(event.action, event.phase, magnitude);
 
@@ -2360,7 +2377,11 @@ export class PlayerRuntimeController {
         const code = "animation.rootMotion.physicsUnsupported";
         const message = `Entity "${entityId}" does not have a character controller in physics world`;
         const hint = "Add a CharacterBody and Collider component to the entity before enabling root motion";
-        this.#log("error", code, { entityId, error: message, hint });
+        // Once per entity: frame() runs this every tick and must not flood the log.
+        if (!this.#rootMotionUnsupportedLogged.has(entityId)) {
+          this.#rootMotionUnsupportedLogged.add(entityId);
+          this.#log("error", code, { entityId, error: message, hint });
+        }
         continue;
       }
 
@@ -2592,6 +2613,8 @@ export class PlayerRuntimeController {
 
       if (!this.#paused) {
         this.#scripts.update(deltaSeconds);
+        // Same order as step(): root motion is applied before physics advances.
+        this.#updateRootMotion(deltaSeconds);
         if (this.#physics) {
           this.#physics.advance(deltaSeconds);
           this.#syncTransformsFromPhysics();
