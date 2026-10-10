@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
-
 import type { ProjectDocument } from "@kinetra/project-model";
 
 import { orbRunAudio, startOrbRunSimulation, summarizeOrbRun, type OrbRunSummary } from "./game.js";
 import { ORB_RUN_ACTION } from "./ids.js";
 import type { OrbRunStatus } from "./scripts.js";
+import { sha256Hex } from "./sha256.js";
 import type { HeadlessSceneSimulation } from "./simulation.js";
 
 /**
@@ -89,6 +88,20 @@ function canonical(value: unknown): unknown {
  * retuning a locomotion curve does not invalidate recorded runs.
  */
 export function digestOrbRunState(simulation: HeadlessSceneSimulation): string {
+  const cached = DIGEST_CACHE.get(simulation);
+  if (cached && cached.revision === simulation.stateRevision) return cached.digest;
+  const digest = computeOrbRunDigest(simulation);
+  DIGEST_CACHE.set(simulation, { revision: simulation.stateRevision, digest });
+  return digest;
+}
+
+/**
+ * Digest of the last observed state per simulation. `stateRevision` moves on every step and every restore, so a repeated
+ * query (the acceptance probe asks for it on each `state` read) costs O(1) instead of re-hashing the whole event log.
+ */
+const DIGEST_CACHE = new WeakMap<HeadlessSceneSimulation, { revision: number; digest: string }>();
+
+function computeOrbRunDigest(simulation: HeadlessSceneSimulation): string {
   const summary = summarizeOrbRun(simulation);
   const scripts = simulation
     .scriptStates()
@@ -105,7 +118,7 @@ export function digestOrbRunState(simulation: HeadlessSceneSimulation): string {
       .cues()
       .map((cue) => ({ assetId: cue.assetId, bus: cue.bus, step: cue.step, gain: cue.gain })),
   };
-  return createHash("sha256").update(JSON.stringify(canonical(payload))).digest("hex");
+  return sha256Hex(JSON.stringify(canonical(payload)));
 }
 
 function sameActions(a: Record<string, number>, b: Record<string, number>): boolean {

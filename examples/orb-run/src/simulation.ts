@@ -89,6 +89,7 @@ export class HeadlessSceneSimulation {
   #logs: SimulationLogEntry[] = [];
   #events: SimulationEvent[] = [];
   #step = 0;
+  #revision = 0;
   #started = false;
   #stepListeners = new Set<(simulation: HeadlessSceneSimulation) => void>();
 
@@ -140,6 +141,14 @@ export class HeadlessSceneSimulation {
     return this.#step;
   }
 
+  /**
+   * Increases whenever gameplay-visible state may have changed: every fixed step and every restore. Equal revisions
+   * mean an identical state, so derived values (the state digest) can be cached on it.
+   */
+  get stateRevision(): number {
+    return this.#revision;
+  }
+
   get elapsedSeconds(): number {
     return this.#step * this.fixedDeltaSeconds;
   }
@@ -174,6 +183,7 @@ export class HeadlessSceneSimulation {
     }
     for (let index = 0; index < steps; index += 1) {
       this.#step += 1;
+      this.#revision += 1;
       this.#host.update(this.fixedDeltaSeconds);
       for (const listener of [...this.#stepListeners]) listener(this);
     }
@@ -240,7 +250,9 @@ export class HeadlessSceneSimulation {
     if (!validation.valid) {
       throw new Error(validation.error ?? `Script "${entityId}" rejected restore state`);
     }
+    this.#revision += 1;
     await this.#host.restoreScriptState(entityId, state);
+    this.#revision += 1;
   }
 
   restorePosition(entityId: string, position: Vec3): void {
@@ -248,6 +260,7 @@ export class HeadlessSceneSimulation {
       throw new Error(`Entity "${entityId}" has no runtime transform`);
     }
     this.#positions.set(entityId, [...position]);
+    this.#revision += 1;
   }
 
   /** Set the step counter when resuming a saved run (only before the first advance). */
@@ -259,6 +272,7 @@ export class HeadlessSceneSimulation {
       throw new Error("restoreStep is only allowed on a fresh simulation");
     }
     this.#step = step;
+    this.#revision += 1;
   }
 
   async dispose(): Promise<void> {
