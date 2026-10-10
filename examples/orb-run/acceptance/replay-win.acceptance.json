@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.replay-win",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    {
+      "type": "runtime.start",
+      "sceneId": "scene_12q1bczg4xp8m"
+    },
+    {
+      "type": "input",
+      "action": "player.moveRight",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "05309d79446981f68818186cdd83ee995421511514c455285f05df4a0811a57a"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 60
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "8af0394f845993a24c93394a7c6c745afed6bdf7273806931722b9da2b9f9203"
+    },
+    {
+      "type": "input",
+      "action": "player.moveRight",
+      "phase": "release"
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 90
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "ff90fe7e084d08e81ce7f5bad332b6328ab1a479cd9a7cbeba8030b838cd14a9"
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "release"
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 120
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "551e46aa5ca6008f60ab6dcf126a6ca46bcb4978f420b11e58bee3916e0d49e2"
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "release"
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 150
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "067f047b21ed442bcd89280533c7e050d70fa6d446188c0bdb5be004ce5de916"
+    },
+    {
+      "type": "input",
+      "action": "player.moveLeft",
+      "phase": "release"
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 180
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "07b07d84a50d0d658630a8657db05dd9784980cc3e3bf89ccc09bc4b519af995"
+    },
+    {
+      "type": "input",
+      "action": "player.moveBackward",
+      "phase": "release"
+    },
+    {
+      "type": "input",
+      "action": "player.moveRight",
+      "phase": "press",
+      "value": 1
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 210
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "152e24443bacb244b5f430b26903e5cf9891c80222ff9c2aab65484076c03ef2"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 23
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 233
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "45d5075e62bef03681b3e1a53209047190d263d51d4209b0de73aec0681a249c"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.status",
+      "expected": "won"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.collectedCount",
+      "expected": 3
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.totalOrbs",
+      "expected": 3
+    },
+    {
+      "type": "runtime.stop"
+    }
+  ]
+}

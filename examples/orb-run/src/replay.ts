@@ -20,6 +20,8 @@ export const ORB_RUN_REPLAY_SCHEMA_VERSION = 1;
 /** A replay is a short playtest, not a soak test: 100 minutes at 60 Hz. */
 export const ORB_RUN_REPLAY_MAX_STEPS = 360_000;
 export const ORB_RUN_DEFAULT_CHECKPOINT_EVERY = 30;
+/** `playOrbRunReplay` hands control back to the event loop after this many steps, so a long replay never starves its host. */
+export const ORB_RUN_REPLAY_YIELD_EVERY_STEPS = 2048;
 
 export interface OrbRunReplayInput {
   /** 1-based step the held set applies from (the first step that runs with it). */
@@ -45,7 +47,13 @@ export interface OrbRunReplay {
   outcome: { status: OrbRunStatus; collectedCount: number; totalOrbs: number };
 }
 
-export type OrbRunReplayErrorCode = "invalid_replay" | "step_mismatch" | "recorder_not_fresh" | "unknown_action";
+export type OrbRunReplayErrorCode =
+  | "invalid_replay"
+  | "step_mismatch"
+  | "recorder_not_fresh"
+  | "unknown_action"
+  | "replay_too_long"
+  | "aborted";
 
 export class OrbRunReplayError extends Error {
   readonly code: OrbRunReplayErrorCode;
@@ -76,7 +84,7 @@ function canonical(value: unknown): unknown {
 
 /**
  * Stable SHA-256 of everything gameplay decided so far: step, run summary, the
- * runtime positions, every script's state, the event log and the audio cues.
+ * runtime position of every entity, every script's state, the event log and the audio cues.
  * Rendering-side derivations (animation poses, HUD) are *not* in it, so
  * retuning a locomotion curve does not invalidate recorded runs.
  */
@@ -86,11 +94,8 @@ export function digestOrbRunState(simulation: HeadlessSceneSimulation): string {
     .scriptStates()
     .map((state) => ({ entityId: state.entityId, scriptId: state.scriptId, state: state.state ?? null }))
     .sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0));
-  const positions: Record<string, number[]> = {};
-  for (const state of scripts) {
-    const position = simulation.getPosition(state.entityId);
-    if (position) positions[state.entityId] = position;
-  }
+  // Every entity with a runtime position, not only the scripted ones: a moved prop or camera is gameplay-visible too.
+  const positions = simulation.positions();
   const payload = {
     summary,
     scripts,
@@ -288,12 +293,35 @@ export interface OrbRunReplayResult {
   finalDigest: string;
 }
 
-/** Plays a replay on a fresh game and checks it against its own checkpoints. Untrusted input is parsed strictly first. */
-export async function playOrbRunReplay(
-  input: unknown,
-  options: { project?: ProjectDocument; onStep?: (simulation: HeadlessSceneSimulation) => void } = {},
-): Promise<OrbRunReplayResult> {
+export interface PlayOrbRunReplayOptions {
+  project?: ProjectDocument;
+  onStep?: (simulation: HeadlessSceneSimulation) => void;
+  /** Refuse (`replay_too_long`, before any step runs) a replay with more steps than this; defaults to `ORB_RUN_REPLAY_MAX_STEPS`. */
+  maxSteps?: number;
+  /** Stops the playback at the next yield point (`aborted`) and disposes the simulation. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Plays a replay on a fresh game and checks it against its own checkpoints. Untrusted input is parsed strictly first.
+ * Playback is asynchronous: it yields to the event loop every `ORB_RUN_REPLAY_YIELD_EVERY_STEPS` steps, so even a
+ * maximum-length replay (360k steps) cannot block a host for the whole run and can be cancelled with `signal`.
+ */
+export async function playOrbRunReplay(input: unknown, options: PlayOrbRunReplayOptions = {}): Promise<OrbRunReplayResult> {
   const replay = parseOrbRunReplay(input);
+  const maxSteps = options.maxSteps ?? ORB_RUN_REPLAY_MAX_STEPS;
+  if (!Number.isInteger(maxSteps) || maxSteps < 1) {
+    throw new RangeError(`maxSteps must be an integer >= 1, got ${String(maxSteps)}`);
+  }
+  if (replay.totalSteps > maxSteps) {
+    throw new OrbRunReplayError("replay_too_long", "$.totalSteps", `${replay.totalSteps} steps exceeds the allowed ${maxSteps}`);
+  }
+  const abortIfRequested = (): void => {
+    if (options.signal?.aborted) {
+      throw new OrbRunReplayError("aborted", "$", "replay playback was aborted");
+    }
+  };
+  abortIfRequested();
   const simulation = await startOrbRunSimulation(options.project);
   try {
     if (Math.abs(simulation.fixedDeltaSeconds - replay.fixedDeltaSeconds) > 1e-12) {
@@ -315,6 +343,10 @@ export async function playOrbRunReplay(
       }
       simulation.advance(1);
       options.onStep?.(simulation);
+      if (step % ORB_RUN_REPLAY_YIELD_EVERY_STEPS === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        abortIfRequested();
+      }
       const expected = checkpoints.get(step);
       if (expected !== undefined && divergence === undefined) {
         const actual = digestOrbRunState(simulation);

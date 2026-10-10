@@ -44,35 +44,35 @@
   "checkpoints": [
     {
       "step": 30,
-      "digest": "4e0c3d3140d76c209dc97ca8d7a6f94927de9a6e04249cc697c26bdfd3379e62"
+      "digest": "05309d79446981f68818186cdd83ee995421511514c455285f05df4a0811a57a"
     },
     {
       "step": 60,
-      "digest": "9be9737ffb8d8f28686778745aedbcd7136fd3da498fd3d3d12a118bd6acd873"
+      "digest": "8af0394f845993a24c93394a7c6c745afed6bdf7273806931722b9da2b9f9203"
     },
     {
       "step": 90,
-      "digest": "c19d3ad92b76b5df018cb6021354864a9c61bb07063282f0793a7cb557169fae"
+      "digest": "ff90fe7e084d08e81ce7f5bad332b6328ab1a479cd9a7cbeba8030b838cd14a9"
     },
     {
       "step": 120,
-      "digest": "7abd094b506228b062b18c80858a46ced493806acbc85f521f3e882c2f77a089"
+      "digest": "551e46aa5ca6008f60ab6dcf126a6ca46bcb4978f420b11e58bee3916e0d49e2"
     },
     {
       "step": 150,
-      "digest": "6194106642f34fedf7154abd747fec5adfabf8f1979c71ec4fb7475d0da8ffc9"
+      "digest": "067f047b21ed442bcd89280533c7e050d70fa6d446188c0bdb5be004ce5de916"
     },
     {
       "step": 180,
-      "digest": "ff8c212e386f40bb04df74c00192eb92c80d11857bee4e32b725ffadebf70e4e"
+      "digest": "07b07d84a50d0d658630a8657db05dd9784980cc3e3bf89ccc09bc4b519af995"
     },
     {
       "step": 210,
-      "digest": "d4cff59242c8bd077367ba6b1360b1a525d3cec5503f5f22bc6f9589570622f2"
+      "digest": "152e24443bacb244b5f430b26903e5cf9891c80222ff9c2aab65484076c03ef2"
     },
     {
       "step": 233,
-      "digest": "1ae4e9ea706ba40789db9dc1a591bb1418584090a1dde686345b95a59f45f0ac"
+      "digest": "45d5075e62bef03681b3e1a53209047190d263d51d4209b0de73aec0681a249c"
     }
   ],
   "outcome": {

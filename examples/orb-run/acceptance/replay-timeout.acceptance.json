@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.replay-timeout",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    {
+      "type": "runtime.start",
+      "sceneId": "scene_12q1bczg4xp8m"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "ac620bc118e41f8073e9d66b8346850532e20adc110c7e58a40fedad4c1ddcb5"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 60
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "b18856bd860d0671832170981ca72e3a2488ecde0a2aa97c2e2b2fdf33394cd6"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 90
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "3ceae4e574c80db68662340c58136a92c6392d0001d178b0934d9ef209e9b050"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 120
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "4a3b0bc612577eb424417c4ca9214fad104b00c051bb3972a85ab92393eac334"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 150
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "da4376a9de6a90ca43aa7f43a15e03e47161030eba8a5593dda1828788faa422"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 180
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "23ec4af1f7976c7ae4ffb3d3bad682bee4c4fd3b54ee053e7a4fe8e2465e1821"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 210
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "12e8e200c8cc9cacf66ec2a89c893090c455a3b69fafe5fc8df8c8217d5126dc"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 240
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "4882c4844df2e44e00debb8e663a7fd2d5c66406a857429eb990906cb43af326"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 270
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "227184ef2bce29fcf27a440b4b806d14b5140c1df42b21c14c591462e1d1188c"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 300
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "f77e5a0c944ace65c8b29d51aa041dc6d563279a7fd2b45a1a3ebf0fd6b035fe"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 330
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "133b66ca8d5714853f7f3440dde567e1f8c5b49eb28349ee7c1dcc9b11bceed2"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 360
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "c4e498de6038d8aa6d26b30bcf09620a8baac86af779366a6493743c0f5991b3"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 390
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "a1b09a801a167f1ed0b84e923d9058f2283072424ecca470a17dc1a3b100ada9"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 420
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "916b609f738a30365b2a94714c48adec4f88d5050336e5fd67cac5a0d3dffbd7"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 450
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "10a9d3308acfdb2de28facbd0c75ca33c6c43dbf151aba4bafd13e738cbf9f6f"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 480
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "a4a982aaf713fccfe2134245072c3913829b36d23cd15c50132b571f15e9e622"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 510
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "e9478023e0090f65f48778e7b80655537e552987f48a136c4e6e5b1f6a4f0866"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 540
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "0b083fc669b40fb58aee8e266d029b4ec27a1071442880e07bb4e50c40a20834"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 570
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "55ff4ab3333d236b84a766779cc444b5e80cc1f8a52df803d1fd64e7e9267739"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 30
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 600
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "054484731713a8c692494dc4f80b1f1854e4c94c1dfb0f899dff9552a23d9848"
+    },
+    {
+      "type": "runtime.step",
+      "steps": 10
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.step",
+      "expected": 610
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.replay.digest",
+      "expected": "ef7155a9c7ac108e20425c72b2c035ea6ea82df899388d88ec0ad5d27218055b"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.status",
+      "expected": "lost"
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.collectedCount",
+      "expected": 0
+    },
+    {
+      "type": "assert.equal",
+      "path": "state.game.totalOrbs",
+      "expected": 3
+    },
+    {
+      "type": "runtime.stop"
+    }
+  ]
+}

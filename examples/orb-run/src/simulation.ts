@@ -204,6 +204,13 @@ export class HeadlessSceneSimulation {
     return position ? [...position] : undefined;
   }
 
+  /** Every runtime position (all entities with a transform, scripted or not), keyed by entity id in sorted order. */
+  positions(): Record<string, Vec3> {
+    const out: Record<string, Vec3> = {};
+    for (const id of [...this.#positions.keys()].sort()) out[id] = [...this.#positions.get(id)!];
+    return out;
+  }
+
   /** Authored (read-only) component data for an entity, as a deep copy. */
   getAuthoredComponent(entityId: string, component: string): JsonValue | undefined {
     const value = this.#entities.get(entityId)?.components[component];
