@@ -111,11 +111,11 @@ function validateEntity(
     });
   }
 
-  if (!isRecord(entity.components)) {
+  if (!isPlainObject(entity.components)) {
     issues.push({
       path: `${path}.components`,
       code: "entity.components.invalid",
-      message: "Entity components must be an object",
+      message: "Entity components must be a plain object",
     });
   } else {
     for (const [componentName, componentValue] of Object.entries(entity.components)) {
