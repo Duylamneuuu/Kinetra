@@ -68,3 +68,36 @@ test("maxHistory must be a positive integer or Infinity", () => {
   assert.doesNotThrow(() => new EditorSession(bus, { maxHistory: Infinity }));
   assert.doesNotThrow(() => new EditorSession(bus, { maxHistory: 1 }));
 });
+
+test("by default the editor follows a bus built with a smaller undo depth", () => {
+  const bus = new CommandBus(fixture(), 0, { maxUndoDepth: 3 });
+  const editor = new EditorSession(bus);
+  for (let index = 1; index <= 5; index += 1) {
+    editor.patchComponent("root", "Stats", { hp: index });
+  }
+  let undone = 0;
+  while (editor.canUndo) {
+    // Never an UNDO_EXPIRED: canUndo only claims edits the bus still remembers.
+    editor.undo();
+    undone += 1;
+    assert.ok(undone <= 5, "undo must terminate");
+  }
+  assert.equal(undone, 3);
+  assert.equal(hp(bus), 2);
+});
+
+test("an unbounded bus gives an unbounded editor history by default", () => {
+  const bus = new CommandBus(fixture(), 0, { maxUndoDepth: Infinity });
+  const editor = new EditorSession(bus);
+  const edits = DEFAULT_MAX_UNDO_DEPTH + 20;
+  for (let index = 1; index <= edits; index += 1) {
+    editor.patchComponent("root", "Stats", { hp: index });
+  }
+  let undone = 0;
+  while (editor.canUndo) {
+    editor.undo();
+    undone += 1;
+  }
+  assert.equal(undone, edits);
+  assert.equal(hp(bus), 0);
+});

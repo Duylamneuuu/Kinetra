@@ -8,7 +8,7 @@ Every change to a project (from the editor, a script or an AI agent over MCP) is
 
 | Export | Kind | What it does |
 | --- | --- | --- |
-| `CommandBus` | class | Owns a validated `ProjectDocument` and its revision (`new CommandBus(project, initialRevision = 0, options?)`). `options.maxUndoDepth` (default 100) and `options.maxEventLogLength` (default 10000) bound the retained history; `Infinity` opts out. |
+| `CommandBus` | class | Owns a validated `ProjectDocument` and its revision (`new CommandBus(project, initialRevision = 0, options?)`). `options.maxUndoDepth` (default 100) and `options.maxEventLogLength` (default 10000) bound the retained history; `Infinity` opts out; `bus.maxUndoDepth` reads the bound back. |
 | `bus.execute(command)` | method | Runs one typed command as a one-command transaction. Returns a `CommandResult`. |
 | `bus.executeUnknown(input)` | method | Same, but first parses untrusted JSON with `parseEngineCommand` (what MCP tools use). |
 | `bus.executeTransaction(commands, options?)` | method | All-or-nothing batch: one revision bump, one undo token. |
