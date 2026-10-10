@@ -4,7 +4,12 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
-import { parseBridgeLine, type BridgeRequest } from "./bridge-protocol.js";
+import {
+  normalizeRendererResponse,
+  parseBridgeLine,
+  serializeBridgeMessage,
+  type BridgeRequest,
+} from "./bridge-protocol.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,13 +56,6 @@ interface BridgeResponse {
   error?: string;
 }
 
-interface RendererResponse {
-  id: string;
-  ok: boolean;
-  result?: unknown;
-  error?: string;
-}
-
 interface PendingRendererRequest {
   resolve(value: unknown): void;
   reject(error: Error): void;
@@ -89,7 +87,9 @@ function maybeEmitBridgeReady(): void {
 }
 
 function bridgeWrite(value: unknown): void {
-  const line = `${JSON.stringify(value)}\n`;
+  // serializeBridgeMessage never throws: an unserialisable result becomes a structured failure
+  // reply instead of an unhandled rejection that leaves the client waiting for its timeout.
+  const line = serializeBridgeMessage(value);
 
   if (bridgeSocket && !bridgeSocket.destroyed) {
     bridgeSocket.write(line, "utf8");
@@ -205,8 +205,15 @@ ipcMain.on("kinetra:runtime:renderer-ready", (event) => {
 
 ipcMain.on(
   "kinetra:runtime:response",
-  (event, response: RendererResponse) => {
+  (event, rawResponse: unknown) => {
     if (event.sender !== mainWindow?.webContents) {
+      return;
+    }
+
+    // A malformed reply must not throw inside the listener (uncaught main-process exception).
+    const response = normalizeRendererResponse(rawResponse);
+    if (!response) {
+      console.error("[bridge] ignored a malformed renderer response");
       return;
     }
 
