@@ -5,11 +5,11 @@ import { serializeProject } from "@kinetra/project-model";
 
 import { createOrbRunAssetsManifest } from "./asset-manifest.js";
 import { createOrbRunProject } from "./authoring.js";
-import { createOrbRunReplays } from "./replay-fixtures.js";
+import { createOrbRunReplayManifest, createOrbRunReplays } from "./replay-fixtures.js";
 
 /**
  * Regenerate `orb-run.kinetra.json` from the authoring plan, `acceptance/assets.acceptance.json` from the content
- * and the golden replays in `acceptance/replays/` from the playtest bot (run after editing the plan, the content or the gameplay).
+ * the golden replays in `acceptance/replays/` from the playtest bot (run after editing the plan, the content or the gameplay).
  */
 const target = fileURLToPath(new URL("../../orb-run.kinetra.json", import.meta.url));
 await writeFile(target, serializeProject(createOrbRunProject()), "utf8");
@@ -25,4 +25,8 @@ for (const [name, replay] of Object.entries(replays)) {
   const replayTarget = fileURLToPath(new URL(`../../acceptance/replays/${name}.replay.json`, import.meta.url));
   await writeFile(replayTarget, `${JSON.stringify(replay, null, 2)}\n`, "utf8");
   console.log(`wrote ${replayTarget}`);
+  const manifestFile = fileURLToPath(new URL(`../../acceptance/replay-${name}.acceptance.json`, import.meta.url));
+  const replayManifest = createOrbRunReplayManifest(replay, `orb-run.replay-${name}`);
+  await writeFile(manifestFile, `${JSON.stringify(replayManifest, null, 2)}\n`, "utf8");
+  console.log(`wrote ${manifestFile}`);
 }
