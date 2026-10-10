@@ -7,6 +7,7 @@ import { createSyntheticWav } from "@kinetra/audio";
 import { AcceptanceRunner, acceptanceManifestSchema, type AcceptanceManifest } from "@kinetra/verification";
 
 import {
+  ORB_RUN_ASSET_FAILURE_LOG_LIMIT,
   ORB_RUN_ASSET_IDS,
   ORB_RUN_AUDIO_ASSET,
   ORB_RUN_MODEL_ASSET,
@@ -85,7 +86,7 @@ test("snapshots are deterministic across probes (fingerprints and hashes include
   assert.deepEqual(await observe(), await observe());
 });
 
-test("an edit registered before runtime.start is already live at the first frame, and survives a restart", async () => {
+test("an edit registered before runtime.start is already live at the first frame; a plain restart begins from the shipped content", async () => {
   const edited = await createOrbRunModelBytes(ORB_RUN_MODEL_ASSET.orb, { color: [0.2, 0.9, 0.2, 1] });
   const report = await new AcceptanceRunner(new OrbRunHeadlessProbe()).run(
     manifest([
@@ -94,12 +95,63 @@ test("an edit registered before runtime.start is already live at the first frame
       { type: "assert.equal", path: `state.assets.byId.${ORB_RUN_MODEL_ASSET.orb}.sourceHash`, expected: hashBytes(edited) },
       { type: "runtime.stop" },
       { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
-      { type: "assert.equal", path: "state.assets.reimportCount", expected: 1 },
+      { type: "assert.equal", path: "state.assets.reimportCount", expected: 0 },
+      { type: "assert.equal", path: `state.assets.byId.${ORB_RUN_MODEL_ASSET.orb}.revision`, expected: 1 },
       { type: "assert.equal", path: "state.game.step", expected: 0 },
       { type: "runtime.stop" },
     ]),
   );
   assert.equal(report.passed, true, firstFailure(report));
+});
+
+test("one probe can run several manifests in a row: asset edits and failures do not leak into the next run (#262)", async () => {
+  const probe = new OrbRunHeadlessProbe();
+  const edited = await createOrbRunModelBytes(ORB_RUN_MODEL_ASSET.orb, { color: [0.2, 0.9, 0.2, 1] });
+  const dirty = await new AcceptanceRunner(probe).run(
+    manifest([
+      { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
+      { type: "asset.register", assetId: ORB_RUN_MODEL_ASSET.orb, dataBase64: b64(edited) },
+      { type: "assert.equal", path: "state.assets.reimportCount", expected: 1 },
+      { type: "asset.register", assetId: ORB_RUN_MODEL_ASSET.player, dataBase64: b64(new Uint8Array([1, 2, 3, 4])) },
+      { type: "assert.equal", path: "state.assets.failedCount", expected: 1 },
+      { type: "runtime.stop" },
+    ]),
+  );
+  assert.equal(dirty.passed, true, firstFailure(dirty));
+
+  // The pinned manifest of slice 9 expects revision 1 everywhere; it only passes on pristine content.
+  const url = new URL("../../acceptance/assets.acceptance.json", import.meta.url);
+  const pinned = acceptanceManifestSchema.parse(JSON.parse(await readFile(url, "utf8")));
+  const clean = await new AcceptanceRunner(probe).run(pinned);
+  assert.equal(clean.passed, true, firstFailure(clean));
+
+  const pristine = await new AcceptanceRunner(probe).run(
+    manifest([
+      { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
+      { type: "assert.equal", path: "state.assets.reimportCount", expected: 0 },
+      { type: "assert.equal", path: "state.assets.failedCount", expected: 0 },
+      { type: "runtime.stop" },
+    ]),
+  );
+  assert.equal(pristine.passed, true, firstFailure(pristine));
+  // The first manifest's failure warning is still history on the probe (like simulation logs), not state.
+  const warnings = (await probe.logs()).filter((log) => log.message === "asset.reimportFailed");
+  assert.ok(warnings.length >= 1);
+  await probe.close();
+});
+
+test("catalog: the failure log keeps only the most recent entries", async () => {
+  const catalog = await OrbRunAssetCatalog.create();
+  const id = ORB_RUN_MODEL_ASSET.exitPad;
+  const total = ORB_RUN_ASSET_FAILURE_LOG_LIMIT + 5;
+  for (let i = 0; i < total; i += 1) await catalog.replaceSource(id, new Uint8Array([i % 256, 1, 2, 3]));
+  const failures = catalog.failures();
+  assert.equal(failures.length, ORB_RUN_ASSET_FAILURE_LOG_LIMIT);
+  assert.equal(catalog.state().failedCount, 1, "the asset is still reported failed");
+  const good = await createOrbRunModelBytes(id);
+  await catalog.replaceSource(id, good);
+  assert.equal(catalog.state().failedCount, 0);
+  assert.equal(catalog.failures().length, ORB_RUN_ASSET_FAILURE_LOG_LIMIT);
 });
 
 test("registering the unchanged source is a no-op: no new revision, no failure", async () => {
