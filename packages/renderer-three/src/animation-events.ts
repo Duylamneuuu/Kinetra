@@ -81,6 +81,7 @@ export class AnimationEventDispatcher {
   #listeners = new Set<AnimationEventListener>();
   #log: RuntimeAnimationEvent[] = [];
   #pending: RuntimeAnimationEvent[] = [];
+  #flushing = false;
   #diagnostics: AnimationEventDiagnostic[] = [];
   #diagnosticKeys = new Set<string>();
   #sequence = 0;
@@ -214,26 +215,38 @@ export class AnimationEventDispatcher {
   /**
    * Delivers queued events to the log and listeners. Listener exceptions are caught so a bad
    * handler can never stall the animation loop. Reentrant-safe: a listener that triggers another
-   * step only delivers the events that step queued.
+   * step queues that step's events, and the delivery already in progress hands them out after the
+   * current batch, so listeners and the log always see strictly increasing sequence numbers.
    */
   flush(): void {
-    if (this.#pending.length === 0) return;
-    const batch = this.#pending;
-    this.#pending = [];
-    for (const event of batch) {
-      this.#log.push(event);
-      this.#stats.fired += 1;
-      if (this.#log.length > MAX_ANIMATION_EVENT_LOG) {
-        this.#log.shift();
-        this.#stats.evicted += 1;
-      }
-      for (const listener of Array.from(this.#listeners)) {
-        try {
-          listener({ ...event, payload: structuredClone(event.payload) });
-        } catch {
-          this.#stats.listenerErrors += 1;
+    // A listener may step the animation again, which calls flush from inside this one. Delivering
+    // the nested step's events right there would overtake the rest of the batch in progress
+    // (log and listeners would see sequence 1, 3, 4, 2). The outer call owns delivery and drains
+    // what the nested step queued once the batch in progress is done, so order stays the firing order.
+    if (this.#flushing) return;
+    this.#flushing = true;
+    try {
+      while (this.#pending.length > 0) {
+        const batch = this.#pending;
+        this.#pending = [];
+        for (const event of batch) {
+          this.#log.push(event);
+          this.#stats.fired += 1;
+          if (this.#log.length > MAX_ANIMATION_EVENT_LOG) {
+            this.#log.shift();
+            this.#stats.evicted += 1;
+          }
+          for (const listener of Array.from(this.#listeners)) {
+            try {
+              listener({ ...event, payload: structuredClone(event.payload) });
+            } catch {
+              this.#stats.listenerErrors += 1;
+            }
+          }
         }
       }
+    } finally {
+      this.#flushing = false;
     }
   }
 
