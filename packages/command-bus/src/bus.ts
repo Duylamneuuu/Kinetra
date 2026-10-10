@@ -324,7 +324,12 @@ function assertResultingProjectValid(working: ProjectDocument): void {
       .map((issue) => `${issue.path}: ${issue.message}`)
       .join("; ");
     const more = error.issues.length > MAX_REPORTED_ISSUES ? ` (+${error.issues.length - MAX_REPORTED_ISSUES} more)` : "";
-    throw new CommandError("INVALID_COMMAND", `Command would produce an invalid project: ${shown}${more}`);
+    throw new CommandError(
+      "INVALID_COMMAND",
+      `Command would produce an invalid project: ${shown}${more}`,
+      undefined,
+      error.issues.map((issue) => ({ ...issue })),
+    );
   }
 }
 

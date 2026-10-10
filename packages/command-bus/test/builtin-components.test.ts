@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  ProjectValidationError,
   stableId,
   type ProjectDocument,
 } from "@kinetra/project-model";
 
-import { CommandBus, type EngineCommand } from "../src/index.js";
+import { CommandBus, CommandError, type EngineCommand } from "../src/index.js";
 
 const sceneId = stableId("scene", "builtin");
 
@@ -40,10 +39,12 @@ function issueCodes(fn: () => unknown): string[] {
   try {
     fn();
   } catch (error) {
-    assert.ok(error instanceof ProjectValidationError, `unexpected error ${String(error)}`);
+    assert.ok(error instanceof CommandError, `unexpected error ${String(error)}`);
+    assert.equal(error.code, "INVALID_COMMAND");
+    assert.ok(error.issues, "INVALID_COMMAND from a schema failure carries its issues");
     return error.issues.map((issue) => issue.code);
   }
-  assert.fail("expected a ProjectValidationError");
+  assert.fail("expected a CommandError");
 }
 
 test("entity.create with an unsupported Primitive.kind is rejected and leaves the revision unchanged", () => {

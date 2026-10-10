@@ -67,6 +67,26 @@ test("a patch that would make the project invalid is a structured INVALID_COMMAN
   assert.equal(bus.eventLog().length, eventsBefore, "no event logged");
 });
 
+test("the error carries every issue (path + stable code) for callers that branch on them", () => {
+  const bus = seeded();
+  const error = expectInvalidCommand(
+    () => bus.executeUnknown(patch({ when: new Date(0) })),
+    "issues",
+  );
+  assert.ok(error.issues && error.issues.length >= 1, "issues attached");
+  for (const issue of error.issues ?? []) {
+    assert.equal(typeof issue.path, "string");
+    assert.equal(typeof issue.code, "string");
+    assert.equal(typeof issue.message, "string");
+  }
+  assert.ok(error.issues?.some((issue) => issue.path.includes("components.C")));
+  // Other bus errors carry no issues.
+  assert.throws(
+    () => bus.executeUnknown({ requestId: "x", command: "nope", payload: {} }),
+    (e: unknown) => e instanceof CommandError && e.issues === undefined,
+  );
+});
+
 test("the issue list in the message is capped at three and says how many more", () => {
   const bus = new CommandBus(project());
   const ids = [1, 2, 3, 4, 5].map((n) => stableId("entity", `cap-${n}`));
