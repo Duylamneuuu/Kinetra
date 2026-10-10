@@ -89,7 +89,11 @@ export class JsonDocumentStore<T>{
   }
 
   async save(key:string,value:T):Promise<void>{
-    await this.storage.set(`${this.prefix}:${key}`,JSON.stringify(value));
+    // JSON.stringify returns undefined (not a string) for undefined/function/symbol values;
+    // storing that would corrupt the slot or fail later inside a storage backend.
+    const serialized:string|undefined=JSON.stringify(value);
+    if(typeof serialized!=="string") throw new TypeError(`JsonDocumentStore cannot serialize a ${typeof value} value for "${this.prefix}:${key}"`);
+    await this.storage.set(`${this.prefix}:${key}`,serialized);
   }
 
   async remove(key:string):Promise<void>{

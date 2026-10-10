@@ -314,6 +314,13 @@ export class CommandBus {
 
   constructor(project: ProjectDocument, initialRevision = 0, options: CommandBusOptions = {}) {
     assertValidProject(project);
+    // A NaN/negative/fractional/string start revision would make every later revision NaN (or
+    // fractional) and break expectedProjectRevision for the rest of the session.
+    if (typeof initialRevision !== "number" || !Number.isSafeInteger(initialRevision) || initialRevision < 0) {
+      throw new RangeError(
+        `initialRevision must be a non-negative safe integer, received ${String(initialRevision)}`,
+      );
+    }
     this.#maxUndoDepth = resolveBound("maxUndoDepth", options.maxUndoDepth, DEFAULT_MAX_UNDO_DEPTH);
     this.#maxEventLogLength = resolveBound(
       "maxEventLogLength",

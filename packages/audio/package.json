@@ -9,6 +9,6 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/audio.test.js dist/test/validation.test.js"
+    "test":"node --test dist/test/audio.test.js dist/test/validation.test.js dist/test/effective-gain.test.js"
   }
 }
