@@ -226,7 +226,7 @@ test("ArenaGameManager stats accumulation, encounter progression, and state rest
   manager.onEvent("gameplay.damage", { amount: 1 }, fakeContext);
   assert.equal(manager.stats.damageTaken, 1);
 
-  manager.onEvent("gameplay.enemyDamage", { amount: 2 }, fakeContext);
+  manager.onEvent("enemy.hurt", { damage: 2 }, fakeContext);
   assert.equal(manager.stats.damageDealt, 2);
 
   // Enemy defeated updates encounter and unlocks extraction
