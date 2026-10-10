@@ -331,12 +331,35 @@ export class ClipEventTracker {
   #position: number;
   #started = false;
 
+  /**
+   * Safe to call directly: an unusable duration (NaN, Infinity, <= 0) makes the tracker inert
+   * (duration 1, no events, so `time`/`position` stay finite and nothing fires) and an invalid
+   * `maxFiresPerAdvance` falls back to the default. Events that do not belong to `options.clip`
+   * or lie outside [0, duration] are ignored. Prefer {@link createClipEventTracker}, which also
+   * reports why.
+   */
   constructor(options: ClipEventTrackerOptions, events: readonly ClipAnimationEvent[]) {
+    const usable = Number.isFinite(options.duration) && options.duration > 0;
     this.clip = options.clip;
-    this.duration = options.duration;
+    this.duration = usable ? options.duration : 1;
     this.loop = options.loop;
-    this.#events = events;
-    this.#cap = options.maxFiresPerAdvance ?? DEFAULT_MAX_FIRES_PER_ADVANCE;
+    this.#events = usable
+      ? events
+          .filter(
+            (event) =>
+              event.clip === options.clip &&
+              Number.isFinite(event.time) &&
+              event.time >= 0 &&
+              event.time <= options.duration,
+          )
+          .sort((a, b) => a.time - b.time)
+      : [];
+    this.#cap =
+      options.maxFiresPerAdvance !== undefined &&
+      Number.isInteger(options.maxFiresPerAdvance) &&
+      options.maxFiresPerAdvance >= 1
+        ? options.maxFiresPerAdvance
+        : DEFAULT_MAX_FIRES_PER_ADVANCE;
     const start = options.startTime ?? 0;
     this.#position = Math.min(this.duration, Math.max(0, Number.isFinite(start) ? start : 0));
   }
@@ -493,17 +516,21 @@ export function createClipEventTracker(options: ClipEventTrackerOptions): {
       remediation: `Pass an integer >= 1 or omit it (default ${DEFAULT_MAX_FIRES_PER_ADVANCE}).`,
     });
   }
-  const own = usable
-    ? options.events
-        .filter(
-          (event) =>
-            event.clip === options.clip &&
-            Number.isFinite(event.time) &&
-            event.time >= 0 &&
-            event.time <= options.duration,
-        )
-        .sort((a, b) => a.time - b.time)
-    : [];
+  const isOwn = (event: ClipAnimationEvent): boolean => event.clip === options.clip;
+  const inRange = (event: ClipAnimationEvent): boolean =>
+    Number.isFinite(event.time) && event.time >= 0 && event.time <= options.duration;
+  if (usable) {
+    const dropped = options.events.filter((event) => isOwn(event) && !inRange(event)).length;
+    if (dropped > 0) {
+      diagnostics.push({
+        code: "animation.events.beyondDuration",
+        severity: "warning",
+        message: `${dropped} event(s) of clip "${options.clip}" lie outside [0, ${options.duration}]s and will never fire.`,
+        remediation: `Move them to a time between 0 and the clip duration (${options.duration}s).`,
+      });
+    }
+  }
+  const own = usable ? options.events.filter((event) => isOwn(event) && inRange(event)) : [];
   const safe: ClipEventTrackerOptions = {
     ...options,
     duration: usable ? options.duration : 1,
