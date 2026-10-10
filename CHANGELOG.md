@@ -6,16 +6,43 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-10
+
+### Added
+
+- **editor**: `@kinetra/editor` headless observer core (#104 part 1): `buildHierarchy` + `EditorSession` that edits only through the command bus, with editor-vs-MCP parity tests ([#258](https://github.com/Duylamneuuu/Kinetra/pull/258))
+- **orb-run**: content is part of the acceptance gate (slice 9) ([#250](https://github.com/Duylamneuuu/Kinetra/pull/250))
+
+### Fixed
+
+- **blender-bridge**: recipe settings can no longer choose the executable/script to spawn unless the host opts in (refs #145) ([#251](https://github.com/Duylamneuuu/Kinetra/pull/251))
+- **player**: audio controller drops a play() that outlives init()/reset(), prunes finished playbacks, releases nodes on failed start ([#249](https://github.com/Duylamneuuu/Kinetra/pull/249))
+- **animation**: retarget bake/inspect tolerate profiles without a bones object; a cache write failure no longer discards a baked clip ([#246](https://github.com/Duylamneuuu/Kinetra/pull/246))
+- **blender-bridge**: importer removes the <staging>.manifest.json / .glb sidecars it leaves in the asset directory ([#247](https://github.com/Duylamneuuu/Kinetra/pull/247))
+- **player**: runtime snapshots and saves keep entity/asset id "__proto__"; entity order by code unit instead of localeCompare (#228) ([#242](https://github.com/Duylamneuuu/Kinetra/pull/242))
+- **orb-run**: headless probe step/wait/hold bounds, stuck action on rejected hold, input dropped while paused (refs #145) ([#233](https://github.com/Duylamneuuu/Kinetra/pull/233))
+
+### Tests
+
+- **navigation-recast**: geometry/property coverage + bake rejects non-array geometry with RangeError ([#260](https://github.com/Duylamneuuu/Kinetra/pull/260))
+- **asset-pipeline**: AssetHotReloadCoordinator transaction, runtime-reload and lifecycle branches (#209) ([#259](https://github.com/Duylamneuuu/Kinetra/pull/259))
+- **verification**: packaged-resolver edge cases and FakeVisualCritiqueProvider branches (refs #152) ([#256](https://github.com/Duylamneuuu/Kinetra/pull/256))
+- **asset-pipeline**: AssetReimportService failure/cleanup/event branches and default Node file system (#209) ([#254](https://github.com/Duylamneuuu/Kinetra/pull/254))
+
+### Documentation
+
+- **docs**: verification visual-baseline section and renderer-three animation-events section, both doc-checked ([#253](https://github.com/Duylamneuuu/Kinetra/pull/253))
+- **docs**: CHANGELOG through #227, HANDOFF 22-24, blender-bridge README with executed example, UNDO_EXPIRED in agent guide ([#245](https://github.com/Duylamneuuu/Kinetra/pull/245))
+
 ## 2026-10-09
 
 ### Added
 
-- **editor**: `@kinetra/editor` headless observer core (#104 part 1): `buildHierarchy` + `EditorSession` that edits only through the command bus, with editor-vs-MCP parity tests
-- **verification**: visual baseline management: `visual-baseline.ts` stores sha256 + dHash + size per named frame, `check` reports identical/similar/mismatch/missing with a diff artifact, `update` needs `--confirm` and refuses under CI (#100)
+- **verification**: visual baseline management: `visual-baseline.ts` stores sha256 + dHash + size per named frame, `check` reports identical/similar/mismatch/missing with a diff artifact, `update` needs `--confirm` and refuses under CI (#100) ([#248](https://github.com/Duylamneuuu/Kinetra/pull/248))
 - **orb-run**: content through the asset pipeline (slice 7) ([#220](https://github.com/Duylamneuuu/Kinetra/pull/220))
-- **orb-run**: the runner animates from gameplay: per-step locomotion blend + foot IK observer (`OrbRunAnimator`), `state.animation.*` in the headless probe and an `animation` acceptance manifest (slice 8)
+- **orb-run**: the runner animates from gameplay: per-step locomotion blend + foot IK observer (`OrbRunAnimator`), `state.animation.*` in the headless probe and an `animation` acceptance manifest (slice 8) ([#238](https://github.com/Duylamneuuu/Kinetra/pull/238))
 - **orb-run**: HUD contract with acceptance manifests (slice 6) ([#188](https://github.com/Duylamneuuu/Kinetra/pull/188))
-- **renderer-three**: `ThreeSceneRuntime` drives animation events from its mixers (`setAnimationEvents`, `onAnimationEvent`, bounded event log, diagnostics) (#90 part 2)
+- **renderer-three**: `ThreeSceneRuntime` drives animation events from its mixers (`setAnimationEvents`, `onAnimationEvent`, bounded event log, diagnostics) (#90 part 2) ([#236](https://github.com/Duylamneuuu/Kinetra/pull/236))
 - **animation**: animation events contract (#90 part 1): validation + deterministic clip event tracker ([#180](https://github.com/Duylamneuuu/Kinetra/pull/180))
 - **orb-run**: audio cues with a headless audio service (slice 5) ([#179](https://github.com/Duylamneuuu/Kinetra/pull/179))
 - **orb-run**: foot placement with two-bone IK (slice 4) ([#160](https://github.com/Duylamneuuu/Kinetra/pull/160))
@@ -34,6 +61,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **renderer-three**: crossfadeAnimation rejects non-finite blendSeconds/speed instead of freezing a fade or poisoning the mixer ([#232](https://github.com/Duylamneuuu/Kinetra/pull/232))
+- **asset-pipeline**: watcher drops checks overtaken by stop/remove/re-point; coordinator survives a throwing runtime updateAsset ([#243](https://github.com/Duylamneuuu/Kinetra/pull/243))
 - **core**: ScriptHost keeps empty-message script errors visible and explains async validateRestoreState ([#240](https://github.com/Duylamneuuu/Kinetra/pull/240))
 - **player**: startArenaGame joins a pending start instead of double-starting the runtime (#230) ([#239](https://github.com/Duylamneuuu/Kinetra/pull/239))
 - **verification**: concurrent first requests share one Electron startup instead of spawning duplicates ([#235](https://github.com/Duylamneuuu/Kinetra/pull/235))
