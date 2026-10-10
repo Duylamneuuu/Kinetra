@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/runtime-three.test.js dist/test/multi-instance.test.js dist/test/reload.test.js dist/test/blend-space.test.js dist/test/graph-blend-space.test.js dist/test/morph.test.js dist/test/compressed-gltf.test.js dist/test/ik.test.js dist/test/step-guards.test.js dist/test/async-races.test.js dist/test/non-finite-components.test.js dist/test/animation-events.test.js dist/test/crossfade-same-clip.test.js dist/test/crossfade-guards.test.js"
+    "test": "node --test dist/test/runtime-three.test.js dist/test/multi-instance.test.js dist/test/reload.test.js dist/test/blend-space.test.js dist/test/graph-blend-space.test.js dist/test/morph.test.js dist/test/compressed-gltf.test.js dist/test/ik.test.js dist/test/step-guards.test.js dist/test/async-races.test.js dist/test/non-finite-components.test.js dist/test/animation-events.test.js dist/test/crossfade-same-clip.test.js dist/test/crossfade-guards.test.js dist/test/load-models-twice.test.js dist/test/root-motion-keeps-loop-mode.test.js dist/test/reload-root-motion.test.js"
   },
   "dependencies": {
     "@kinetra/animation": "workspace:*",
