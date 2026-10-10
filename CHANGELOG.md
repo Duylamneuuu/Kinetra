@@ -15,6 +15,22 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: script `transform.setPosition`/`translate` validate finite vectors before mutating the Three.js object ([#287](https://github.com/Duylamneuuu/Kinetra/pull/287))
+- **asset-pipeline**: `reimportWithDependents` staleness check fingerprints dependencies like `reimport()` (skips missing ones), no orphan `dependentReimportStarted` ([#285](https://github.com/Duylamneuuu/Kinetra/pull/285))
+- **navigation-recast,save-state**: bake rounds agent metres to voxel cells without float drift; `SaveMigrator` rejects a migration that returns undefined ([#284](https://github.com/Duylamneuuu/Kinetra/pull/284))
+- **player**: Electron bridge answers an unserialisable result with a structured failure instead of no reply; malformed renderer IPC responses are ignored instead of throwing ([#282](https://github.com/Duylamneuuu/Kinetra/pull/282))
+- **physics-rapier**: `moveCharacter` no longer runs a real step and sees colliders added/teleported since the last step ([#280](https://github.com/Duylamneuuu/Kinetra/pull/280))
+- **reference-game**: `ArenaGameManager.damageDealt` counts `enemy.hurt`, not attempted hits on a defeated enemy ([#279](https://github.com/Duylamneuuu/Kinetra/pull/279))
+- **editor**: `EditorSession` drops an undo token the bus no longer holds instead of blocking older edits forever ([#277](https://github.com/Duylamneuuu/Kinetra/pull/277))
+- **asset-pipeline**: `SourceAssetWatcher` keeps waiting for a source that is missing (moved aside, deleted, not created yet) instead of going deaf ([#276](https://github.com/Duylamneuuu/Kinetra/pull/276))
+- **animation**: `skeletonSignature`/`retargetCacheKey` no longer collide for bone names with separators, NaN/Infinity or `__proto__` ([#272](https://github.com/Duylamneuuu/Kinetra/pull/272))
+- **input**: `InputRouter` constructor validates the map (shape, unique ids, bindings) instead of failing later with TypeErrors ([#271](https://github.com/Duylamneuuu/Kinetra/pull/271))
+- **verification**: visual-baseline CLI rejects empty frame dirs, reports corrupt PNGs and *.png directories as exit 2, rejects empty --only ([#257](https://github.com/Duylamneuuu/Kinetra/pull/257))
+- **renderer-three**: IkController copies pole/weight on setTarget and returns copies from observe() ([#270](https://github.com/Duylamneuuu/Kinetra/pull/270))
+- **animation**: validateAnimationGraph reports malformed graph shapes as diagnostics instead of throwing ([#264](https://github.com/Duylamneuuu/Kinetra/pull/264))
+- **renderer-three**: crossfading a clip into itself restarts it instead of stopping it when the fade ends ([#268](https://github.com/Duylamneuuu/Kinetra/pull/268))
+- **asset-pipeline,blender-bridge**: retry stale dependents when the root is a noop, reject NaN/negative creativeUnitsCost, validate NodeProcessRunner maxOutputChars ([#267](https://github.com/Duylamneuuu/Kinetra/pull/267))
+- **command-bus,audio,save-state**: CommandBus rejects invalid initialRevision; AudioMixerModel.effectiveGain never Infinity/NaN; JsonDocumentStore.save rejects unserializable values ([#263](https://github.com/Duylamneuuu/Kinetra/pull/263))
 - **blender-bridge**: recipe settings can no longer choose the executable/script to spawn unless the host opts in (refs #145) ([#251](https://github.com/Duylamneuuu/Kinetra/pull/251))
 - **player**: audio controller drops a play() that outlives init()/reset(), prunes finished playbacks, releases nodes on failed start ([#249](https://github.com/Duylamneuuu/Kinetra/pull/249))
 - **animation**: retarget bake/inspect tolerate profiles without a bones object; a cache write failure no longer discards a baked clip ([#246](https://github.com/Duylamneuuu/Kinetra/pull/246))
@@ -24,6 +40,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **verification**: runtime-probe delegation edge cases ([#283](https://github.com/Duylamneuuu/Kinetra/pull/283))
+- **reference-game**: encounter edge cases (frame sanitising, lockdown win/lose, damage payloads, player input) ([#265](https://github.com/Duylamneuuu/Kinetra/pull/265))
 - **navigation-recast**: geometry/property coverage + bake rejects non-array geometry with RangeError ([#260](https://github.com/Duylamneuuu/Kinetra/pull/260))
 - **asset-pipeline**: AssetHotReloadCoordinator transaction, runtime-reload and lifecycle branches (#209) ([#259](https://github.com/Duylamneuuu/Kinetra/pull/259))
 - **verification**: packaged-resolver edge cases and FakeVisualCritiqueProvider branches (refs #152) ([#256](https://github.com/Duylamneuuu/Kinetra/pull/256))
@@ -31,6 +49,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- **docs**: CHANGELOG through #287, STATUS snapshot ([#278](https://github.com/Duylamneuuu/Kinetra/pull/278))
+- **docs**: CHANGELOG through #260, HANDOFF 25-26, STATUS snapshot ([#269](https://github.com/Duylamneuuu/Kinetra/pull/269))
 - **docs**: verification visual-baseline section and renderer-three animation-events section, both doc-checked ([#253](https://github.com/Duylamneuuu/Kinetra/pull/253))
 - **docs**: CHANGELOG through #227, HANDOFF 22-24, blender-bridge README with executed example, UNDO_EXPIRED in agent guide ([#245](https://github.com/Duylamneuuu/Kinetra/pull/245))
 
