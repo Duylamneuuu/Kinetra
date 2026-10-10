@@ -177,7 +177,12 @@ export class IkController {
     if (opts.weight !== undefined && (!Number.isFinite(opts.weight) || opts.weight < 0 || opts.weight > 1)) {
       return fail([diag("ik.target.invalid-weight", "Weight must be within 0..1", "Pass a number from 0 to 1.")]);
     }
-    this.#targets.set(chainId, { target: [target[0], target[1], target[2]], options: { ...opts } });
+    // Own copies of every vector: a caller reusing a scratch array (or writing NaN into it later)
+    // must not change, or poison, the stored target after validation has passed.
+    const stored: IkTargetOptions = {};
+    if (opts.pole !== undefined) stored.pole = [opts.pole[0], opts.pole[1], opts.pole[2]];
+    if (opts.weight !== undefined) stored.weight = opts.weight;
+    this.#targets.set(chainId, { target: [target[0], target[1], target[2]], options: stored });
     return { success: true, diagnostics: [] };
   }
 
@@ -202,9 +207,13 @@ export class IkController {
   }
 
   observe(): IkChainObservation[] {
+    // Observations are copies: editing one must never move the stored target.
     return [...this.#targets.entries()]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([chainId, t]) => t.last ?? { chainId, target: t.target, reachable: false, converged: false, error: NaN });
+      .map(([chainId, t]) => ({
+        ...(t.last ?? { chainId, reachable: false, converged: false, error: NaN }),
+        target: [t.target[0], t.target[1], t.target[2]] as IkVec3,
+      }));
   }
 
   /** Call after `mixer.update()`. Mutates bone local rotations only. */

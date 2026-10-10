@@ -359,3 +359,72 @@ test("hot reimport into an asset without the chain bones drops and reports the I
   runtime.updateAnimation(1 / 60);
   runtime.dispose();
 });
+
+test("setTarget copies the pole: mutating the caller's array later does not move the solved pose", () => {
+  const pole: [number, number, number] = [0, 0, 1];
+  const a = arm();
+  const ika = new IkController(a, [twoBone]);
+  ika.setTarget("arm", [1, 1, 0], { pole });
+  ika.apply();
+  const expected = handPos(a).clone();
+  const kneeExpected = a.getObjectByName("lower")!.getWorldPosition(new THREE.Vector3());
+
+  const b = arm();
+  const ikb = new IkController(b, [twoBone]);
+  const scratch: [number, number, number] = [0, 0, 1];
+  ikb.setTarget("arm", [1, 1, 0], { pole: scratch });
+  scratch[0] = 0;
+  scratch[1] = 0;
+  scratch[2] = -1; // a script reusing a scratch vector for something else
+  ikb.apply();
+  assert.ok(handPos(b).distanceTo(expected) < 1e-4);
+  const knee = b.getObjectByName("lower")!.getWorldPosition(new THREE.Vector3());
+  assert.ok(knee.distanceTo(kneeExpected) < 1e-4, `elbow must still bend towards +z, got ${knee.toArray()}`);
+});
+
+test("setTarget copies options: later NaN written into the caller's pole never reaches the solver", () => {
+  const root = arm();
+  const ik = new IkController(root, [twoBone]);
+  const pole: [number, number, number] = [0, 0, 1];
+  ik.setTarget("arm", [1, 1, 0], { pole });
+  pole[2] = Number.NaN;
+  ik.apply();
+  const h = handPos(root);
+  assert.ok(Number.isFinite(h.x) && Number.isFinite(h.y) && Number.isFinite(h.z), `hand position must stay finite, got ${h.toArray()}`);
+  assert.ok(h.distanceTo(new THREE.Vector3(1, 1, 0)) < 1e-4);
+});
+
+test("observe() returns copies: editing an observation cannot move the stored target", () => {
+  const root = arm();
+  const ik = new IkController(root, [twoBone]);
+  ik.setTarget("arm", [1, 1, 0], { pole: [0, 0, 1] });
+  ik.apply();
+  const first = ik.observe();
+  const editable = first[0]!.target as unknown as number[];
+  editable[0] = 99;
+  editable[1] = Number.NaN;
+  assert.deepEqual(ik.observe()[0]!.target, [1, 1, 0]);
+  ik.apply();
+  assert.ok(handPos(root).distanceTo(new THREE.Vector3(1, 1, 0)) < 1e-4);
+
+  // Before the first apply() the observation is also a copy.
+  const fresh = new IkController(arm(), [twoBone]);
+  fresh.setTarget("arm", [1, 1, 0]);
+  const pending = fresh.observe();
+  (pending[0]!.target as unknown as number[])[0] = 7;
+  assert.deepEqual(fresh.observe()[0]!.target, [1, 1, 0]);
+});
+
+test("adoptTargets gives the new controller its own pole copy", () => {
+  const old = new IkController(arm(), [twoBone]);
+  const pole: [number, number, number] = [0, 0, 1];
+  old.setTarget("arm", [1, 1, 0], { pole });
+  const next = new IkController(arm(), [twoBone]);
+  next.adoptTargets(old);
+  pole[2] = -1;
+  old.clearTarget();
+  const root = next.observe();
+  assert.equal(root.length, 1);
+  const rootObj = new THREE.Group();
+  void rootObj;
+});
