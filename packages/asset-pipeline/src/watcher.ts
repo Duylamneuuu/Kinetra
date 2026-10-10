@@ -14,6 +14,8 @@ export interface SourceAssetWatcherOptions {
   debounceMs?: number;
   maxRetries?: number;
   retryDelayMs?: number;
+  /** How often to look for a watched source that is currently missing (default 200 ms). */
+  rearmIntervalMs?: number;
   onEvent?: (event: SourceChangeEvent) => void;
 }
 
@@ -28,6 +30,9 @@ export class SourceAssetWatcher {
   #knownHashes = new Map<string, string>(); // assetId -> contentHash
   #watchers = new Map<string, FSWatcher>(); // sourcePath -> FSWatcher
   #debounceTimers = new Map<string, NodeJS.Timeout>();
+  /** sourcePath -> pending retry of watching a file that did not exist. */
+  #rearmTimers = new Map<string, NodeJS.Timeout>();
+  readonly #rearmMs: number;
   #running = false;
   /** Bumped by every stop(); a start() that outlives its generation must not create watchers. */
   #generation = 0;
@@ -36,6 +41,7 @@ export class SourceAssetWatcher {
     this.#debounceMs = options.debounceMs ?? 60;
     this.#maxRetries = options.maxRetries ?? 3;
     this.#retryDelayMs = options.retryDelayMs ?? 20;
+    this.#rearmMs = options.rearmIntervalMs ?? 200;
     if (options.onEvent) {
       this.#listeners.add(options.onEvent);
     }
@@ -83,6 +89,7 @@ export class SourceAssetWatcher {
   #detachPath(assetId: string, sourcePath: string): void {
     if (this.#pathToAssetId.get(sourcePath) !== assetId) return;
     this.#unwatchFile(sourcePath);
+    this.#cancelRearm(sourcePath);
     this.#pathToAssetId.delete(sourcePath);
     const timer = this.#debounceTimers.get(sourcePath);
     if (timer) {
@@ -139,6 +146,10 @@ export class SourceAssetWatcher {
       clearTimeout(timer);
     }
     this.#debounceTimers.clear();
+    for (const timer of this.#rearmTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.#rearmTimers.clear();
   }
 
   #watchFile(sourcePath: string): void {
@@ -168,7 +179,31 @@ export class SourceAssetWatcher {
 
       this.#watchers.set(sourcePath, watcher);
     } catch {
-      // If file doesn't exist yet, watch might throw. Will retry on explicit check or create.
+      // The file does not exist right now (deleted, or moved aside by an editor that keeps a
+      // backup and writes a new file a moment later, as Blender does with "<name>.blend1").
+      // Nothing would ever notify us again, so keep trying until the file is back.
+      this.#scheduleRearm(sourcePath);
+    }
+  }
+
+  /** Poll for a source that could not be watched; once it can be, check it for changes. */
+  #scheduleRearm(sourcePath: string): void {
+    if (!this.#running || this.#rearmTimers.has(sourcePath) || !this.#pathToAssetId.has(sourcePath)) return;
+    const timer = setTimeout(() => {
+      this.#rearmTimers.delete(sourcePath);
+      if (!this.#running || !this.#pathToAssetId.has(sourcePath) || this.#watchers.has(sourcePath)) return;
+      this.#watchFile(sourcePath); // reschedules itself while the file is still missing
+      if (this.#watchers.has(sourcePath)) this.#handleFsNotification(sourcePath);
+    }, this.#rearmMs);
+    if (typeof timer.unref === "function") timer.unref();
+    this.#rearmTimers.set(sourcePath, timer);
+  }
+
+  #cancelRearm(sourcePath: string): void {
+    const timer = this.#rearmTimers.get(sourcePath);
+    if (timer) {
+      clearTimeout(timer);
+      this.#rearmTimers.delete(sourcePath);
     }
   }
 
