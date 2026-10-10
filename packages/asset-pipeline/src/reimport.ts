@@ -249,13 +249,7 @@ export class AssetReimportService {
     const newSourceHash = hashBytes(sourceBytes);
 
     // 2. Collect dependency fingerprints
-    const dependencyFingerprints: string[] = [];
-    for (const depId of record.dependencies) {
-      const depRecord = this.#database.get(depId);
-      if (depRecord) {
-        dependencyFingerprints.push(depRecord.fingerprint);
-      }
-    }
+    const dependencyFingerprints = this.#dependencyFingerprints(record);
 
     // 3. Compute desired import fingerprint
     const desiredFingerprint = importFingerprint({
@@ -479,9 +473,7 @@ export class AssetReimportService {
       }
 
       // Collect dependency fingerprints from current database state
-      const depFingerprints = depRecord.dependencies.map(
-        (d) => this.#database.get(d)?.fingerprint ?? "",
-      );
+      const depFingerprints = this.#dependencyFingerprints(depRecord);
 
       const desiredFingerprint = importFingerprint({
         sourceHash: depRecord.source.contentHash,
@@ -552,6 +544,20 @@ export class AssetReimportService {
       unaffectedAssetIds: unaffected,
       error: hasFailed ? `Dependent "${failedAssetIds[0]}" failed to reimport` : undefined,
     };
+  }
+
+  /**
+   * Fingerprints of the dependencies that exist in the database. reimport() and the staleness check in
+   * reimportWithDependents() must use this one definition: a dependency missing from the database is
+   * skipped, not hashed as an empty string, or an up-to-date dependent always looks stale.
+   */
+  #dependencyFingerprints(record: AssetRecord): string[] {
+    const fingerprints: string[] = [];
+    for (const depId of record.dependencies) {
+      const depRecord = this.#database.get(depId);
+      if (depRecord) fingerprints.push(depRecord.fingerprint);
+    }
+    return fingerprints;
   }
 
   #emit(event: ReimportEvent): void {
