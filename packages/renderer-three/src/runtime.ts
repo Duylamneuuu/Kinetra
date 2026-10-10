@@ -421,7 +421,10 @@ export class ThreeSceneRuntime {
       throw new Error("Cannot load models into a disposed ThreeSceneRuntime");
     }
 
-    const entries = Array.from(this.#models.entries());
+    // An entity that already carries an instance keeps it: loading again would stack a second model
+    // scene on the object and orphan the first instance (template refcount never drops, mixer
+    // and animation state silently replaced). Use attachModel/reloadAsset to swap a model.
+    const entries = Array.from(this.#models.entries()).filter(([entityId]) => !this.#instances.has(entityId));
     await Promise.all(
       entries.map(async ([entityId, metadata]) => {
         const object = this.#objects.get(entityId);
@@ -576,6 +579,8 @@ export class ThreeSceneRuntime {
     droppedMorphOverrides?: Record<string, string[]> | undefined;
     /** Entity -> IK chains with active targets the reloaded asset no longer supports. */
     droppedIkChains?: Record<string, string[]> | undefined;
+    /** Entity -> why root motion could not be re-enabled on the reloaded asset (e.g. root bone gone). */
+    droppedRootMotion?: Record<string, string> | undefined;
   }> {
     if (this.#disposed) {
       return { success: false, affectedEntities: [], error: "Runtime is disposed" };
@@ -596,6 +601,7 @@ export class ThreeSceneRuntime {
 
     const droppedMorphOverrides: Record<string, string[]> = {};
     const droppedIkChains: Record<string, string[]> = {};
+    const droppedRootMotion: Record<string, string> = {};
     let newTemplate: ModelAssetTemplate;
     try {
       newTemplate = await this.#templateCache.resolveNewTemplate(assetId, resolver);
@@ -635,6 +641,10 @@ export class ThreeSceneRuntime {
         : undefined;
       const oldMorph = this.#morphControllers.get(entityId);
       const oldIk = this.#ikControllers.get(entityId);
+      // The root-motion configuration lives on the animator session that is discarded below.
+      const oldRootMotion = oldSession?.rootMotion?.enabled
+        ? { mode: oldSession.rootMotion.mode, rootBoneName: oldSession.rootMotion.rootBoneName }
+        : undefined;
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
@@ -718,6 +728,15 @@ export class ThreeSceneRuntime {
           metadata.animation.blendSpace = undefined;
         }
       }
+      // 8. Re-enable root motion on the new instance. Without this a reimport silently turned
+      // root motion off (sampleRootMotion returned zeros and the character stopped travelling).
+      // The rebuilt session extracts from whatever clip the graph/blend space restored above.
+      if (oldRootMotion) {
+        const reconfigured = this.configureRootMotion(entityId, { enabled: true, ...oldRootMotion });
+        if (!reconfigured.success) {
+          droppedRootMotion[entityId] = reconfigured.error ?? "root motion could not be re-enabled";
+        }
+      }
     }
 
     this.#updateResourceSharingMetadata();
@@ -726,6 +745,7 @@ export class ThreeSceneRuntime {
       affectedEntities,
       ...(Object.keys(droppedMorphOverrides).length > 0 ? { droppedMorphOverrides } : {}),
       ...(Object.keys(droppedIkChains).length > 0 ? { droppedIkChains } : {}),
+      ...(Object.keys(droppedRootMotion).length > 0 ? { droppedRootMotion } : {}),
     };
   }
 
@@ -1942,9 +1962,16 @@ export class ThreeSceneRuntime {
           const curTime = session.activeAction.time;
           const curWeight = session.activeAction.getEffectiveWeight();
           const curScale = session.activeAction.getEffectiveTimeScale();
+          // A fresh action defaults to LoopRepeat: carry the playing action's loop mode over, or a
+          // one-shot clip (attack, jump) would start looping once root motion is enabled.
+          const curLoop = session.activeAction.loop;
+          const curClamp = session.activeAction.clampWhenFinished;
+          const curRepetitions = session.activeAction.repetitions;
           session.activeAction.stop();
 
           const inPlaceAction = session.mixer.clipAction(extracted.inPlaceClip);
+          inPlaceAction.setLoop(curLoop, curRepetitions);
+          inPlaceAction.clampWhenFinished = curClamp;
           inPlaceAction.time = curTime;
           inPlaceAction.setEffectiveWeight(curWeight);
           inPlaceAction.setEffectiveTimeScale(curScale);
