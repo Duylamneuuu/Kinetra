@@ -13,6 +13,7 @@ import type {
   GameShellMode,
 } from "./runtime-controller.js";
 import { singleFlight } from "./single-flight.js";
+import { normalizeGain } from "./gain-value.js";
 
 export class GameShellController {
   #runtime: PlayerRuntimeController;
@@ -194,7 +195,7 @@ export class GameShellController {
   }
 
   async setMasterVolume(gain: number): Promise<void> {
-    const clamped = Math.max(0, Math.min(1, gain));
+    const clamped = normalizeGain(gain, this.#settings.audio.masterGain);
     this.#settings.audio.masterGain = clamped;
     this.#runtime.getAudioController().setBusGain("master", clamped);
     if (this.#valMasterGain) {
@@ -204,7 +205,7 @@ export class GameShellController {
   }
 
   async setSfxVolume(gain: number): Promise<void> {
-    const clamped = Math.max(0, Math.min(1, gain));
+    const clamped = normalizeGain(gain, this.#settings.audio.sfxGain);
     this.#settings.audio.sfxGain = clamped;
     this.#runtime.getAudioController().setBusGain("sfx", clamped);
     if (this.#valSfxGain) {

@@ -37,6 +37,7 @@ import { createScriptTransformService } from "./script-transform.js";
 import { decidePlayerInput } from "./input-event.js";
 import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
 import { KeyTracker } from "./key-tracker.js";
+import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
   InputRouter,
@@ -361,6 +362,8 @@ export class PlayerRuntimeController {
   #navMesh: RecastNavMesh | undefined;
   #navigationState: PlayerRuntimeNavigationState = { hasNavMesh: false };
   #assetResolver: AssetResolver;
+  /** Bumped by every stop; a nav bake/load that started before it must not install its result. */
+  #navGeneration = 0;
   #assetRegistry = new Map<string, Uint8Array>();
   #assetFingerprints = new Map<string, string>();
   #assetSourceHashes = new Map<string, string>();
@@ -898,6 +901,8 @@ export class PlayerRuntimeController {
       this.#physics = undefined;
     }
 
+    // Any bake/load still in flight belongs to the runtime being torn down: it must not install itself.
+    this.#navGeneration += 1;
     if (this.#navMesh) {
       this.#navMesh.dispose();
       this.#navMesh = undefined;
@@ -928,28 +933,33 @@ export class PlayerRuntimeController {
     indices?: number[];
     config?: Record<string, unknown>;
   }): Promise<void> {
-    if (this.#navMesh) {
-      this.#navMesh.dispose();
-      this.#navMesh = undefined;
-    }
-
     const positions = input.positions;
     const indices = input.indices;
 
+    // Validate before touching the installed mesh: a rejected request must not destroy it.
     if (!positions || !indices) {
       throw new Error(
         "Navigation bake requires positions and indices geometry buffers",
       );
     }
 
+    const generation = this.#navGeneration;
     const { RecastNavMesh } = await import("@kinetra/navigation-recast");
-    this.#navMesh = await RecastNavMesh.bake({
-      positions,
-      indices,
-      ...(input.config as any),
+    const navMesh = await replaceDisposable<RecastNavMesh>({
+      current: () => this.#navMesh,
+      create: () =>
+        RecastNavMesh.bake({
+          positions,
+          indices,
+          ...(input.config as any),
+        }),
+      install: (next) => {
+        this.#navMesh = next;
+      },
+      isCancelled: () => generation !== this.#navGeneration,
     });
 
-    const serialized = uint8ArrayToBase64(this.#navMesh.toBytes());
+    const serialized = uint8ArrayToBase64(navMesh.toBytes());
     this.#navigationState = {
       hasNavMesh: true,
       serialized,
@@ -961,14 +971,18 @@ export class PlayerRuntimeController {
   }
 
   async loadNavigation(dataBase64: string): Promise<void> {
-    if (this.#navMesh) {
-      this.#navMesh.dispose();
-      this.#navMesh = undefined;
-    }
-
+    // Decode and build the replacement first; the installed mesh survives a bad payload.
+    const generation = this.#navGeneration;
     const bytes = base64ToUint8Array(dataBase64);
     const { RecastNavMesh } = await import("@kinetra/navigation-recast");
-    this.#navMesh = await RecastNavMesh.fromBytes(bytes);
+    await replaceDisposable<RecastNavMesh>({
+      current: () => this.#navMesh,
+      create: () => RecastNavMesh.fromBytes(bytes),
+      install: (next) => {
+        this.#navMesh = next;
+      },
+      isCancelled: () => generation !== this.#navGeneration,
+    });
     this.#navigationState = {
       hasNavMesh: true,
       serialized: dataBase64,
