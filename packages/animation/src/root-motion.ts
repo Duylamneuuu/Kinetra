@@ -130,7 +130,9 @@ export function sampleRootMotionAt(
   if (samples.length === 0) {
     return { position: [0, 0, 0], yaw: 0 };
   }
-  if (samples.length === 1 || loopDuration <= 0) {
+  // `!(x > 0)` also catches NaN; a non-finite time or duration has no defined
+  // position, so fall back to the first sample instead of interpolating NaN.
+  if (samples.length === 1 || !(loopDuration > 0) || Number.isNaN(time)) {
     const s = samples[0]!;
     return { position: [...s.position], yaw: s.yaw };
   }
@@ -189,13 +191,18 @@ export function computeRootMotionStepDelta(
     speed?: number;
   },
 ): RootMotionFrameDelta {
-  if (samples.length < 2 || loopDuration <= 0 || mode === "none") {
+  if (samples.length < 2 || !(loopDuration > 0) || mode === "none") {
+    return { translation: [0, 0, 0], yaw: 0 };
+  }
+  // A non-finite step (NaN/Infinity time, duration or speed) must never leak NaN
+  // into an entity transform: treat the frame as "no motion".
+  if (!Number.isFinite(loopDuration) || !Number.isFinite(prevTime) || !Number.isFinite(deltaTime)) {
     return { translation: [0, 0, 0], yaw: 0 };
   }
 
   const speed = typeof options?.speed === "number" ? options.speed : 1.0;
   const dt = deltaTime * speed;
-  if (Math.abs(dt) < 1e-8) {
+  if (!Number.isFinite(dt) || Math.abs(dt) < 1e-8) {
     return { translation: [0, 0, 0], yaw: 0 };
   }
 
