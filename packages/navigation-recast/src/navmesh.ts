@@ -153,7 +153,7 @@ function assertNavMeshBytes(bytes: Uint8Array): void {
  * `Math.ceil` of `1.05 / 0.15` (7.000000000000001) gains one. Quotients within a
  * relative 1e-9 of an integer snap to it first.
  */
-function toCells(length: number, cell: number, round: (value: number) => number): number {
+export function toCells(length: number, cell: number, round: (value: number) => number): number {
   const quotient = length / cell;
   const nearest = Math.round(quotient);
   return round(Math.abs(quotient - nearest) <= 1e-9 * Math.max(1, Math.abs(nearest)) ? nearest : quotient);

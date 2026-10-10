@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test dist/test/navigation.test.js dist/test/navigation-geometry.test.js dist/test/bake-cell-rounding.test.js dist/test/bake-sparse-input.test.js"
+    "test": "node --test dist/test/navigation.test.js dist/test/navigation-geometry.test.js dist/test/bake-cell-rounding.test.js dist/test/bake-sparse-input.test.js dist/test/to-cells.test.js"
   },
   "dependencies": {
     "@kinetra/project-model": "workspace:*",
