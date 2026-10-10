@@ -159,11 +159,14 @@ export function parseEngineCommand(input: unknown): EngineCommand {
     case "entity.reparent": {
       if (
         typeof payload.entityId !== "string" ||
-        (payload.parentId !== undefined && typeof payload.parentId !== "string")
+        (payload.parentId !== undefined &&
+          (typeof payload.parentId !== "string" || payload.parentId.length === 0))
       ) {
+        // An empty parentId used to be falsy in the handler and silently detach the entity;
+        // detaching is spelled by omitting parentId, never by a blank string.
         throw new CommandError(
           "INVALID_COMMAND",
-          "entity.reparent requires entityId and an optional string parentId",
+          "entity.reparent requires entityId and an optional non-empty string parentId (omit parentId to detach)",
         );
       }
       break;
