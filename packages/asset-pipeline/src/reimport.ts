@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname } from "node:path";
+import { NodeIO, getBounds } from "@gltf-transform/core";
 import type { AssetDatabase } from "./database.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
@@ -124,16 +125,51 @@ const nodeFileSystem: FileSystemAdapter = {
   },
 };
 
+/**
+ * World-space bounding-box size of every scene in a GLB, or undefined when it cannot be measured
+ * (unparseable body, no geometry, non-finite positions). Never throws.
+ */
+async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, number, number] | undefined> {
+  try {
+    const document = await new NodeIO().readBinary(bytes);
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (const scene of document.getRoot().listScenes()) {
+      const bounds = getBounds(scene);
+      for (let axis = 0; axis < 3; axis++) {
+        min[axis] = Math.min(min[axis]!, bounds.min[axis]!);
+        max[axis] = Math.max(max[axis]!, bounds.max[axis]!);
+      }
+    }
+    const size = [0, 1, 2].map((axis) => max[axis]! - min[axis]!);
+    if (!size.every((value) => Number.isFinite(value) && value >= 0)) return undefined;
+    return [size[0]!, size[1]!, size[2]!];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Validates the GLB header and publishes the bytes unchanged. `metadata.dimensions` is the measured
+ * bounding-box size of the model; when it cannot be measured the field is left out so the record keeps
+ * whatever dimensions it already had (it never stamps a made-up value over real metadata).
+ */
 export class GlbDirectImporter implements AssetImporter {
   async import(context: AssetImporterContext): Promise<AssetImporterResult> {
     // Validate GLB header
     inspectGlb(context.sourceBytes);
+    const dimensions = await measureGlbDimensions(context.sourceBytes);
     return {
       artifactBytes: context.sourceBytes,
-      metadata: {
-        dimensions: [1, 1, 1],
-      },
+      ...(dimensions ? { metadata: { dimensions } } : {}),
     };
+  }
+}
+
+/** Byte-for-byte copy with no format check and no metadata: the built-in `passthrough` importer. */
+export class PassthroughImporter implements AssetImporter {
+  async import(context: AssetImporterContext): Promise<AssetImporterResult> {
+    return { artifactBytes: context.sourceBytes };
   }
 }
 
@@ -159,7 +195,7 @@ export class AssetReimportService {
     // Register built-in default importers
     this.#importers.set("glb", new GlbDirectImporter());
     this.#importers.set("direct-glb", new GlbDirectImporter());
-    this.#importers.set("passthrough", new GlbDirectImporter());
+    this.#importers.set("passthrough", new PassthroughImporter());
 
     if (options.importers) {
       for (const [k, v] of options.importers) {

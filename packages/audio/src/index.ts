@@ -34,9 +34,15 @@ export interface AudioRuntimeState {
   activePlaybacks: AudioPlaybackState[];
 }
 
+/**
+ * Largest gain a bus may be given, and the ceiling of every `effectiveGain` (+12 dB, a linear factor of 4).
+ * Larger values are rejected at the boundary; a product of valid bus gains that exceeds it is clamped.
+ */
+export const MAX_AUDIO_GAIN = 4;
+
 function assertValidGain(gain: unknown, context: string): asserts gain is number {
-  if (typeof gain !== "number" || !Number.isFinite(gain) || gain < 0) {
-    throw new RangeError(`${context}: gain must be finite and >= 0, got ${String(gain)}`);
+  if (typeof gain !== "number" || !Number.isFinite(gain) || gain < 0 || gain > MAX_AUDIO_GAIN) {
+    throw new RangeError(`${context}: gain must be finite and within 0..${MAX_AUDIO_GAIN}, got ${String(gain)}`);
   }
 }
 
@@ -124,9 +130,9 @@ export class AudioMixerModel {
       current = current.parentId ? this.#buses.get(current.parentId) : undefined;
     }
     if (silent) return 0;
-    // Individually finite gains can still overflow when multiplied; consumers (Web Audio
-    // GainNode) reject non-finite values.
-    return Number.isFinite(gain) ? gain : Number.MAX_VALUE;
+    // A chain of buses that each boost (up to MAX_AUDIO_GAIN) can still multiply past the ceiling;
+    // the result is always finite and within 0..MAX_AUDIO_GAIN for the Web Audio GainNode.
+    return Math.min(gain, MAX_AUDIO_GAIN);
   }
 
   #require(id: string): AudioBusDefinition {

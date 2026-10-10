@@ -1,5 +1,6 @@
 import {
   AudioMixerModel,
+  MAX_AUDIO_GAIN,
   type AudioBusDefinition,
   type AudioBusState,
   type AudioPlaybackState,
@@ -258,7 +259,7 @@ export class PlayerAudioController {
     const playbackId = `playback_${++this.#nextPlaybackId}`;
     const instanceGain =
       typeof options.gain === "number" && Number.isFinite(options.gain)
-        ? Math.max(0, options.gain)
+        ? Math.min(MAX_AUDIO_GAIN, Math.max(0, options.gain))
         : 1.0;
     const loop = Boolean(options.loop);
 
@@ -396,7 +397,8 @@ export class PlayerAudioController {
 
     for (const record of this.#playbacks.values()) {
       const busEffective = this.#mixer.effectiveGain(record.bus);
-      const effectiveGain = record.gain * busEffective;
+      // Per-play gain times bus gain can exceed the documented ceiling (both up to MAX_AUDIO_GAIN).
+      const effectiveGain = Math.min(MAX_AUDIO_GAIN, record.gain * busEffective);
       const isMuted = busEffective === 0;
 
       let currentTime = 0;

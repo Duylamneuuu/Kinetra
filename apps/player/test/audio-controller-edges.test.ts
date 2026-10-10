@@ -220,6 +220,10 @@ test(
     const cases: Array<[unknown, number]> = [
       [0.25, 0.25],
       [-3, 0],
+      // Above the documented ceiling (MAX_AUDIO_GAIN = 4) a per-play gain is clamped, never passed to the GainNode as-is.
+      [5, 4],
+      [1e308, 4],
+      [Number.MAX_VALUE, 4],
       [Number.NaN, 1],
       [Number.POSITIVE_INFINITY, 1],
       ["loud", 1],
@@ -235,6 +239,20 @@ test(
     cases.forEach(([, expected], index) => {
       assert.equal(byId.get(ids[index] as string)?.gain, expected, `case ${index}`);
     });
+  }),
+);
+
+test(
+  "a boosted bus times a boosted per-play gain reports an effectiveGain no larger than the 4x ceiling",
+  withFakeAudio(async () => {
+    const audio = new PlayerAudioController();
+    audio.init(resolverOf(BYTES));
+    audio.setBusGain("sfx", 4);
+    assert.throws(() => audio.setBusGain("sfx", 4.5), RangeError);
+    const played = await audio.play({ assetId: "sfx.a", bus: "sfx", gain: 4 });
+    const playback = audio.getState().activePlaybacks.find((p) => p.playbackId === played.playbackId);
+    assert.equal(playback?.gain, 4);
+    assert.equal(playback?.effectiveGain, 4);
   }),
 );
 

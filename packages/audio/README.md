@@ -14,8 +14,9 @@ Platform-free audio model: a bus tree with gain and mute, the state shapes the r
 
 ## Behaviour worth knowing
 
-- `effectiveGain(id)` multiplies the gain up the parent chain. A muted bus anywhere on the chain makes it `0`.
-- The constructor throws on an empty or duplicate bus id, a missing parent, a cycle, or a gain that is not finite and `>= 0`. `setGain` applies the same gain rule with a `RangeError`; an unknown bus id throws.
+- `effectiveGain(id)` multiplies the gain up the parent chain. A muted bus anywhere on the chain makes it `0`. The result is always finite and within `0..MAX_AUDIO_GAIN`: a chain of boosted buses whose product exceeds the ceiling is clamped to it.
+- Gain ceiling: `MAX_AUDIO_GAIN` is `4` (+12 dB, a linear factor). A bus gain above it (or negative, `NaN`, `Infinity`) is **rejected**, not clamped: the constructor and `setGain` throw a `RangeError` naming the bus and the `0..4` range, and the bus keeps its previous gain.
+- The constructor throws on an empty or duplicate bus id, a missing parent, a cycle, or a gain outside `0..MAX_AUDIO_GAIN`. `setGain` applies the same gain rule with a `RangeError`; an unknown bus id throws.
 - `getBus` / `getBuses` return clones; mutate buses only through `setGain` and `setMuted`.
 - `createSyntheticWav` throws `RangeError` for a non-integer or non-positive `sampleRate`, or a negative or non-finite `durationSeconds` / `frequency`, or when the PCM payload would exceed `MAX_SYNTHETIC_WAV_DATA_BYTES` (64 MiB). `setMuted` and the constructor throw `TypeError` for a non-boolean `muted`.
 
@@ -37,6 +38,7 @@ assert.equal(mixer.effectiveGain("sfx"), 0);
 mixer.setMuted("master", false);
 
 assert.throws(() => mixer.setGain("sfx", -1), RangeError);
+assert.throws(() => mixer.setGain("sfx", 1e308), RangeError); // above MAX_AUDIO_GAIN (4)
 assert.throws(() => mixer.effectiveGain("missing"), /Unknown audio bus/);
 assert.throws(
   () => new AudioMixerModel([{ id: "a", parentId: "b", gain: 1 }, { id: "b", parentId: "a", gain: 1 }]),
