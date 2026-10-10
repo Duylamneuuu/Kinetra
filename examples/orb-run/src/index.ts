@@ -11,3 +11,5 @@ export * from "./locomotion.js";
 export * from "./animator.js";
 export * from "./foot-ik.js";
 export * from "./hud.js";
+export * from "./replay.js";
+export * from "./replay-fixtures.js";

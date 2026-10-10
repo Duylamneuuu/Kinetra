@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "game": "orb-run",
+  "fixedDeltaSeconds": 0.03333333333333333,
+  "totalSteps": 610,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "step": 30,
+      "digest": "871fa9604c5e604b94821754e951d75cf55b7a18a4797412b4d33a3d3de90788"
+    },
+    {
+      "step": 60,
+      "digest": "51467e208cff966bffd0b4d4707bc16f13ac5e9e0e1ea9875e4146ade85aec3e"
+    },
+    {
+      "step": 90,
+      "digest": "4f12261d819c01f2988d046248e46ed594c2fb12f3cca75649aa945de7b592bc"
+    },
+    {
+      "step": 120,
+      "digest": "9699db8c45c5b6ea34d5d2a7749036cb0407ad6257a5ece4ca2e3a95cc04fe2d"
+    },
+    {
+      "step": 150,
+      "digest": "8e68f3124ec867b28819c85b8bf211e041af4b198038df1641f7af18eaf8ae03"
+    },
+    {
+      "step": 180,
+      "digest": "63e0370bbff959ee723943167b94b7c8e562ced30093812beebbb271ab0c4d25"
+    },
+    {
+      "step": 210,
+      "digest": "58d680d59ab34d3ee7fffceaad1e4d1478fd4204c972ca9b7f2ef54635669905"
+    },
+    {
+      "step": 240,
+      "digest": "cc860dad3da6898f63c51cb0b2380540c98c45917b316458068773a944046658"
+    },
+    {
+      "step": 270,
+      "digest": "d119f478020556b1906630cb60315230be29c29a04613cb1cdb91d6704975c1f"
+    },
+    {
+      "step": 300,
+      "digest": "fcd1dbf798d6e313c986b7dab45fa9eb2dc6c13dc5712e1668a55eee3bb0cafa"
+    },
+    {
+      "step": 330,
+      "digest": "f213fdf560ad74f41295208f0be341009f0ea9d6ea6c5288a914690490468313"
+    },
+    {
+      "step": 360,
+      "digest": "30830c079ea030e41954a9faee5b58155f20e079ed40fa35ee3568560dc6221b"
+    },
+    {
+      "step": 390,
+      "digest": "a253112eb31599bd5097f5e7f262b380e02b040d420becdd42c96abe85cc894d"
+    },
+    {
+      "step": 420,
+      "digest": "8a6f62cd53e28abef050964bc8bf1e57a2be9c97dcab0149888756a6b88e8438"
+    },
+    {
+      "step": 450,
+      "digest": "f38091306a8cc42973e95d76d74855b99574248ed65bb1d2025bf747ce4b0368"
+    },
+    {
+      "step": 480,
+      "digest": "6d47515f81b4d75df04431ef52b78a48a6370e9dddccd708c777a9259a0071d9"
+    },
+    {
+      "step": 510,
+      "digest": "4f127d3eb0d0d21fe04be1e0407b9f573771bfa3d2af132963877029efb24a07"
+    },
+    {
+      "step": 540,
+      "digest": "7dddff3a4f980f507da096521fa81dd18f0bd9d9fac9b2f611a2db689bc29837"
+    },
+    {
+      "step": 570,
+      "digest": "37da8465de1b8a69a0b924866eecfdd998ca448c3e726687f8831bf409c6b6eb"
+    },
+    {
+      "step": 600,
+      "digest": "63572948ad7fccfbd64553fe520e6d5b6bebbd604933c7d5ecce2dc1fac391e8"
+    },
+    {
+      "step": 610,
+      "digest": "062bf44fb0124a79701b1dd0f1c6c44bfc183a4fb4f36edd33060df4eb592430"
+    }
+  ],
+  "outcome": {
+    "status": "lost",
+    "collectedCount": 0,
+    "totalOrbs": 3
+  }
+}

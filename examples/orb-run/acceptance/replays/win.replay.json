@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "game": "orb-run",
+  "fixedDeltaSeconds": 0.03333333333333333,
+  "totalSteps": 233,
+  "inputs": [
+    {
+      "step": 1,
+      "actions": {
+        "player.moveRight": 1
+      }
+    },
+    {
+      "step": 61,
+      "actions": {
+        "player.moveLeft": 1
+      }
+    },
+    {
+      "step": 91,
+      "actions": {
+        "player.moveBackward": 1
+      }
+    },
+    {
+      "step": 121,
+      "actions": {
+        "player.moveLeft": 1
+      }
+    },
+    {
+      "step": 151,
+      "actions": {
+        "player.moveBackward": 1
+      }
+    },
+    {
+      "step": 181,
+      "actions": {
+        "player.moveRight": 1
+      }
+    }
+  ],
+  "checkpoints": [
+    {
+      "step": 30,
+      "digest": "4e0c3d3140d76c209dc97ca8d7a6f94927de9a6e04249cc697c26bdfd3379e62"
+    },
+    {
+      "step": 60,
+      "digest": "9be9737ffb8d8f28686778745aedbcd7136fd3da498fd3d3d12a118bd6acd873"
+    },
+    {
+      "step": 90,
+      "digest": "c19d3ad92b76b5df018cb6021354864a9c61bb07063282f0793a7cb557169fae"
+    },
+    {
+      "step": 120,
+      "digest": "7abd094b506228b062b18c80858a46ced493806acbc85f521f3e882c2f77a089"
+    },
+    {
+      "step": 150,
+      "digest": "6194106642f34fedf7154abd747fec5adfabf8f1979c71ec4fb7475d0da8ffc9"
+    },
+    {
+      "step": 180,
+      "digest": "ff8c212e386f40bb04df74c00192eb92c80d11857bee4e32b725ffadebf70e4e"
+    },
+    {
+      "step": 210,
+      "digest": "d4cff59242c8bd077367ba6b1360b1a525d3cec5503f5f22bc6f9589570622f2"
+    },
+    {
+      "step": 233,
+      "digest": "1ae4e9ea706ba40789db9dc1a591bb1418584090a1dde686345b95a59f45f0ac"
+    }
+  ],
+  "outcome": {
+    "status": "won",
+    "collectedCount": 3,
+    "totalOrbs": 3
+  }
+}

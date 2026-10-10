@@ -163,6 +163,11 @@ export class HeadlessSceneSimulation {
     this.#actions.clear();
   }
 
+  /** The semantic input actions currently held (a copy with sorted keys, so it is stable to record and compare). */
+  heldActions(): Record<string, number> {
+    return Object.fromEntries([...this.#actions.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  }
+
   advance(steps = 1): void {
     if (!this.#started) {
       throw new Error("Simulation must be started before advancing");
