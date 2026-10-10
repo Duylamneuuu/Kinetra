@@ -18,6 +18,19 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
+  apps/editor:
+    dependencies:
+      '@kinetra/command-bus':
+        specifier: workspace:*
+        version: link:../../packages/command-bus
+      '@kinetra/project-model':
+        specifier: workspace:*
+        version: link:../../packages/project-model
+    devDependencies:
+      '@kinetra/mcp-server':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server
+
   apps/player:
     dependencies:
       '@kinetra/animation':

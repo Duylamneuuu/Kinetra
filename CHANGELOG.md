@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **editor**: `@kinetra/editor` headless observer core (#104 part 1): `buildHierarchy` + `EditorSession` that edits only through the command bus, with editor-vs-MCP parity tests
 - **verification**: visual baseline management: `visual-baseline.ts` stores sha256 + dHash + size per named frame, `check` reports identical/similar/mismatch/missing with a diff artifact, `update` needs `--confirm` and refuses under CI (#100)
 - **orb-run**: content through the asset pipeline (slice 7) ([#220](https://github.com/Duylamneuuu/Kinetra/pull/220))
 - **orb-run**: the runner animates from gameplay: per-step locomotion blend + foot IK observer (`OrbRunAnimator`), `state.animation.*` in the headless probe and an `animation` acceptance manifest (slice 8)
