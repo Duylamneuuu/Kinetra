@@ -7,7 +7,7 @@ import type {
   AssetImporterContext,
   AssetImporterResult,
 } from "@kinetra/asset-pipeline";
-import { inspectGlb } from "@kinetra/asset-pipeline";
+import { inspectGlb, measureGlbDimensions } from "@kinetra/asset-pipeline";
 import {
   BlenderBridgeError,
   type ProcessRunner,
@@ -246,10 +246,14 @@ export class BlenderGlbImporter implements AssetImporter {
     }
     const parsed = manifestBytes ? parseBlenderManifest(manifestBytes, manifestPath) : { diagnostics: [] };
 
+    // Measured bounding-box size of the exported model. When it cannot be measured the field is left
+    // out so the record keeps whatever dimensions it already had, never a made-up [1, 1, 1].
+    const dimensions = await measureGlbDimensions(artifactBytes);
+
     return {
       artifactBytes,
       metadata: {
-        dimensions: [1, 1, 1],
+        ...(dimensions ? { dimensions } : {}),
         ...(parsed.manifest ? { custom: { ...parsed.manifest } } : {}),
       },
       diagnostics: parsed.diagnostics,
