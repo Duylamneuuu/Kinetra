@@ -131,3 +131,9 @@ test("undo snapshots are not aliased to later commits (no shared mutable state)"
   const x = (bus.snapshot().project.scenes[0]!.entities[0]!.components.Transform as { x: number }).x;
   assert.equal(x, 2);
 });
+
+test("maxUndoDepth is exposed read-only and reflects the configured bound", () => {
+  assert.equal(new CommandBus(project()).maxUndoDepth, DEFAULT_MAX_UNDO_DEPTH);
+  assert.equal(new CommandBus(project(), 0, { maxUndoDepth: 3 }).maxUndoDepth, 3);
+  assert.equal(new CommandBus(project(), 0, { maxUndoDepth: Infinity }).maxUndoDepth, Infinity);
+});

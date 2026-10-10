@@ -1,5 +1,4 @@
 import {
-  DEFAULT_MAX_UNDO_DEPTH,
   CommandError,
   type ChangeRecord,
   type CommandBus,
@@ -26,9 +25,8 @@ export interface EditorSessionOptions {
   requestIdPrefix?: string;
   /**
    * Most edits the session remembers for undo. The bus keeps only its own bounded undo history
-   * (DEFAULT_MAX_UNDO_DEPTH by default), so remembering more here would only leak memory and make
-   * `canUndo` claim edits the bus has already forgotten. Set it to the bus's `maxUndoDepth` when
-   * the bus was built with a non-default one. Default: DEFAULT_MAX_UNDO_DEPTH.
+   * so remembering more here would only leak memory and make `canUndo` claim edits the bus has
+   * already forgotten. Default: the bus's own `maxUndoDepth`.
    */
   maxHistory?: number;
 }
@@ -62,7 +60,7 @@ export class EditorSession {
   constructor(bus: CommandBus, options: EditorSessionOptions = {}) {
     this.#bus = bus;
     this.#prefix = options.requestIdPrefix ?? "editor";
-    const maxHistory = options.maxHistory ?? DEFAULT_MAX_UNDO_DEPTH;
+    const maxHistory = options.maxHistory ?? bus.maxUndoDepth;
     if (maxHistory !== Infinity && !(Number.isInteger(maxHistory) && maxHistory >= 1)) {
       throw new RangeError(`maxHistory must be a positive integer (or Infinity), received ${String(maxHistory)}`);
     }

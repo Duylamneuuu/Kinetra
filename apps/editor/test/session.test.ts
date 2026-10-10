@@ -217,7 +217,8 @@ test("an undo token another client already consumed is dropped, not left blockin
 
 test("evicted undo tokens (maxUndoDepth) clear the editor history instead of failing forever", () => {
   const bus = new CommandBus(fixture(), 0, { maxUndoDepth: 2 });
-  const editor = new EditorSession(bus);
+  // The default would follow the bus (2); an explicitly larger history is what can outlive it.
+  const editor = new EditorSession(bus, { maxHistory: 100 });
   for (let hp = 1; hp <= 4; hp += 1) {
     editor.patchComponent("root", "Stats", { hp });
   }

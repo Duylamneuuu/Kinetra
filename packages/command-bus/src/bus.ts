@@ -342,6 +342,11 @@ export class CommandBus {
     return this.#revision;
   }
 
+  /** Most undo snapshots this bus keeps (Infinity when the bound was opted out of). */
+  get maxUndoDepth(): number {
+    return this.#maxUndoDepth;
+  }
+
   /** Number of events that fell out of the bounded event log (so a consumer can detect a gap). */
   get droppedEventCount(): number {
     return this.#droppedEvents;
