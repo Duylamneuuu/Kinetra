@@ -33,6 +33,7 @@ import {
   type ScriptLifecycleState,
   type PreparedScriptRestore,
 } from "@kinetra/core";
+import { assertFiniteVec3, translatedPosition } from "./finite-vec3.js";
 import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import {
@@ -752,7 +753,9 @@ export class PlayerRuntimeController {
                   const obj = this.#runtime?.getObject(entityId);
                   return obj ? [obj.position.x, obj.position.y, obj.position.z] : [0, 0, 0];
                 },
-                setPosition: (pos: [number, number, number]) => {
+                setPosition: (rawPos: [number, number, number]) => {
+                  // Validate before touching the Three.js object so a rejected call changes nothing.
+                  const pos = assertFiniteVec3(rawPos, "transform.setPosition position");
                   const obj = this.#runtime?.getObject(entityId);
                   if (obj) {
                     obj.position.set(pos[0], pos[1], pos[2]);
@@ -765,16 +768,19 @@ export class PlayerRuntimeController {
                     );
                   }
                 },
-                translate: (delta: [number, number, number]) => {
+                translate: (rawDelta: [number, number, number]) => {
                   const obj = this.#runtime?.getObject(entityId);
                   if (obj) {
-                    obj.position.x += delta[0];
-                    obj.position.y += delta[1];
-                    obj.position.z += delta[2];
+                    const next = translatedPosition(
+                      [obj.position.x, obj.position.y, obj.position.z],
+                      rawDelta,
+                      "transform.translate delta",
+                    );
+                    obj.position.set(next[0], next[1], next[2]);
                     if (this.#physics?.hasBody(entityId)) {
                       this.#physics.setBodyTranslation(
                         entityId,
-                        { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                        { x: next[0], y: next[1], z: next[2] },
                         true,
                       );
                     }
