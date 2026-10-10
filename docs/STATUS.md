@@ -55,7 +55,7 @@ What has meaningful proof:
 - partial failure semantics with structured `DependencyRebuildResult` (`rebuilt`, `failed`, `blocked`, `unaffected`);
 - engine-owned `BlenderGlbImporter` executing headless Blender export into staging GLBs with validation;
 - headless `.blend` fixture modification (`modify_fixture.py`) changing binary content hash;
-- high-level `AssetHotReloadCoordinator` wiring watcher -> reimport -> dependency rebuild -> runtime asset update -> live entity reload without manual glue;
+- high-level `AssetHotReloadCoordinator` wiring watcher -> reimport -> dependency rebuild -> runtime asset update -> live entity reload without manual glue; its `getTransactionHistory()` keeps only the newest `maxTransactionHistory` transactions (default `DEFAULT_MAX_TRANSACTION_HISTORY` = 100), so a long watch session no longer grows memory without limit (`coordinator-history-bound.test.ts`, 4 tests);
 - single-transaction coalescing and touch/NOOP filtering;
 - live Electron hot reload swapping live entity instances without process restart, preserving entity IDs and transforms;
 - multi-instance reload proof sharing single template parse across multiple entities;

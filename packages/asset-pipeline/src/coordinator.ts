@@ -50,7 +50,15 @@ export interface AssetHotReloadCoordinatorOptions {
   fileSystem?: FileSystemAdapter;
   onEvent?: (event: ReimportEvent) => void;
   onTransaction?: (tx: AssetHotReloadTransaction) => void;
+  /**
+   * How many finished transactions `getTransactionHistory()` keeps (the newest ones). A watch session
+   * can run for days, so an unbounded list is a slow memory leak. Default {@link DEFAULT_MAX_TRANSACTION_HISTORY}.
+   */
+  maxTransactionHistory?: number;
 }
+
+/** Default size of the coordinator's transaction history. */
+export const DEFAULT_MAX_TRANSACTION_HISTORY = 100;
 
 const defaultNodeFs: FileSystemAdapter = {
   async readFile(p: string) {
@@ -78,8 +86,14 @@ export class AssetHotReloadCoordinator {
   #serviceUnsubscribe?: (() => void) | undefined;
   #inFlightPromise?: Promise<AssetHotReloadTransaction | null> | undefined;
   #started = false;
+  readonly #maxHistory: number;
 
   constructor(options: AssetHotReloadCoordinatorOptions) {
+    const maxHistory = options.maxTransactionHistory ?? DEFAULT_MAX_TRANSACTION_HISTORY;
+    if (!Number.isInteger(maxHistory) || maxHistory < 1) {
+      throw new RangeError(`maxTransactionHistory must be a positive integer, got ${String(maxHistory)}`);
+    }
+    this.#maxHistory = maxHistory;
     this.#database = options.database;
     this.#reimportService = options.reimportService;
     this.#watcher = options.watcher;
@@ -316,6 +330,9 @@ export class AssetHotReloadCoordinator {
     };
 
     this.#txHistory.push(tx);
+    if (this.#txHistory.length > this.#maxHistory) {
+      this.#txHistory.splice(0, this.#txHistory.length - this.#maxHistory);
+    }
     for (const listener of this.#txListeners) {
       try {
         listener(tx);
