@@ -1140,8 +1140,18 @@ export class ArenaGameManager implements GameScript {
       }
     } else if (event === "gameplay.damage") {
       this.stats.damageTaken += readArenaDamageAmount(payload);
-    } else if (event === "gameplay.enemyDamage") {
-      this.stats.damageDealt += readArenaDamageAmount(payload);
+    } else if (event === "enemy.hurt") {
+      // Count damage the enemy actually took, not damage that was merely attempted:
+      // `gameplay.enemyDamage` is also delivered for hits on an already-defeated
+      // enemy (which ignores them) and, because emits are synchronous and nested,
+      // may reach this script before or after the enemy's own reaction, so no
+      // "is the enemy dead yet" guard on it can be order independent. The enemy
+      // only emits `enemy.hurt` for a hit it applied.
+      this.stats.damageDealt += readArenaDamageAmount(
+        typeof payload === "object" && payload !== null && "damage" in payload
+          ? { amount: (payload as { damage: unknown }).damage }
+          : undefined,
+      );
     } else if (event === "enemy.stateChanged") {
       if (
         typeof payload === "object" &&
