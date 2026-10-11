@@ -80,6 +80,44 @@ export interface EntityDeleteInput {
   dryRun?: boolean;
 }
 
+/**
+ * The project store refused to save a mutation. Structured so MCP clients can branch on `code`
+ * and retry optimistically: `projectRevision` is the bus revision *after* the failure. Revisions
+ * never go backwards, so even when the command was rolled back (`rolledBack: true`, project
+ * content unchanged) the revision has advanced past the one the caller sent; a retry must use
+ * `expectedProjectRevision: projectRevision`. When `rolledBack` is false the mutation is still
+ * applied in memory (an undo, or a command another command has already been stacked on) and the
+ * next successful save writes it.
+ */
+export class ProjectPersistError extends Error {
+  readonly code = "PERSIST_FAILED" as const;
+  readonly projectRevision: number;
+  readonly rolledBack: boolean;
+  readonly remediation: string;
+  /** Present when rolling back also failed; the save error stays the primary one. */
+  readonly rollbackError?: unknown;
+
+  constructor(
+    cause: unknown,
+    details: { projectRevision: number; rolledBack: boolean; rollbackError?: unknown },
+  ) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    const state = details.rolledBack
+      ? "the change was rolled back, so the project content is unchanged"
+      : "the change is still applied in memory and will be written by the next successful save";
+    super(`Saving the project failed: ${reason} (${state}; project revision is now ${details.projectRevision})`, {
+      cause,
+    });
+    this.name = "ProjectPersistError";
+    this.projectRevision = details.projectRevision;
+    this.rolledBack = details.rolledBack;
+    if (details.rollbackError !== undefined) this.rollbackError = details.rollbackError;
+    this.remediation = details.rolledBack
+      ? `Fix the storage problem, then retry the same command with expectedProjectRevision ${details.projectRevision}.`
+      : `Fix the storage problem, then call project.inspect; the next mutation (or a retried undo) saves the whole project. Use expectedProjectRevision ${details.projectRevision}.`;
+  }
+}
+
 export class KinetraAgentService {
   readonly bus: CommandBus;
   readonly runtime: RuntimeHost;
@@ -268,7 +306,14 @@ export class KinetraAgentService {
     // The undo token is single-use, so when this save fails the in-memory project stays undone
     // and cannot be redone. Track that memory is ahead of disk so the next call saves the whole
     // project again.
-    await this.#persistIfMutated(before, result, true);
+    try {
+      await this.#persistIfMutated(before, result, true);
+    } catch (error) {
+      throw new ProjectPersistError(error, {
+        projectRevision: this.bus.revision,
+        rolledBack: false,
+      });
+    }
     return result;
   }
 
@@ -396,17 +441,25 @@ export class KinetraAgentService {
       // error matches reality and the same command can be retried. When another command has
       // already been applied meanwhile, undo is refused (it is last-in-first-out); that later
       // command's save writes the whole project, so memory and disk converge anyway.
+      let rolledBack = false;
+      let rollbackError: unknown;
       if (result.undoToken !== undefined && this.bus.revision === result.revision) {
         try {
           this.bus.undo(result.undoToken, result.revision);
           // Memory is back to what it was before the command, so it is exactly as (un)saved
           // as it was then.
           this.#unsaved = wasUnsaved;
-        } catch {
-          // Keep the original persistence error as the one reported.
+          rolledBack = true;
+        } catch (undoError) {
+          // Keep the original persistence error as the primary one, but do not lose this.
+          rollbackError = undoError;
         }
       }
-      throw error;
+      throw new ProjectPersistError(error, {
+        projectRevision: this.bus.revision,
+        rolledBack,
+        ...(rollbackError !== undefined ? { rollbackError } : {}),
+      });
     }
     return result;
   }
