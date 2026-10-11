@@ -14,3 +14,4 @@ export * from "./hud.js";
 export * from "./replay.js";
 export * from "./replay-fixtures.js";
 export * from "./level-check.js";
+export * from "./fuzz.js";
