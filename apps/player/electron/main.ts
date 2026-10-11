@@ -5,8 +5,10 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
+  BRIDGE_MALFORMED_RENDERER_RESPONSE,
   normalizeRendererResponse,
   parseBridgeLine,
+  recoverRendererResponseId,
   serializeBridgeMessage,
   type BridgeRequest,
 } from "./bridge-protocol.js";
@@ -213,6 +215,21 @@ ipcMain.on(
     // A malformed reply must not throw inside the listener (uncaught main-process exception).
     const response = normalizeRendererResponse(rawResponse);
     if (!response) {
+      // With a recoverable id, fail that pending request now (structured) rather than letting it
+      // wait for the renderer timeout; without one nothing can be correlated, so it is dropped.
+      const malformedId = recoverRendererResponseId(rawResponse);
+      const malformedPending =
+        malformedId === null ? undefined : rendererPending.get(malformedId);
+      if (malformedId !== null && malformedPending) {
+        clearTimeout(malformedPending.timer);
+        rendererPending.delete(malformedId);
+        malformedPending.reject(
+          new Error(
+            `${BRIDGE_MALFORMED_RENDERER_RESPONSE}: renderer replied to "${malformedId}" with a malformed response`,
+          ),
+        );
+        return;
+      }
       console.error("[bridge] ignored a malformed renderer response");
       return;
     }
