@@ -22,6 +22,7 @@
     "@kinetra/audio": "workspace:*",
     "@kinetra/command-bus": "workspace:*",
     "@kinetra/core": "workspace:*",
+    "@kinetra/navigation-recast": "workspace:*",
     "@kinetra/project-model": "workspace:*",
     "@kinetra/verification": "workspace:*"
   },
