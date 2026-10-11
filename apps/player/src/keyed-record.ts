@@ -28,3 +28,19 @@ export function compareCodeUnits(left: string, right: string): number {
   if (left > right) return 1;
   return 0;
 }
+
+/**
+ * Sets `record[key] = value` as an own, enumerable data property, creating a prototype-less
+ * record when `record` is undefined. Unlike plain assignment, a `__proto__` key never swaps the
+ * prototype, so author-chosen ids (action ids in saved custom bindings) survive save and reload.
+ * Mutates and returns the given record.
+ */
+export function setKeyedEntry<T>(
+  record: Record<string, T> | undefined,
+  key: string,
+  value: T,
+): Record<string, T> {
+  const target = record ?? (Object.create(null) as Record<string, T>);
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
+  return target;
+}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { compareCodeUnits, createKeyedRecord } from "../src/keyed-record.js";
+import { compareCodeUnits, createKeyedRecord, setKeyedEntry } from "../src/keyed-record.js";
 
 test("createKeyedRecord keeps __proto__ and constructor as own keys", () => {
   const record = createKeyedRecord<number>([
@@ -84,4 +84,32 @@ test("compareCodeUnits is a consistent total order over a seeded fuzz of ids", (
     assert.ok(compareCodeUnits(sorted[i]!, sorted[i - 1]!) >= 0);
   }
   assert.deepEqual([...ids].reverse().sort(compareCodeUnits), sorted);
+});
+
+// #228: shell.ts remapAction stored custom bindings with `customBindings[actionId] = bindings` on a
+// `{}` literal, so remapping an action named "__proto__" swapped the prototype and the binding was
+// never saved. setKeyedEntry keeps every action id as an own, enumerable, JSON-visible key.
+test("setKeyedEntry creates a prototype-less record and keeps __proto__ as a saved key", () => {
+  const record = setKeyedEntry<number[]>(undefined, "__proto__", [1]);
+  setKeyedEntry(record, "constructor", [2]);
+  setKeyedEntry(record, "move", [3]);
+
+  assert.equal(Object.getPrototypeOf(record), null);
+  assert.deepEqual(Object.keys(record).sort(), ["__proto__", "constructor", "move"]);
+  const viaJson = JSON.parse(JSON.stringify(record)) as Record<string, number[]>;
+  assert.deepEqual(Object.getOwnPropertyDescriptor(viaJson, "__proto__")?.value, [1]);
+  assert.deepEqual(Object.entries(record).sort(), [["__proto__", [1]], ["constructor", [2]], ["move", [3]]]);
+});
+
+test("setKeyedEntry writes into an existing plain record (as loaded from settings) without a prototype swap", () => {
+  const loaded: Record<string, number[]> = { jump: [0] };
+  const result = setKeyedEntry(loaded, "__proto__", [9]);
+
+  assert.equal(result, loaded, "mutates and returns the record it was given");
+  assert.equal(Object.getPrototypeOf(loaded), Object.prototype, "prototype is untouched");
+  assert.deepEqual(Object.keys(loaded).sort(), ["__proto__", "jump"]);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(loaded, "__proto__")?.value, [9]);
+
+  setKeyedEntry(loaded, "__proto__", [10]);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(loaded, "__proto__")?.value, [10], "overwrites an existing entry");
 });
