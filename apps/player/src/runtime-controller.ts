@@ -74,6 +74,9 @@ import {
 import { resolvePerformanceSampleOptions, type PerformanceSampleOptionsInput } from "./sample-options.js";
 import * as THREE from "three";
 
+const NAV_SUPERSEDED_MESSAGE =
+  "The navigation request was superseded by a newer bake/load, or the runtime was stopped, before it finished";
+
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
 export interface PlayerRuntimeLog {
@@ -944,9 +947,12 @@ export class PlayerRuntimeController {
       );
     }
 
-    const generation = this.#navGeneration;
+    // Every request claims a new generation: the request started last wins, not the one that
+    // happens to finish last (a slow older bake must not overwrite a newer mesh).
+    const generation = ++this.#navGeneration;
     const { RecastNavMesh } = await import("@kinetra/navigation-recast");
-    const navMesh = await replaceDisposable<RecastNavMesh>({
+    await replaceDisposable<RecastNavMesh>({
+      cancelledMessage: NAV_SUPERSEDED_MESSAGE,
       current: () => this.#navMesh,
       create: () =>
         RecastNavMesh.bake({
@@ -955,16 +961,17 @@ export class PlayerRuntimeController {
           ...(input.config as any),
         }),
       install: (next) => {
+        // Mesh and navigationState change together, synchronously: a swap that completes right
+        // after this one can never leave the serialized bytes describing a disposed mesh.
+        const serialized = uint8ArrayToBase64(next.toBytes());
         this.#navMesh = next;
+        this.#navigationState = {
+          hasNavMesh: true,
+          serialized,
+        };
       },
       isCancelled: () => generation !== this.#navGeneration,
     });
-
-    const serialized = uint8ArrayToBase64(navMesh.toBytes());
-    this.#navigationState = {
-      hasNavMesh: true,
-      serialized,
-    };
     this.#log("info", "navigation.baked", {
       vertexCount: positions.length / 3,
       triangleCount: indices.length / 3,
@@ -973,21 +980,22 @@ export class PlayerRuntimeController {
 
   async loadNavigation(dataBase64: string): Promise<void> {
     // Decode and build the replacement first; the installed mesh survives a bad payload.
-    const generation = this.#navGeneration;
     const bytes = base64ToUint8Array(dataBase64);
+    const generation = ++this.#navGeneration;
     const { RecastNavMesh } = await import("@kinetra/navigation-recast");
     await replaceDisposable<RecastNavMesh>({
+      cancelledMessage: NAV_SUPERSEDED_MESSAGE,
       current: () => this.#navMesh,
       create: () => RecastNavMesh.fromBytes(bytes),
       install: (next) => {
         this.#navMesh = next;
+        this.#navigationState = {
+          hasNavMesh: true,
+          serialized: dataBase64,
+        };
       },
       isCancelled: () => generation !== this.#navGeneration,
     });
-    this.#navigationState = {
-      hasNavMesh: true,
-      serialized: dataBase64,
-    };
     this.#log("info", "navigation.loaded", { byteLength: bytes.byteLength });
   }
 

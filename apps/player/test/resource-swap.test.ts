@@ -108,6 +108,65 @@ test("overlapping swaps dispose the superseded result instead of leaking it", as
   assert.equal(slowResource.disposed, 0);
 });
 
+test("a swap whose install throws disposes the replacement and keeps the previous resource", async () => {
+  let installed: Fake | undefined = new Fake("old");
+  const old = installed;
+  let built: Fake | undefined;
+  await assert.rejects(
+    replaceDisposable<Fake>({
+      current: () => installed,
+      create: () => {
+        built = new Fake("new");
+        return built;
+      },
+      install: () => {
+        throw new Error("serialize failed");
+      },
+    }),
+    /serialize failed/,
+  );
+  assert.equal(installed, old);
+  assert.equal(old.disposed, 0);
+  assert.equal(built?.disposed, 1);
+});
+
+test("a cancelled swap reports the caller's message", async () => {
+  await assert.rejects(
+    replaceDisposable<Fake>({
+      current: () => undefined,
+      create: () => new Fake("late"),
+      install: () => {},
+      isCancelled: () => true,
+      cancelledMessage: "superseded by a newer request",
+    }),
+    (error: unknown) =>
+      error instanceof ResourceSwapCancelledError && error.message === "superseded by a newer request",
+  );
+});
+
+test("with a generation token claimed per request, the request started last wins even when it finishes first", async () => {
+  // Mirrors RuntimeController.bakeNavigation / loadNavigation: each request claims a new generation.
+  let generation = 0;
+  let installed: Fake | undefined;
+  const request = (name: string, delay: number) => {
+    const mine = ++generation;
+    return replaceDisposable<Fake>({
+      current: () => installed,
+      create: () => new Promise<Fake>((resolve) => setTimeout(() => resolve(new Fake(name)), delay)),
+      install: (value) => {
+        installed = value;
+      },
+      isCancelled: () => mine !== generation,
+    });
+  };
+  const slowOlder = request("older-slow", 20);
+  const fastNewer = request("newer-fast", 1);
+  const newer = await fastNewer;
+  await assert.rejects(slowOlder, ResourceSwapCancelledError);
+  assert.equal(installed, newer);
+  assert.equal(newer.disposed, 0);
+});
+
 test("re-installing the same instance does not dispose it", async () => {
   const same = new Fake("same");
   let installed: Fake | undefined = same;
