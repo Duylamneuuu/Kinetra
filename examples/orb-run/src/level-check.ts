@@ -3,6 +3,7 @@ import type { JsonValue, ProjectDocument } from "@kinetra/project-model";
 import type { OrbRunRules } from "./authoring.js";
 import { ORB_RUN_RULES_COMPONENT, ORB_RUN_SCENE_ID, ORB_RUN_SCRIPT } from "./ids.js";
 import { OrbRunRulesError, parseOrbRunRules } from "./scripts.js";
+import { OrbRunWallError, circleHitsWall, readOrbRunWalls, ORB_RUN_PLAYER_RADIUS, type OrbRunWall } from "./walls.js";
 
 /**
  * Level check: a static analysis of the *authored* Orb Run project (positions,
@@ -23,6 +24,13 @@ import { OrbRunRulesError, parseOrbRunRules } from "./scripts.js";
  *   steps it quantises to). A limit at or above it is provably winnable.
  * - in between the level is `unproven`: possible only by cutting corners or
  *   analogue input, so the check makes no claim.
+ *
+ * Walls (`OrbRunWall` entities, see `walls.ts`) lengthen routes in ways a
+ * static octile bound cannot price, so a level with walls keeps the (still
+ * valid) lower bound but makes no playtest claim: `playtestSeconds`, `slackSeconds`
+ * and `route` are null, the verdict is at best `unproven`, and the
+ * `walls_present` warning points at `planOrbRunRoute` (navigation.ts), which
+ * bakes a navmesh and prices the real route.
  */
 
 export type OrbRunLevelCode =
@@ -38,6 +46,9 @@ export type OrbRunLevelCode =
   | "orb_outside_arena"
   | "orb_unreachable"
   | "exit_unreachable"
+  | "wall_invalid"
+  | "player_in_wall"
+  | "walls_present"
   | "time_impossible"
   | "time_unproven"
   | "time_tight";
@@ -70,13 +81,15 @@ export interface OrbRunLevelReport {
   orbCount: number;
   /** Seconds nothing can beat; null when the level is structurally invalid. */
   lowerBoundSeconds: number | null;
-  /** Seconds the playtest bot needs; null when the level is structurally invalid. */
+  /** Seconds the playtest bot needs; null when the level is structurally invalid or has walls. */
   playtestSeconds: number | null;
   /** `timeLimitSeconds - playtestSeconds` (negative = the bot loses); null when invalid. */
   slackSeconds: number | null;
   /** Whether `route` is the exact optimum (true up to `ORB_RUN_LEVEL_EXACT_ORDER_LIMIT` orbs) or a nearest-neighbour order. */
   orderExact: boolean;
   route: OrbRunLevelRoute | null;
+  /** Walls found in the scene (centre and half extents), in entity-id order. */
+  walls: OrbRunWall[];
 }
 
 export interface OrbRunLevelOptions {
@@ -193,7 +206,12 @@ function bestOrder(
   return { order, exact: false };
 }
 
-function invalidReport(rules: OrbRunRules | null, diagnostics: OrbRunLevelDiagnostic[], orbCount: number): OrbRunLevelReport {
+function invalidReport(
+  rules: OrbRunRules | null,
+  diagnostics: OrbRunLevelDiagnostic[],
+  orbCount: number,
+  walls: OrbRunWall[] = [],
+): OrbRunLevelReport {
   return {
     ok: false,
     verdict: "invalid",
@@ -207,6 +225,7 @@ function invalidReport(rules: OrbRunRules | null, diagnostics: OrbRunLevelDiagno
     slackSeconds: null,
     orderExact: true,
     route: null,
+    walls,
   };
 }
 
@@ -234,6 +253,14 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
   const players = scene.entities.filter((entity) => scriptIdOf(entity.components) === ORB_RUN_SCRIPT.player);
   const orbs = scene.entities.filter((entity) => scriptIdOf(entity.components) === ORB_RUN_SCRIPT.orb);
   const exits = scene.entities.filter((entity) => entity.name === "Exit");
+
+  let walls: OrbRunWall[] = [];
+  try {
+    walls = readOrbRunWalls(scene.entities);
+  } catch (cause) {
+    if (!(cause instanceof OrbRunWallError)) throw cause;
+    for (const issue of cause.issues) error("wall_invalid", issue.message, issue.entityId);
+  }
 
   let rules: OrbRunRules | null = null;
   if (managers.length !== 1) {
@@ -265,7 +292,7 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
   const orbPositions = orbs.map((orb) => locate(orb, `Orb ${orb.id}`));
 
   if (!rules || !player || !exit || orbs.length === 0 || orbPositions.some((entry) => !entry)) {
-    return invalidReport(rules, diagnostics, orbs.length);
+    return invalidReport(rules, diagnostics, orbs.length, walls);
   }
   const found = orbPositions as Found[];
   const limit = rules.arenaHalfExtent;
@@ -274,6 +301,9 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     warn("player_outside_arena", "The player starts outside the arena and is clamped onto its edge at the first move", player.entityId);
   }
   const start = clampToArena(player.position, limit);
+  if (circleHitsWall(walls, start.x, start.z, ORB_RUN_PLAYER_RADIUS)) {
+    error("player_in_wall", "The player starts inside a wall and could never move", player.entityId);
+  }
 
   const seen = new Map<string, string>();
   for (const orb of found) {
@@ -297,7 +327,7 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     }
   }
   if (diagnostics.some((entry) => entry.severity === "error")) {
-    return invalidReport(rules, diagnostics, orbs.length);
+    return invalidReport(rules, diagnostics, orbs.length, walls);
   }
 
   const targets = found.map((orb) => clampToArena(orb.position, limit));
@@ -346,6 +376,13 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
       `The clock (${rules.timeLimitSeconds} s) is shorter than the fastest conceivable run (${round(lowerBoundSeconds)} s)`,
       managers[0]!.id,
     );
+  } else if (walls.length > 0) {
+    verdict = "unproven";
+    warn(
+      "walls_present",
+      `The level has ${walls.length} wall(s): the straight-line playtest bound does not apply, price the route with planOrbRunRoute (lower bound ${round(lowerBoundSeconds)} s)`,
+      managers[0]!.id,
+    );
   } else if (playtestSeconds > rules.timeLimitSeconds) {
     verdict = "unproven";
     warn(
@@ -374,12 +411,16 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     rules,
     orbCount: found.length,
     lowerBoundSeconds: round(lowerBoundSeconds),
-    playtestSeconds: round(playtestSeconds),
-    slackSeconds: round(slackSeconds),
+    playtestSeconds: walls.length > 0 ? null : round(playtestSeconds),
+    slackSeconds: walls.length > 0 ? null : round(slackSeconds),
     orderExact: play.exact && lower.exact,
-    route: {
-      orbIds: play.order.map((index) => found[index]!.entityId),
-      waypoints: [...play.order.map((index) => targets[index]!), exitTarget].map((point) => ({ x: point.x, z: point.z })),
-    },
+    route:
+      walls.length > 0
+        ? null
+        : {
+            orbIds: play.order.map((index) => found[index]!.entityId),
+            waypoints: [...play.order.map((index) => targets[index]!), exitTarget].map((point) => ({ x: point.x, z: point.z })),
+          },
+    walls,
   };
 }

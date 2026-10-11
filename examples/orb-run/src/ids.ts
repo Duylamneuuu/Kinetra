@@ -39,6 +39,9 @@ export const ORB_RUN_SCRIPT = {
 /** Custom component holding the game rules, authored as project data. */
 export const ORB_RUN_RULES_COMPONENT = "OrbRunRules";
 
+/** Custom component marking an entity as an axis-aligned wall (see `src/walls.ts`). */
+export const ORB_RUN_WALL_COMPONENT = "OrbRunWall";
+
 /** Semantic input actions (same ids as the engine's default player input map). */
 export const ORB_RUN_ACTION = {
   moveRight: "player.moveRight",

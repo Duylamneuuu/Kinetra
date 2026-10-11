@@ -8,6 +8,7 @@ import type { JsonValue, ProjectDocument } from "@kinetra/project-model";
 
 import { ORB_RUN_DEFAULT_RULES, type OrbRunRules } from "./authoring.js";
 import { ORB_RUN_AUDIO_ASSET, ORB_RUN_AUDIO_BUS, pickupAssetForCount } from "./audio.js";
+import { readOrbRunWalls, resolveWallMotion, type OrbRunWall } from "./walls.js";
 import {
   ORB_RUN_ACTION,
   ORB_RUN_EVENT,
@@ -86,7 +87,10 @@ export class OrbRunPlayer implements GameScript {
   distanceTravelled = 0;
   finished = false;
 
-  constructor(private readonly rules: OrbRunRules) {}
+  constructor(
+    private readonly rules: OrbRunRules,
+    private readonly walls: readonly OrbRunWall[] = [],
+  ) {}
 
   onUpdate(context: GameScriptContext, deltaSeconds: number): void {
     if (this.finished || !context.transform || !context.input) return;
@@ -103,11 +107,12 @@ export class OrbRunPlayer implements GameScript {
     const step = this.rules.playerSpeed * deltaSeconds;
     const before = context.transform.getPosition();
     const limit = this.rules.arenaHalfExtent;
-    const next: Vec3 = [
-      Math.max(-limit, Math.min(limit, before[0] + (dx / length) * step)),
-      before[1],
-      Math.max(-limit, Math.min(limit, before[2] + (dz / length) * step)),
-    ];
+    const wanted = {
+      x: Math.max(-limit, Math.min(limit, before[0] + (dx / length) * step)),
+      z: Math.max(-limit, Math.min(limit, before[2] + (dz / length) * step)),
+    };
+    const moved = resolveWallMotion(this.walls, { x: before[0], z: before[2] }, wanted);
+    const next: Vec3 = [moved.x, before[1], moved.z];
     context.transform.setPosition(next);
     this.distanceTravelled += horizontalDistance(before, next);
   }
@@ -351,8 +356,10 @@ export function createOrbRunScriptRegistry(project: ProjectDocument, sceneId: st
     .map((entity) => entity.id)
     .sort();
 
+  const walls = readOrbRunWalls(scene.entities);
+
   const registry = new ScriptRegistry();
-  registry.register(ORB_RUN_SCRIPT.player, () => new OrbRunPlayer(rules));
+  registry.register(ORB_RUN_SCRIPT.player, () => new OrbRunPlayer(rules, walls));
   registry.register(ORB_RUN_SCRIPT.orb, () => new OrbRunOrb(rules));
   registry.register(
     ORB_RUN_SCRIPT.manager,
