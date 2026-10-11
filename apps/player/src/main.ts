@@ -123,19 +123,16 @@ async function handleRuntimeCommand(request: {
     }
 
     case "performance.sample": {
-      const warmupFrames =
-        typeof params.warmupFrames === "number" ? params.warmupFrames : undefined;
-      const sampleFrames =
-        typeof params.sampleFrames === "number" ? params.sampleFrames : undefined;
-      const fixedDeltaSeconds =
-        typeof params.fixedDeltaSeconds === "number"
-          ? params.fixedDeltaSeconds
-          : undefined;
+      // Validated (bounds, finiteness) inside samplePerformance; a bad value rejects the command
+      // instead of freezing the renderer or feeding NaN into the simulation.
+      const warmupFrames = params.warmupFrames;
+      const sampleFrames = params.sampleFrames;
+      const fixedDeltaSeconds = params.fixedDeltaSeconds;
       const mode = params.mode === "continuous" ? "continuous" : "stepped";
       return await runtime.samplePerformance({
-        ...(warmupFrames !== undefined ? { warmupFrames } : {}),
-        ...(sampleFrames !== undefined ? { sampleFrames } : {}),
-        ...(fixedDeltaSeconds !== undefined ? { fixedDeltaSeconds } : {}),
+        warmupFrames,
+        sampleFrames,
+        fixedDeltaSeconds,
         mode,
       });
     }

@@ -37,6 +37,28 @@ const platformApi = {
   },
 };
 
+/**
+ * Sends one reply to the main process. `ipcRenderer.send` structured-clones its payload and throws
+ * on a value that cannot be cloned (a function, a DOM node, a Symbol). Inside the un-awaited async
+ * handler below that throw was an unhandled rejection: no reply was ever sent, so the main process
+ * (and the probe / MCP client behind it) waited for its whole request timeout. A reply that cannot
+ * be cloned is replaced by a structured failure that keeps the request id.
+ *
+ * Sandboxed preloads cannot require sibling modules, so this stays in this file.
+ */
+function sendRuntimeResponse(response: RuntimeBridgeResponse): void {
+  try {
+    ipcRenderer.send("kinetra:runtime:response", response);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    ipcRenderer.send("kinetra:runtime:response", {
+      id: response.id,
+      ok: false,
+      error: `BRIDGE_UNCLONEABLE_RESPONSE: ${reason}`,
+    } satisfies RuntimeBridgeResponse);
+  }
+}
+
 const runtimeBridge = {
   onCommand(
     handler: (request: RuntimeBridgeRequest) => Promise<unknown>,
@@ -66,7 +88,7 @@ const runtimeBridge = {
             };
           }
 
-          ipcRenderer.send("kinetra:runtime:response", response);
+          sendRuntimeResponse(response);
         })();
       },
     );
