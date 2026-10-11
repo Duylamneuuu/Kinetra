@@ -122,6 +122,14 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFiniteVec3(value: unknown): value is [number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((component) => typeof component === "number" && Number.isFinite(component))
+  );
+}
+
 export function createGameplaySaveMigrator(): SaveMigrator {
   return new SaveMigrator(CURRENT_SAVE_SCHEMA_VERSION)
     .register(1, (data: unknown) => {
@@ -130,9 +138,16 @@ export function createGameplaySaveMigrator(): SaveMigrator {
         throw new Error("Save migration v1→v2 received invalid data: expected an object");
       }
       const v1 = data as {
-        sceneId: string;
+        sceneId: unknown;
         entities?: unknown;
       };
+      // A save without a usable sceneId would migrate "successfully" and then lose the scene on the
+      // next JSON round trip (undefined is dropped) or restore into a scene that does not exist.
+      if (typeof v1.sceneId !== "string" || v1.sceneId.length === 0) {
+        throw new Error(
+          `Save migration v1→v2 received invalid data: sceneId must be a non-empty string (got ${JSON.stringify(v1.sceneId) ?? "undefined"})`,
+        );
+      }
       if (v1.entities !== undefined && !isPlainRecord(v1.entities)) {
         throw new Error("Save migration v1→v2 received invalid data: entities must be an object");
       }
@@ -145,17 +160,30 @@ export function createGameplaySaveMigrator(): SaveMigrator {
           );
         }
         const entry = rawEntry as {
-          position?: [number, number, number];
-          rotation?: [number, number, number];
-          state?: Record<string, unknown>;
+          position?: unknown;
+          rotation?: unknown;
+          state?: unknown;
         };
+        for (const field of ["position", "rotation"] as const) {
+          const value = entry[field];
+          if (value !== undefined && !isFiniteVec3(value)) {
+            throw new Error(
+              `Save migration v1→v2 received invalid data: entities["${entityId}"].${field} must be an array of 3 finite numbers`,
+            );
+          }
+        }
+        if (entry.state !== undefined && !isPlainRecord(entry.state)) {
+          throw new Error(
+            `Save migration v1→v2 received invalid data: entities["${entityId}"].state must be an object`,
+          );
+        }
         // defineProperty keeps an entity id such as "__proto__" as plain data;
         // plain assignment would swap the prototype and silently drop the entity.
         Object.defineProperty(entities, entityId, {
           value: {
-            ...(entry.position !== undefined ? { position: entry.position } : {}),
-            ...(entry.rotation !== undefined ? { rotation: entry.rotation } : {}),
-            ...(entry.state !== undefined ? { gameplay: entry.state } : {}),
+            ...(entry.position !== undefined ? { position: entry.position as [number, number, number] } : {}),
+            ...(entry.rotation !== undefined ? { rotation: entry.rotation as [number, number, number] } : {}),
+            ...(entry.state !== undefined ? { gameplay: entry.state as Record<string, unknown> } : {}),
           } satisfies EntitySaveState,
           enumerable: true,
           writable: true,
