@@ -170,6 +170,7 @@ interface ScriptEntry {
 export class ScriptHost {
   #entries = new Map<string, ScriptEntry>();
   #inFlight = new Map<"start" | "stop" | "destroy", Promise<void>>();
+  #tail: Promise<void> = Promise.resolve();
 
   register(input: {
     id: string;
@@ -219,13 +220,22 @@ export class ScriptHost {
     return this.#shared("destroy", () => this.#destroyAll());
   }
 
+  /**
+   * Lifecycle passes run one at a time, in call order. Interleaving them was a race: a stopAll()
+   * issued while startAll() awaited a hook found nothing "started" yet and resolved, then the
+   * scripts came up anyway; a destroyAll() could run onDestroy while onStart was still pending
+   * and clear the registry under the running start. Overlapping calls of the same pass (queued
+   * or running) still share one run. The pass is registered synchronously so a later call in
+   * the same tick shares it; a failed pass does not block the ones queued behind it.
+   */
   #shared(pass: "start" | "stop" | "destroy", run: () => Promise<void>): Promise<void> {
-    const running = this.#inFlight.get(pass);
-    if (running) return running;
-    const next = run().finally(() => {
-      this.#inFlight.delete(pass);
+    const known = this.#inFlight.get(pass);
+    if (known) return known;
+    const next = this.#tail.then(run).finally(() => {
+      if (this.#inFlight.get(pass) === next) this.#inFlight.delete(pass);
     });
     this.#inFlight.set(pass, next);
+    this.#tail = next.catch(() => undefined);
     return next;
   }
 
@@ -339,7 +349,8 @@ export class ScriptHost {
   }
 
   async #destroyAll(): Promise<void> {
-    await this.stopAll();
+    // Already inside the lifecycle queue: run the stop inline instead of queueing behind ourselves.
+    await this.#stopAll();
     for (const entry of this.#ordered().reverse()) {
       // onDestroy is applicable if onCreate successfully completed and onDestroy has not yet executed
       if (entry.created && !entry.destroyed) {
