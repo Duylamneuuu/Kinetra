@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname } from "node:path";
 import { NodeIO, getBounds } from "@gltf-transform/core";
 import type { AssetDatabase } from "./database.js";
-import { measureGlbBoundsFromJson } from "./glb-bounds.js";
+import { glbDeclaresMeshes, measureGlbBoundsFromJson } from "./glb-bounds.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
 import type {
@@ -166,7 +166,11 @@ export class GlbDirectImporter implements AssetImporter {
       artifactBytes: context.sourceBytes,
       ...(dimensions
         ? { metadata: { dimensions } }
-        : {
+        : // A GLB with no meshes at all (animation-only clips, empty node trees) has nothing to measure;
+          // warning on every import of a valid file would be noise.
+          !glbDeclaresMeshes(context.sourceBytes)
+          ? {}
+          : {
             diagnostics: [
               {
                 severity: "warning" as const,
