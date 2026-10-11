@@ -383,6 +383,12 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Proof**: each PR carries its own Node tests (see `CHANGELOG.md` for the list); these are package-level and edge-case tests, not new Electron or packaged proofs;
 - **Not done**: the editor browser/console are not wired to a file system or a runtime host's own log; PR #185 (pluggable game modules for the player) and PR #261 (`validateAnimationGraph` malformed structure as diagnostics) are still open.
 
+### 30. Orb Run Walled Fuzzing And Reimport/Navigation Hardening (P3–P8, PRs #385–#390)
+
+- **Contract**: `orb-run` slice 17 makes the seeded fuzzer play walled levels with a `player_clear_of_walls` invariant, walled campaigns, replay and save/resume (#388); the orb-run animator samples ground once and a throwing step listener no longer aborts `advance()` (#385); the player's navigation requests resolve last-started-wins and a failing install releases the replacement (#387); asset reimport failures carry the importer's error code, with `blender.invalidOption` pinned through `AssetReimportService` and staging cleanup (#389); MCP tools are pinned to forward every optional field (#390);
+- **Proof**: each PR carries its own Node tests (see `CHANGELOG.md`); these are package-level tests, not new Electron or packaged proofs;
+- **Not done**: no new bridge/MCP command surface was added in this batch.
+
 ## Completion definition
 
 Kinetra is not "done" when:
