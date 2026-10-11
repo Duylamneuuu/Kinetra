@@ -171,6 +171,8 @@ export class ScriptHost {
   #entries = new Map<string, ScriptEntry>();
   #inFlight = new Map<"start" | "stop" | "destroy", Promise<void>>();
   #tail: Promise<void> = Promise.resolve();
+  /** The most recently queued lifecycle pass; only that one may be shared by a new call. */
+  #lastQueued: Promise<void> | undefined;
 
   register(input: {
     id: string;
@@ -227,56 +229,82 @@ export class ScriptHost {
    * and clear the registry under the running start. Overlapping calls of the same pass (queued
    * or running) still share one run. The pass is registered synchronously so a later call in
    * the same tick shares it; a failed pass does not block the ones queued behind it.
+   *
+   * A call only shares a pass of its kind that is still the last one queued: start → destroy →
+   * startAll() must run a fresh start after the destroy, not resolve with the older start pass
+   * that runs (and is torn down) before it (#337).
    */
   #shared(pass: "start" | "stop" | "destroy", run: () => Promise<void>): Promise<void> {
     const known = this.#inFlight.get(pass);
-    if (known) return known;
+    if (known && known === this.#lastQueued) return known;
     const next = this.#tail.then(run).finally(() => {
       if (this.#inFlight.get(pass) === next) this.#inFlight.delete(pass);
     });
     this.#inFlight.set(pass, next);
+    this.#lastQueued = next;
     this.#tail = next.catch(() => undefined);
     return next;
   }
 
+  /**
+   * Scripts registered while the pass awaits a hook are picked up by a follow-up sweep before the
+   * pass settles, so a startAll() that shares the running pass never resolves with a registered
+   * script left unstarted (#337). Each entry is visited at most once per pass.
+   */
   async #startAll(): Promise<void> {
-    for (const entry of this.#ordered()) {
-      if (entry.lifecycleState === "error") continue;
-
-      if (entry.lifecycleState === "registered") {
-        try {
-          await entry.script.onCreate?.(entry.context);
-          entry.created = true;
-          entry.lifecycleState = "created";
-        } catch (err) {
-          entry.lifecycleState = "error";
-          entry.error = errorText(err);
-          entry.context.log?.("error", "script.error", {
-            id: entry.id,
-            scriptId: entry.scriptId,
-            phase: "onCreate",
-            error: entry.error,
-          });
-          continue;
-        }
+    const visited = new Set<ScriptEntry>();
+    for (;;) {
+      const pending = this.#ordered().filter(
+        (entry) =>
+          !visited.has(entry) &&
+          (entry.lifecycleState === "registered" || entry.lifecycleState === "created"),
+      );
+      if (pending.length === 0) return;
+      for (const entry of pending) {
+        visited.add(entry);
+        // A destroyAll() cannot interleave (passes are queued), but stay defensive about removal.
+        if (this.#entries.get(entry.id) !== entry) continue;
+        await this.#startEntry(entry);
       }
+    }
+  }
 
-      if (entry.lifecycleState === "created") {
-        try {
-          await entry.script.onStart?.(entry.context);
-          entry.started = true;
-          entry.lifecycleState = "started";
-        } catch (err) {
-          entry.lifecycleState = "error";
-          entry.error = errorText(err);
-          entry.context.log?.("error", "script.error", {
-            id: entry.id,
-            scriptId: entry.scriptId,
-            phase: "onStart",
-            error: entry.error,
-          });
-          continue;
-        }
+  async #startEntry(entry: ScriptEntry): Promise<void> {
+    if (entry.lifecycleState === "error") return;
+
+    if (entry.lifecycleState === "registered") {
+      try {
+        await entry.script.onCreate?.(entry.context);
+        entry.created = true;
+        entry.lifecycleState = "created";
+      } catch (err) {
+        entry.lifecycleState = "error";
+        entry.error = errorText(err);
+        entry.context.log?.("error", "script.error", {
+          id: entry.id,
+          scriptId: entry.scriptId,
+          phase: "onCreate",
+          error: entry.error,
+        });
+        return;
+      }
+    }
+
+    if (entry.lifecycleState === "created") {
+      try {
+        await entry.script.onStart?.(entry.context);
+        entry.started = true;
+        entry.lifecycleState = "started";
+      } catch (err) {
+        entry.lifecycleState = "error";
+        entry.error = errorText(err);
+        entry.context.log?.("error", "script.error", {
+          id: entry.id,
+          scriptId: entry.scriptId,
+          phase: "onStart",
+          error: entry.error,
+        });
+        return;
       }
     }
   }
