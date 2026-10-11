@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BRIDGE_MALFORMED_RENDERER_RESPONSE,
   normalizeRendererResponse,
+  recoverRendererResponseId,
   serializeBridgeMessage,
 } from "../electron/bridge-protocol.js";
 
@@ -105,4 +107,34 @@ test("normalizeRendererResponse ignores a non-string error field", () => {
     id: "r",
     ok: false,
   });
+});
+
+test("recoverRendererResponseId returns the id of a malformed reply that still has a string id", () => {
+  for (const raw of [
+    { id: "renderer_3", ok: "yes" },
+    { id: "renderer_4" },
+    { id: "renderer_5", ok: 1, result: {} },
+  ]) {
+    assert.equal(normalizeRendererResponse(raw), null);
+    assert.equal(recoverRendererResponseId(raw), raw.id, JSON.stringify(raw));
+  }
+});
+
+test("recoverRendererResponseId returns null when no usable id exists", () => {
+  for (const raw of [undefined, null, 5, "x", [], {}, { id: 3 }, { id: "" }, { id: null, ok: true }]) {
+    assert.equal(recoverRendererResponseId(raw), null, JSON.stringify(raw));
+  }
+});
+
+test("recoverRendererResponseId never throws on a hostile payload", () => {
+  const hostile = {
+    get id(): string {
+      throw new Error("boom");
+    },
+  };
+  assert.equal(recoverRendererResponseId(hostile), null);
+});
+
+test("the malformed-renderer-response error code is stable", () => {
+  assert.equal(BRIDGE_MALFORMED_RENDERER_RESPONSE, "BRIDGE_MALFORMED_RENDERER_RESPONSE");
 });
