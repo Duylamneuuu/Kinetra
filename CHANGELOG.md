@@ -10,6 +10,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 14 seeded input fuzzing (`runOrbRunFuzz`) with per-step invariants, replay determinism and save/resume equivalence ([#360](https://github.com/Duylamneuuu/Kinetra/pull/360))
+- **editor**: inspector model (`buildInspector`) and `EditorSession.setProperty` (refs #273) ([#358](https://github.com/Duylamneuuu/Kinetra/pull/358))
 - **orb-run**: slice 13 static level check (`analyzeOrbRunLevel`) with clock bounds, probe `state.level` and `level.acceptance.json` ([#351](https://github.com/Duylamneuuu/Kinetra/pull/351))
 - **orb-run**: slice 12 one-command acceptance gate (`runOrbRunAcceptanceSuite` + acceptance CLI) ([#347](https://github.com/Duylamneuuu/Kinetra/pull/347))
 - **orb-run**: replays as acceptance manifests, digest over every entity position, non-blocking replay playback (slice 11) ([#307](https://github.com/Duylamneuuu/Kinetra/pull/307))
@@ -17,6 +19,14 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: baseline artifacts drop stale failing PNGs; concurrent baseline saves use their own temp file ([#365](https://github.com/Duylamneuuu/Kinetra/pull/365))
+- **asset-pipeline**: reimport reports `asset.dependency.missing` for declared dependencies absent from the database (#288) ([#364](https://github.com/Duylamneuuu/Kinetra/pull/364))
+- **animation**: `validateAnimationGraph` reports states/transitions without a string id instead of letting `undefined` satisfy a missing `entryState` or endpoint ([#362](https://github.com/Duylamneuuu/Kinetra/pull/362))
+- **core**: `ScriptHost` lifecycle passes run in call order (`stopAll`/`destroyAll` during `startAll` no longer interleave) ([#361](https://github.com/Duylamneuuu/Kinetra/pull/361))
+- **player**: a pending renderer request fails immediately when the reply is malformed but carries its id (#286) ([#359](https://github.com/Duylamneuuu/Kinetra/pull/359))
+- **save-state**: v1→v2 migration validates `sceneId`, position/rotation and state instead of passing them through (#205) ([#357](https://github.com/Duylamneuuu/Kinetra/pull/357))
+- **physics-rapier**: a query between `moveKinematicBody` and `step` no longer swallows the platform's velocity (moves are re-armed on the real step) ([#356](https://github.com/Duylamneuuu/Kinetra/pull/356))
+- **asset-pipeline**: GLBs requiring Draco/meshopt/quantization keep their dimensions (JSON accessor bounds fallback); unmeasurable models report `asset.dimensions.unmeasured` (#329) ([#355](https://github.com/Duylamneuuu/Kinetra/pull/355))
 - **player**: preload replies with a structured failure (`BRIDGE_UNCLONEABLE_RESPONSE`) when a result cannot be cloned; `performance.sample` validates frame counts and delta (`resolvePerformanceSampleOptions`) ([#352](https://github.com/Duylamneuuu/Kinetra/pull/352))
 - **asset-pipeline**: `AssetHotReloadCoordinator` transaction history is bounded (`maxTransactionHistory`, default 100) ([#349](https://github.com/Duylamneuuu/Kinetra/pull/349))
 - **player**: nav bake/load keep the installed mesh when the replacement fails or is cancelled; volume setters reject NaN ([#348](https://github.com/Duylamneuuu/Kinetra/pull/348))
@@ -51,6 +61,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 - **mcp-server**: `LocalRuntimeHost` and `formatToolError` edge cases (+12 tests) ([#331](https://github.com/Duylamneuuu/Kinetra/pull/331))
 - **physics-rapier**: moveCharacter sees remove()d walls immediately and never integrates dynamic bodies (#286) ([#305](https://github.com/Duylamneuuu/Kinetra/pull/305))
 - **navigation-recast**: unit-test toCells ceil/floor snapping + property test; tiny agentHeight still bakes (#288) ([#308](https://github.com/Duylamneuuu/Kinetra/pull/308))
+
+### Documentation
+
+- **docs**: record Orb Run slice 14 (seeded input fuzzing) in STATUS ([#363](https://github.com/Duylamneuuu/Kinetra/pull/363))
+- **docs**: add PRs #351-#352 to CHANGELOG, HANDOFF hardening batch and STATUS snapshot ([#353](https://github.com/Duylamneuuu/Kinetra/pull/353))
 
 ## 2026-10-10
 
