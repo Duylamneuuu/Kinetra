@@ -300,6 +300,7 @@ export class AssetReimportService {
 
     // 2. Collect dependency fingerprints
     const dependencyFingerprints = this.#dependencyFingerprints(record);
+    const missingDependencies = this.#missingDependencyDiagnostics(record);
 
     // 3. Compute desired import fingerprint
     const desiredFingerprint = importFingerprint({
@@ -335,6 +336,7 @@ export class AssetReimportService {
           newFingerprint: record.fingerprint,
           sourceHash: newSourceHash,
           affectedAssetIds: [],
+          ...(missingDependencies.length > 0 ? { diagnostics: missingDependencies } : {}),
         };
       }
     }
@@ -440,7 +442,7 @@ export class AssetReimportService {
         ...record.metadata,
         ...(importResult.metadata ?? {}),
       },
-      diagnostics: importResult.diagnostics ?? [],
+      diagnostics: [...(importResult.diagnostics ?? []), ...missingDependencies],
     };
 
     this.#database.upsert(updatedRecord);
@@ -473,7 +475,7 @@ export class AssetReimportService {
       newFingerprint: desiredFingerprint,
       sourceHash: newSourceHash,
       affectedAssetIds,
-      diagnostics: importResult.diagnostics,
+      diagnostics: missingDependencies.length > 0 ? updatedRecord.diagnostics : importResult.diagnostics,
     };
   }
 
@@ -608,6 +610,25 @@ export class AssetReimportService {
       if (depRecord) fingerprints.push(depRecord.fingerprint);
     }
     return fingerprints;
+  }
+
+  /**
+   * One warning per declared dependency that is not in the database. Such a dependency is left out of
+   * the fingerprint (see #dependencyFingerprints), so without a diagnostic an asset that names a wrong
+   * id would look permanently up to date and nobody would learn that it can never be invalidated.
+   */
+  #missingDependencyDiagnostics(record: AssetRecord): AssetDiagnostic[] {
+    const diagnostics: AssetDiagnostic[] = [];
+    for (const depId of record.dependencies) {
+      if (this.#database.get(depId)) continue;
+      diagnostics.push({
+        severity: "warning",
+        code: "asset.dependency.missing",
+        message: `Asset "${record.id}" declares dependency "${depId}", which is not in the asset database; changes to it cannot invalidate this asset. Register the dependency or remove it from the dependency list.`,
+        path: record.source.path,
+      });
+    }
+    return diagnostics;
   }
 
   #emit(event: ReimportEvent): void {
