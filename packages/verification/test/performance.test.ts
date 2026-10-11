@@ -220,6 +220,26 @@ test("performance: unusable threshold values are reported instead of silently dr
   assert.match(override.error ?? "", /linux:frame\.p95Ms/);
 });
 
+test("performance: an unusable threshold under a key without a dot is reported when it sits in a budgets map (#231)", () => {
+  const typo = evaluatePerformanceBudget(
+    mockEvidence,
+    { budgets: { frameP95: "x", "renderer.drawCalls": { max: 100 } } },
+    { platform: "linux" },
+  );
+  assert.equal(typo.passed, false);
+  assert.match(typo.error ?? "", /performance\.budgetInvalid/);
+  assert.match(typo.error ?? "", /frameP95/);
+
+  // A flat spec shares its object with unrelated step fields, so only dotted keys are metric paths there.
+  const flat = evaluatePerformanceBudget(
+    mockEvidence,
+    { type: "assert.performanceBudget", note: "nightly", "renderer.drawCalls": 100 },
+    { platform: "linux" },
+  );
+  assert.equal(flat.passed, true);
+  assert.equal(flat.error, undefined);
+});
+
 test("performance: a valid budget still passes and reports its threshold count", () => {
   const result = evaluatePerformanceBudget(mockEvidence, { "frame.p95Ms": { max: 30 }, "renderer.drawCalls": 100 });
   assert.equal(result.passed, true);

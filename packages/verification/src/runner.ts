@@ -683,10 +683,15 @@ async function executeStep(
         const violationSummary = evaluation.violations
           .map((v) => `${v.metric} actual ${v.actual} exceeds ${v.comparison} ${v.limit}`)
           .join("; ");
+        // The same budget can be both exceeded and partly unusable. Reporting only the violations
+        // would hide that other thresholds were skipped, so the report names both problems.
+        const invalidNote =
+          evaluation.error !== undefined ? ` | also ${evaluation.error}` : "";
         throw new StepAssertionError(
-          `performance.budgetExceeded: ${violationSummary}`,
+          `performance.budgetExceeded: ${violationSummary}${invalidNote}`,
           step.budget,
           {
+            ...(evaluation.error !== undefined ? { budgetError: evaluation.error } : {}),
             violations: evaluation.violations,
             evidence,
             platform: evaluation.platform,

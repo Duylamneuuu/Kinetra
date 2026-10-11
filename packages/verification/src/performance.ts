@@ -160,12 +160,13 @@ export function resolveBudgetForPlatform(
       ? (raw.budget as Record<string, unknown>)
       : raw;
 
-  const baseMap =
+  const explicitBudgets =
     inner.budgets && typeof inner.budgets === "object"
       ? (inner.budgets as Record<string, unknown>)
       : raw.budgets && typeof raw.budgets === "object"
         ? (raw.budgets as Record<string, unknown>)
-        : inner;
+        : undefined;
+  const baseMap = explicitBudgets ?? inner;
 
   const profile =
     typeof raw.profile === "string"
@@ -206,8 +207,11 @@ export function resolveBudgetForPlatform(
     const norm = normalizeThreshold(value);
     if (norm) {
       thresholds[key] = norm;
-    } else if (key.includes(".")) {
+    } else if (explicitBudgets !== undefined || key.includes(".")) {
       // Metric paths are dotted ("frame.p95Ms"); dropping one silently would make the budget pass.
+      // Inside an explicit `budgets` map every entry is a threshold, so an unusable value under any
+      // key (a mistyped "frameP95") is reported. A flat spec also carries step fields (type, note...),
+      // so there only dotted keys count as metric paths.
       invalid.push(key);
     }
   }
