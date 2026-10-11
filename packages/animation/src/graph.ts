@@ -135,10 +135,16 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
       diagnostics.push({code:"anim.state.invalid",message:"Animation state must be an object",remediation:"Use a { id, clipId | blendSpaceId } object for every state."});
       continue;
     }
-    if(states.has(state.id)){
-      diagnostics.push({code:"anim.state.duplicate",message:`Duplicate state "${state.id}"`});
+    if(typeof state.id!=="string" || state.id.length===0){
+      // An id-less state must not enter the id set: `undefined` would then satisfy a missing
+      // entryState or a transition endpoint that has no from/to either.
+      diagnostics.push({code:"anim.state.id.empty",message:`Animation state has no string id (received ${String(state.id)})`,remediation:"Give every state a unique non-empty string id."});
+    }else{
+      if(states.has(state.id)){
+        diagnostics.push({code:"anim.state.duplicate",message:`Duplicate state "${state.id}"`});
+      }
+      states.add(state.id);
     }
-    states.add(state.id);
     const hasClip=typeof state.clipId==="string" && state.clipId.length>0;
     const hasSpace=state.blendSpaceId!==undefined;
     if(hasClip && hasSpace){
@@ -191,6 +197,9 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
     if(!isRecord(transition)){
       diagnostics.push({code:"anim.transition.invalid",message:"Animation transition must be an object",remediation:"Use a { id, from, to, conditions } object for every transition."});
       continue;
+    }
+    if(typeof transition.id!=="string" || transition.id.length===0){
+      diagnostics.push({code:"anim.transition.id.empty",message:`Animation transition has no string id (received ${String(transition.id)})`,remediation:"Give every transition a non-empty string id; it names the transition in results and breaks priority ties."});
     }
     if(transition.from !== "*" && !states.has(transition.from)){
       diagnostics.push({code:"anim.transition.from.missing",message:`Transition "${transition.id}" source is missing`});
