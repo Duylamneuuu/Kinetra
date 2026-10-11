@@ -986,6 +986,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       }
 
       this.#socket = socket;
+      socket.on("error", (error) => this.#handleTransportError("socket", error));
 
       const output = createInterface({
         input: socket,
@@ -1047,6 +1048,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
 
     this.#child = child;
+    child.stdin.on("error", (error) => this.#handleTransportError("stdin", error));
     this.#armReadyPromise();
 
     child.stdout.on("data", (chunk: Buffer) => {
@@ -1102,6 +1104,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     });
 
     this.#child = child;
+    child.stdin.on("error", (error) => this.#handleTransportError("stdin", error));
 
     const output = createInterface({
       input: child.stdout,
@@ -1321,6 +1324,50 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.#readyPromise = undefined;
     this.#resolveReady = undefined;
     this.#rejectReady = undefined;
+    this.#releaseTransport();
+  }
+
+  /**
+   * A bridge process that exited on its own (crash, kill) used to leave its listening server,
+   * socket and temp user-data directory behind: the next `#ensureProcess` overwrote the fields,
+   * so the old server kept the event loop alive and the old directory was never removed.
+   */
+  #releaseTransport(): void {
+    const socket = this.#socket;
+    this.#socket = undefined;
+    socket?.destroy();
+
+    const stdioLines = this.#stdioLines;
+    this.#stdioLines = undefined;
+    stdioLines?.close();
+
+    const server = this.#server;
+    this.#server = undefined;
+    if (server) {
+      server.close();
+      server.unref();
+    }
+
+    if (this.#ownedUserDataDir) {
+      const dirToRemove = this.#ownedUserDataDir;
+      this.#ownedUserDataDir = undefined;
+      try {
+        rmSync(dirToRemove, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * A write to a bridge whose other end is gone (EPIPE/ECONNRESET) is reported asynchronously as
+   * an "error" event. Without a listener that was an uncaught exception that took the host
+   * process down; now the requests in flight fail fast with a descriptive error instead.
+   */
+  #handleTransportError(source: string, error: Error): void {
+    this.#rejectAllPending(
+      new Error(`Electron runtime bridge ${source} failed: ${error.message}`),
+    );
   }
 }
 
