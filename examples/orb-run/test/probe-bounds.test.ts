@@ -124,14 +124,32 @@ test("step while paused is a no-op, matching runtime.step in the player (pause t
   assert.equal(report.passed, true, JSON.stringify(report.steps.find((step) => !step.passed)));
 });
 
-test("a bad step count surfaces as a failed manifest step with a message", async () => {
-  const runner = new AcceptanceRunner(new OrbRunHeadlessProbe());
-  const report = await runner.run(
-    manifest([
+test("a bad step count is rejected by the manifest schema before anything runs", () => {
+  // The schema mirrors the Electron player's runtime.step bounds (36000 steps, delta <= 1 s), so an
+  // oversized step fails validation up front instead of mid-run.
+  const parsed = acceptanceManifestSchema.safeParse({
+    schemaVersion: 1,
+    suite: "orb-run.probe-bounds",
+    steps: [
       { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
       { type: "runtime.step", steps: 1_000_000 },
-    ]),
-  );
+    ],
+  });
+  assert.equal(parsed.success, false);
+  assert.equal(ORB_RUN_MAX_STEPS_PER_CALL, 36_000, "orb-run's probe bound matches the schema bound");
+});
+
+test("a step the probe refuses still surfaces as a failed manifest step with a message", async () => {
+  // Built without the schema to reach the probe's own guard (e.g. a manifest assembled in code).
+  const runner = new AcceptanceRunner(new OrbRunHeadlessProbe());
+  const report = await runner.run({
+    schemaVersion: 1,
+    suite: "orb-run.probe-bounds",
+    steps: [
+      { type: "runtime.start", sceneId: ORB_RUN_SCENE_ID },
+      { type: "runtime.step", steps: 1_000_000 },
+    ],
+  } as AcceptanceManifest);
   assert.equal(report.passed, false);
   assert.match(report.steps[1]?.message ?? "", /steps must be an integer from 0 to 36000/);
 });
