@@ -1,6 +1,6 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 
-import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_ORB_IDS } from "./ids.js";
+import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_ORB_IDS, ORB_RUN_WALL_COMPONENT } from "./ids.js";
 import {
   captureOrbRunSave,
   orbRunAnimator,
@@ -19,6 +19,7 @@ import {
   type OrbRunReplayInput,
 } from "./replay.js";
 import type { HeadlessSceneSimulation, Vec3 } from "./simulation.js";
+import { circleHitsWall, type OrbRunWall } from "./walls.js";
 
 /**
  * Seeded input fuzzing for Orb Run.
@@ -143,6 +144,7 @@ export const ORB_RUN_INVARIANTS = [
   "events_consistent",
   "win_preconditions",
   "player_in_arena",
+  "player_clear_of_walls",
   "static_entities_still",
   "orbs_stowed_when_collected",
   "positions_finite",
@@ -166,6 +168,22 @@ function samePosition(a: readonly number[], b: readonly number[]): boolean {
 }
 
 /**
+ * Walls as an observer sees them: entities whose authored `OrbRunWall` component is well formed, positioned where
+ * the simulation started. Malformed ones are skipped here (`readOrbRunWalls` rejects them when the game starts).
+ */
+function readAuthoredWalls(simulation: HeadlessSceneSimulation, positions: Record<string, Vec3>): OrbRunWall[] {
+  const walls: OrbRunWall[] = [];
+  for (const [entityId, position] of Object.entries(positions)) {
+    const data = simulation.getAuthoredComponent(entityId, ORB_RUN_WALL_COMPONENT);
+    if (typeof data !== "object" || data === null || Array.isArray(data)) continue;
+    const { halfWidth, halfDepth } = data as Record<string, unknown>;
+    if (typeof halfWidth !== "number" || typeof halfDepth !== "number" || !(halfWidth > 0) || !(halfDepth > 0)) continue;
+    walls.push({ entityId, x: position[0], z: position[2], halfWidth, halfDepth });
+  }
+  return walls;
+}
+
+/**
  * Checks the rules of Orb Run after *every* fixed step of a simulation started with `startOrbRunSimulation`, from
  * outside, using only what a player or an acceptance manifest can observe. Violations are collected (capped) instead
  * of thrown, so one bad step still reports the next.
@@ -179,6 +197,7 @@ export class OrbRunInvariantMonitor {
   readonly #limit: number;
   readonly #initialPositions: Record<string, Vec3>;
   readonly #arena: number;
+  readonly #walls: OrbRunWall[];
   readonly #timeLimit: number;
   #previous: OrbRunSummary;
   #stop: (() => void) | undefined;
@@ -187,6 +206,7 @@ export class OrbRunInvariantMonitor {
     this.#simulation = simulation;
     this.#limit = options.maxViolations ?? 50;
     this.#initialPositions = simulation.positions();
+    this.#walls = readAuthoredWalls(simulation, this.#initialPositions);
     const rules = readOrbRunRules(simulation);
     this.#arena = rules.arenaHalfExtent;
     this.#timeLimit = rules.timeLimitSeconds;
@@ -299,6 +319,11 @@ export class OrbRunInvariantMonitor {
     }
     if (finite && (Math.abs(current.player[0]) > this.#arena + EPSILON || Math.abs(current.player[2]) > this.#arena + EPSILON)) {
       this.#report("player_in_arena", `player at ${JSON.stringify(current.player)} left the ±${this.#arena} m arena`);
+    }
+
+    // Walls: the player's circle never overlaps one (walls are authored data, so this holds for any level an agent builds).
+    if (finite && circleHitsWall(this.#walls, current.player[0], current.player[2])) {
+      this.#report("player_clear_of_walls", `player at ${JSON.stringify(current.player)} overlaps a wall`);
     }
 
     // Clock: elapsed + remaining is the limit until it runs out; the clock only runs while playing.
