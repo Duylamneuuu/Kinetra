@@ -451,9 +451,15 @@ export async function loadVisualBaselineFile(path: string): Promise<VisualBaseli
   return parseVisualBaselineFile(text);
 }
 
-/** Writes a baseline file atomically (temp file + rename). */
+let tempCounter = 0;
+
+/**
+ * Writes a baseline file atomically (temp file + rename). Every call uses its own temp file, so two
+ * saves racing on the same path cannot rename (or delete) each other's temp file; the last rename wins.
+ */
 export async function saveVisualBaselineFile(path: string, file: VisualBaselineFile): Promise<void> {
-  const temp = `${path}.${process.pid}.tmp`;
+  tempCounter += 1;
+  const temp = `${path}.${process.pid}.${tempCounter}.tmp`;
   try {
     await writeFile(temp, serializeVisualBaselineFile(file), "utf8");
     await rename(temp, path);
@@ -475,6 +481,9 @@ export async function writeVisualBaselineArtifacts(
 ): Promise<string[]> {
   const written: string[] = [];
   try {
+    // `actual/` belongs to this report: PNGs of frames that failed in an earlier run (and pass now)
+    // would otherwise sit next to a report that no longer mentions them.
+    await rm(join(directory, "actual"), { recursive: true, force: true });
     await mkdir(join(directory, "actual"), { recursive: true });
     const jsonPath = join(directory, "report.json");
     await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
