@@ -77,6 +77,10 @@ export function blendSpaceParameters(space: BlendSpaceDefinition): string[] {
 }
 
 function wrapPhase(value: number): number {
+  // A finite speed can still overflow the per-step advance to +/-Infinity, and
+  // `Infinity - Math.floor(Infinity)` is NaN. A NaN phase is never recovered (every later step
+  // adds to it), so an unrepresentable advance restarts the cycle at 0 instead.
+  if (!Number.isFinite(value)) return 0;
   const wrapped = value - Math.floor(value);
   // Guard against 1 - epsilon rounding up to exactly 1.
   return wrapped >= 1 ? 0 : wrapped;
