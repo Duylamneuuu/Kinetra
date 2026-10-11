@@ -328,7 +328,14 @@ export class ClipEventTracker {
   readonly loop: boolean;
   readonly #events: readonly ClipAnimationEvent[];
   readonly #cap: number;
-  #position: number;
+  /**
+   * The head is an integer loop count plus a time inside the clip ([0, duration) when looping,
+   * [0, duration] otherwise). An unbounded float `loop * duration + time` drifted after many
+   * loops, so events on the loop boundary went missing and, past ~2^53, small advances were
+   * swallowed entirely (#189).
+   */
+  #loopIndex = 0;
+  #local: number;
   #started = false;
 
   /**
@@ -361,28 +368,52 @@ export class ClipEventTracker {
         ? options.maxFiresPerAdvance
         : DEFAULT_MAX_FIRES_PER_ADVANCE;
     const start = options.startTime ?? 0;
-    this.#position = Math.min(this.duration, Math.max(0, Number.isFinite(start) ? start : 0));
+    this.#local = Math.min(this.duration, Math.max(0, Number.isFinite(start) ? start : 0));
+    if (this.loop) this.#settle(0, this.#local);
   }
 
+  /** Unwrapped playback position (`loop * duration + time`); reporting only, may round for huge loop counts. */
   get position(): number {
-    return this.#position;
+    return this.#loopIndex * this.duration + this.#local;
   }
 
   get time(): number {
-    return this.#wrap(this.#position);
+    return this.#local;
+  }
+
+  /** Stores a head given as a loop offset plus a (possibly out-of-range) local time. */
+  #settle(loopIndex: number, local: number): void {
+    const D = this.duration;
+    const whole = Math.floor(local / D);
+    let index = loopIndex + whole;
+    let rest = local - whole * D;
+    if (rest >= D) {
+      rest -= D;
+      index += 1;
+    }
+    if (!(rest >= 0)) rest = 0;
+    this.#loopIndex = index;
+    this.#local = rest;
   }
 
   /** Moves the head without firing anything (a seek). The next advance does not include the start point. */
   seek(time: number): void {
     if (!Number.isFinite(time)) return;
-    this.#position = this.loop ? time : Math.min(this.duration, Math.max(0, time));
+    if (this.loop) {
+      this.#settle(0, time);
+    } else {
+      this.#loopIndex = 0;
+      this.#local = Math.min(this.duration, Math.max(0, time));
+    }
     this.#started = true;
   }
 
   /** Moves the head back to `startTime` and re-arms the start-point inclusion. */
   reset(startTime = 0): void {
     const start = Number.isFinite(startTime) ? startTime : 0;
-    this.#position = Math.min(this.duration, Math.max(0, start));
+    this.#loopIndex = 0;
+    this.#local = Math.min(this.duration, Math.max(0, start));
+    if (this.loop) this.#settle(0, this.#local);
     this.#started = false;
   }
 
@@ -391,7 +422,10 @@ export class ClipEventTracker {
    * crossed in playback order. A non-finite or zero delta moves nothing and fires nothing.
    */
   advance(deltaSeconds: number): ClipEventAdvanceResult {
-    const from = this.#position;
+    // Crossings are computed in the frame of the current loop (`from` in [0, D)), so precision
+    // does not degrade with the number of loops played.
+    const from = this.#local;
+    const base = this.#loopIndex;
     if (!Number.isFinite(deltaSeconds) || deltaSeconds === 0) {
       return this.#result([], false, undefined);
     }
@@ -400,7 +434,11 @@ export class ClipEventTracker {
     if (!this.loop) to = Math.min(this.duration, Math.max(0, to));
     const includeStart = !this.#started;
     this.#started = true;
-    this.#position = to;
+    if (this.loop) {
+      this.#settle(base, to);
+    } else {
+      this.#local = to;
+    }
 
     if (this.#events.length === 0) return this.#result([], false, deltaSeconds > 0);
 
@@ -415,7 +453,7 @@ export class ClipEventTracker {
     // neighbouring iteration whose end (or start) coincides with it.
     const atStart = (k: number): boolean => !this.loop || k === Math.floor(from / D);
 
-    const emit = (event: ClipAnimationEvent, k: number, value: number): boolean => {
+    const emit = (event: ClipAnimationEvent, k: number): boolean => {
       if (fired.length >= this.#cap) {
         truncated = true;
         return false;
@@ -425,8 +463,8 @@ export class ClipEventTracker {
         name: event.name,
         time: event.time,
         payload: clonePayload(event.payload),
-        loop: k,
-        position: value,
+        loop: base + k,
+        position: (base + k) * D + event.time,
       });
       return true;
     };
@@ -442,7 +480,7 @@ export class ClipEventTracker {
         for (const event of this.#events) {
           const value = k * D + event.time;
           const after = value > from || (includeStart && value === from && atStart(k));
-          if (after && value <= to && !emit(event, k, value)) break outer;
+          if (after && value <= to && !emit(event, k)) break outer;
         }
       }
     } else {
@@ -457,17 +495,11 @@ export class ClipEventTracker {
           const event = this.#events[i] as ClipAnimationEvent;
           const value = k * D + event.time;
           const before = value < from || (includeStart && value === from && atStart(k));
-          if (before && value >= to && !emit(event, k, value)) break outer;
+          if (before && value >= to && !emit(event, k)) break outer;
         }
       }
     }
     return this.#result(fired, truncated, forward);
-  }
-
-  #wrap(position: number): number {
-    if (!this.loop) return Math.min(this.duration, Math.max(0, position));
-    const wrapped = ((position % this.duration) + this.duration) % this.duration;
-    return wrapped;
   }
 
   /**
@@ -475,11 +507,11 @@ export class ClipEventTracker {
    * head where it is and is judged against the end of the clip.
    */
   #result(fired: AnimationEventFire[], truncated: boolean, forward: boolean | undefined): ClipEventAdvanceResult {
-    const position = this.#position;
+    const position = this.position;
     return {
       fired,
       truncated,
-      time: this.#wrap(position),
+      time: this.#local,
       position,
       finished: !this.loop && (forward === false ? position <= 0 : position >= this.duration),
     };
