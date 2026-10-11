@@ -192,12 +192,20 @@ function protectLeadingDash(path: string): string {
   return path.startsWith("-") ? `./${path}` : path;
 }
 
+/** Exit code Blender uses when the export script raises (see `--python-exit-code`). */
+const BLENDER_PYTHON_EXCEPTION_EXIT_CODE = "1";
+
 export function blenderHeadlessArgs(input: BlenderExportOptions): string[] {
   const sourceBlend = requirePathOption("sourceBlend", input.sourceBlend);
   const pythonScript = requirePathOption("pythonScript", input.pythonScript);
   const outputGlb = requirePathOption("outputGlb", input.outputGlb);
   return [
     "--background",
+    // Blender exits 0 even when a --python script raises, unless told otherwise; without this a
+    // failed export looks like success and surfaces later as a vague "no GLB found". It must come
+    // before --python so it is already set when the script runs.
+    "--python-exit-code",
+    BLENDER_PYTHON_EXCEPTION_EXIT_CODE,
     protectLeadingDash(sourceBlend),
     "--python",
     protectLeadingDash(pythonScript),

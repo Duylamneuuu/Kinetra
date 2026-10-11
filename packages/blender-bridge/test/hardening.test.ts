@@ -67,12 +67,15 @@ test("argument shape is invariant and no path argument is ever parsed as a flag 
       outputGlb: randomPath(next),
     };
     const args = blenderHeadlessArgs(input);
-    assert.equal(args.length, 7, `seed ${seed}`);
-    assert.deepEqual([args[0], args[2], args[4], args[5]], ["--background", "--python", "--", "--output"]);
+    assert.equal(args.length, 9, `seed ${seed}`);
+    assert.deepEqual(
+      [args[0], args[1], args[2], args[4], args[6], args[7]],
+      ["--background", "--python-exit-code", "1", "--python", "--", "--output"],
+    );
     for (const [index, original] of [
-      [1, input.sourceBlend],
-      [3, input.pythonScript],
-      [6, input.outputGlb],
+      [3, input.sourceBlend],
+      [5, input.pythonScript],
+      [8, input.outputGlb],
     ] as const) {
       const value = args[index]!;
       assert.ok(!value.startsWith("-"), `seed ${seed}: ${JSON.stringify(value)} would be read as a flag`);
@@ -92,6 +95,8 @@ test("regression: relative paths starting with '-' are prefixed with ./", () => 
   });
   assert.deepEqual(args, [
     "--background",
+    "--python-exit-code",
+    "1",
     "./--python-expr=import os",
     "--python",
     "./-P.py",

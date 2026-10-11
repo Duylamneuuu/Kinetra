@@ -47,7 +47,7 @@ def main():
     output = str(Path(args.output).resolve())
     Path(output).parent.mkdir(parents=True, exist_ok=True)
 
-    bpy.ops.export_scene.gltf(
+    result = bpy.ops.export_scene.gltf(
         filepath=output,
         export_format="GLB",
         export_apply=args.apply_modifiers,
@@ -59,6 +59,11 @@ def main():
 
     if not Path(output).exists() and Path(f"{output}.glb").exists():
         Path(f"{output}.glb").replace(output)
+
+    # The glTF operator reports failure by returning {'CANCELLED'} rather than raising, and Blender
+    # would then exit 0; fail loudly so the bridge sees a non-zero exit with this message on stderr.
+    if "FINISHED" not in result or not Path(output).exists():
+        raise SystemExit(f"glTF export did not produce {output} (operator returned {sorted(result)})")
 
     manifest = collect_manifest(output)
     manifest_path = args.manifest or f"{output}.manifest.json"

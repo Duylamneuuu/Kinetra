@@ -76,7 +76,7 @@ class SimulatedBlenderRunner implements ProcessRunner {
       };
     }
 
-    // Parse headless args: --background <source.blend> --python <script> -- --output <target.glb>
+    // Parse headless args: --background --python-exit-code 1 <source.blend> --python <script> -- --output <target.glb>
     const outputIdx = args.indexOf("--output");
     if (outputIdx === -1 || outputIdx >= args.length - 1) {
       return { code: 2, stdout: "", stderr: "Missing --output argument" };
@@ -86,7 +86,8 @@ class SimulatedBlenderRunner implements ProcessRunner {
       return { code: 2, stdout: "", stderr: "Invalid --output argument" };
     }
 
-    const sourceBlend = args[1] ?? "";
+    // The source blend is the positional argument right before --python.
+    const sourceBlend = args[args.indexOf("--python") - 1] ?? "";
     let width = 1.0;
     try {
       if (sourceBlend) {
