@@ -71,6 +71,7 @@ import {
   type StopAudioOptions,
   type StopAudioResult,
 } from "./audio-controller.js";
+import { resolvePerformanceSampleOptions, type PerformanceSampleOptionsInput } from "./sample-options.js";
 import * as THREE from "three";
 
 export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
@@ -2468,15 +2469,12 @@ export class PlayerRuntimeController {
     return dataUrl.replace(/^data:image\/png;base64,/, "");
   }
 
-  async samplePerformance(options: {
-    warmupFrames?: number;
-    sampleFrames?: number;
-    fixedDeltaSeconds?: number;
+  async samplePerformance(options: PerformanceSampleOptionsInput & {
     mode?: "stepped" | "continuous";
   } = {}): Promise<PlayerRuntimePerformanceEvidence> {
-    const warmupFrames = options.warmupFrames ?? 10;
-    const sampleFrames = options.sampleFrames ?? 60;
-    const fixedDeltaSeconds = options.fixedDeltaSeconds ?? 1 / 60;
+    // Same bounds as the bridge command: a non-finite or huge count froze the renderer in this
+    // synchronous loop, and a NaN delta poisoned scripts, physics and animation.
+    const { warmupFrames, sampleFrames, fixedDeltaSeconds } = resolvePerformanceSampleOptions(options);
     const mode = options.mode === "continuous" ? "continuous" : "stepped";
 
     // 1. Warm-up frames (unmeasured)
