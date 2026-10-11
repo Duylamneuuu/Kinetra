@@ -51,7 +51,9 @@ readline.createInterface({ input: socket }).on("line", (line) => {
 setTimeout(() => process.exit(0), 20000);
 `;
 
-test("a write to a bridge that closed its stdin fails the request fast instead of crashing the host", async () => {
+// Windows named pipes do not report EPIPE to the writer when the reader closes fd 0 (the write is
+// accepted and only the request timeout fires), so the fast-failure contract is POSIX-only.
+test("a write to a bridge that closed its stdin fails the request fast instead of crashing the host", { skip: process.platform === "win32" }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "kinetra-fake-deaf-"));
   const playerEntry = join(directory, "fake-player.mjs");
   await writeFile(playerEntry, FAKE_DEAF_STDIO_PLAYER, "utf8");
