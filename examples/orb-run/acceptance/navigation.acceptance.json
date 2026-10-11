@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.navigation",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.navigation.ok", "expected": true },
+    { "type": "assert.equal", "path": "state.navigation.wallCount", "expected": 0 },
+    { "type": "assert.equal", "path": "state.navigation.orderExact", "expected": true },
+    { "type": "assert.equal", "path": "state.navigation.orbIds.2", "expected": "entity_3bxfmahb6bf3i" },
+    { "type": "assert.near", "path": "state.navigation.lengthMeters", "expected": 27.3137, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.navigation.estimatedSeconds", "expected": 6.8284, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.navigation.slackSeconds", "expected": 13.1716, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.navigation.path.0.x", "expected": -4, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.navigation.path.0.z", "expected": -4, "tolerance": 0.01 },
+    { "type": "assert.equal", "path": "state.level.verdict", "expected": "comfortable" },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+    { "type": "assert.equal", "path": "state.navigation.ok", "expected": true }
+  ]
+}
