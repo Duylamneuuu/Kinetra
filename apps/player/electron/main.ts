@@ -12,6 +12,7 @@ import {
   serializeBridgeMessage,
   type BridgeRequest,
 } from "./bridge-protocol.js";
+import { RendererRequestTracker } from "./renderer-requests.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,20 +59,20 @@ interface BridgeResponse {
   error?: string;
 }
 
-interface PendingRendererRequest {
-  resolve(value: unknown): void;
-  reject(error: Error): void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 let mainWindow: BrowserWindow | null = null;
 let smokeFinished = false;
-let rendererRequestCounter = 0;
 let bridgeSocket: Socket | undefined;
 let documentLoaded = false;
 let rendererReady = false;
 let bridgeReadyEmitted = false;
-const rendererPending = new Map<string, PendingRendererRequest>();
+const rendererRequests = new RendererRequestTracker({
+  send(message) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      throw new Error("Kinetra player window is unavailable");
+    }
+    mainWindow.webContents.send("kinetra:runtime:command", message);
+  },
+});
 
 function maybeEmitBridgeReady(): void {
   if (
@@ -136,6 +137,19 @@ function createWindow(): BrowserWindow {
     console.error(`[preload-error] ${preloadPath}:`, error);
   });
 
+  // Requests in flight when the renderer dies or the window closes would
+  // otherwise each wait out the 10 s renderer timeout (and, for a closed
+  // window, never be answerable at all). Fail them now.
+  window.webContents.on("render-process-gone", (_event, details) => {
+    rendererRequests.rejectAll(
+      new Error(`Kinetra renderer process is gone (${details.reason})`),
+    );
+  });
+
+  window.on("closed", () => {
+    rendererRequests.close(new Error("Kinetra player window is unavailable"));
+  });
+
   window.webContents.once("did-fail-load", (_event, code, description) => {
     const message = `Kinetra packaged player failed to load: ${code} ${description}`;
     console.error(message);
@@ -179,21 +193,7 @@ function callRenderer(
     return Promise.reject(new Error("Kinetra player window is unavailable"));
   }
 
-  const id = `renderer_${++rendererRequestCounter}`;
-
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      rendererPending.delete(id);
-      reject(new Error(`Renderer command "${method}" timed out`));
-    }, timeoutMs);
-
-    rendererPending.set(id, { resolve, reject, timer });
-    mainWindow?.webContents.send("kinetra:runtime:command", {
-      id,
-      method,
-      params,
-    });
-  });
+  return rendererRequests.call(method, params, timeoutMs);
 }
 
 ipcMain.on("kinetra:runtime:renderer-ready", (event) => {
@@ -218,39 +218,27 @@ ipcMain.on(
       // With a recoverable id, fail that pending request now (structured) rather than letting it
       // wait for the renderer timeout; without one nothing can be correlated, so it is dropped.
       const malformedId = recoverRendererResponseId(rawResponse);
-      const malformedPending =
-        malformedId === null ? undefined : rendererPending.get(malformedId);
-      if (malformedId !== null && malformedPending) {
-        clearTimeout(malformedPending.timer);
-        rendererPending.delete(malformedId);
-        malformedPending.reject(
+      if (
+        malformedId !== null &&
+        rendererRequests.fail(
+          malformedId,
           new Error(
             `${BRIDGE_MALFORMED_RENDERER_RESPONSE}: renderer replied to "${malformedId}" with a malformed response`,
           ),
-        );
+        )
+      ) {
         return;
       }
       console.error("[bridge] ignored a malformed renderer response");
       return;
     }
 
-    const pending = rendererPending.get(response.id);
-    if (!pending) {
-      return;
-    }
-
-    clearTimeout(pending.timer);
-    rendererPending.delete(response.id);
-
-    if (response.ok) {
-      pending.resolve(response.result);
-    } else {
-      pending.reject(
-        new Error(
-          response.error ?? "Unknown renderer runtime failure",
-        ),
-      );
-    }
+    rendererRequests.respond(
+      response.id,
+      response.ok
+        ? { ok: true, result: response.result }
+        : { ok: false, error: response.error },
+    );
   },
 );
 
@@ -428,7 +416,16 @@ function startRuntimeBridge(): Promise<void> {
         resolve();
       });
 
-      socket.once("error", reject);
+      // A permanent listener: a `once` handler is spent by the first error, and
+      // a second socket error (EPIPE after the host went away) would then be an
+      // uncaught exception in the main process.
+      socket.on("error", (error) => {
+        if (bridgeSocket === socket) {
+          console.error(`[bridge] socket error: ${error.message}`);
+        } else {
+          reject(error);
+        }
+      });
     });
   }
 
