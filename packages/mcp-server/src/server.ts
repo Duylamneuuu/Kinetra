@@ -38,6 +38,8 @@ export function formatToolError(error: unknown): string {
       code?: unknown;
       remediation?: unknown;
       issues?: unknown;
+      projectRevision?: unknown;
+      rolledBack?: unknown;
     };
     const issues = structuredIssues(coded.issues);
     if (typeof coded.code === "string" || issues !== undefined) {
@@ -48,6 +50,12 @@ export function formatToolError(error: unknown): string {
           ...(typeof coded.remediation === "string"
             ? { remediation: coded.remediation }
             : {}),
+          // ProjectPersistError: the client needs the post-failure revision to retry
+          // optimistically and whether the change was rolled back, as fields, not prose.
+          ...(typeof coded.projectRevision === "number" && Number.isSafeInteger(coded.projectRevision)
+            ? { projectRevision: coded.projectRevision }
+            : {}),
+          ...(typeof coded.rolledBack === "boolean" ? { rolledBack: coded.rolledBack } : {}),
           ...(issues !== undefined ? { issues } : {}),
         },
         null,
