@@ -77,6 +77,7 @@ test("the suite keeps the known manifests (a deleted contract is a failing test,
     "hud-timeout",
     "animation",
     "assets",
+    "level",
     "replay-win",
     "replay-timeout",
   ]) {

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "suite": "orb-run.level",
+  "seed": 0,
+  "target": "runtime",
+  "steps": [
+    { "type": "runtime.start", "sceneId": "scene_12q1bczg4xp8m" },
+    { "type": "assert.equal", "path": "state.level.ok", "expected": true },
+    { "type": "assert.equal", "path": "state.level.verdict", "expected": "comfortable" },
+    { "type": "assert.equal", "path": "state.level.errorCount", "expected": 0 },
+    { "type": "assert.equal", "path": "state.level.warningCount", "expected": 0 },
+    { "type": "assert.equal", "path": "state.level.orbCount", "expected": 3 },
+    { "type": "assert.equal", "path": "state.level.orderExact", "expected": true },
+    { "type": "assert.equal", "path": "state.level.rules.timeLimitSeconds", "expected": 20 },
+    { "type": "assert.near", "path": "state.level.lowerBoundSeconds", "expected": 5.45, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.level.playtestSeconds", "expected": 7, "tolerance": 0.01 },
+    { "type": "assert.near", "path": "state.level.slackSeconds", "expected": 13, "tolerance": 0.01 },
+    { "type": "assert.equal", "path": "state.level.route.waypoints.3.x", "expected": 4 },
+    { "type": "assert.equal", "path": "state.level.route.waypoints.3.z", "expected": 4 },
+
+    { "type": "input", "action": "player.moveRight", "phase": "hold", "durationMs": 2000 },
+    { "type": "assert.equal", "path": "state.game.collectedCount", "expected": 1 },
+    { "type": "assert.equal", "path": "state.level.verdict", "expected": "comfortable" }
+  ]
+}

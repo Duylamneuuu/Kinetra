@@ -116,6 +116,44 @@ export function walkTo(
   return used;
 }
 
+/**
+ * Playtest bot with eight-direction input: walks to `target` (x/z) pressing up to two move
+ * actions at once, so it takes the octile shortest path (what `analyzeOrbRunLevel` predicts)
+ * instead of `walkTo`'s one-axis-at-a-time Manhattan path. Stops within `within` metres
+ * (default: one step) or when `stopWhen` says so. Returns the steps used.
+ */
+export function walkStraightTo(
+  simulation: HeadlessSceneSimulation,
+  target: { x: number; z: number },
+  options: { maxSteps?: number; stopWhen?: () => boolean; playerSpeed?: number; within?: number } = {},
+): number {
+  const maxSteps = options.maxSteps ?? 1200;
+  const stepLength = (options.playerSpeed ?? ORB_RUN_DEFAULT_RULES.playerSpeed) * simulation.fixedDeltaSeconds;
+  const within = options.within ?? stepLength;
+  let used = 0;
+  while (used < maxSteps) {
+    if (options.stopWhen?.()) break;
+    const position = simulation.getPosition(ORB_RUN_ENTITY.player);
+    if (!position) throw new Error("Player has no runtime transform");
+    const dx = target.x - position[0];
+    const dz = target.z - position[2];
+    if (Math.hypot(dx, dz) <= within) break;
+    // A single-axis move covers a whole step; below half of it that axis is done (no oscillation).
+    const deadband = stepLength / 2;
+    simulation.releaseAllActions();
+    if (dx > deadband) simulation.setAction(ORB_RUN_ACTION.moveRight, 1);
+    else if (dx < -deadband) simulation.setAction(ORB_RUN_ACTION.moveLeft, 1);
+    if (dz > deadband) simulation.setAction(ORB_RUN_ACTION.moveBackward, 1);
+    else if (dz < -deadband) simulation.setAction(ORB_RUN_ACTION.moveForward, 1);
+    simulation.advance(1);
+    used += 1;
+    const after = simulation.getPosition(ORB_RUN_ENTITY.player)!;
+    if (after[0] === position[0] && after[2] === position[2]) break; // blocked or the run froze the player
+  }
+  simulation.releaseAllActions();
+  return used;
+}
+
 /** The winning route: every orb, then the exit. */
 export const ORB_RUN_WINNING_ROUTE: ReadonlyArray<{ x: number; z: number }> = [
   { x: 4, z: -4 },
