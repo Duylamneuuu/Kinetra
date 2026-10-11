@@ -13,7 +13,7 @@ Legend:
 | Phase | Status | What is actually true |
 |---|---|---|
 | P0 project model | DONE | Versioned text project model, stable IDs, deterministic serialization/migration baseline. |
-| P0 command/query bus | DONE | Typed mutation path, revisions/transactions/diff/undo baseline established. |
+| P0 command/query bus | DONE | Typed mutation path, revisions/transactions/diff/undo baseline established. When `KinetraAgentService` cannot save a mutation it rolls the command back and throws a structured `ProjectPersistError` (`PERSIST_FAILED`, `rolledBack`, `projectRevision`, remediation); revisions stay monotonic (the rollback is an undo and advances them), so the error names the `expectedProjectRevision` to retry with (unit-proven with a failing store, not a real full disk). |
 | P0 Three.js projection | DONE | Minimal runtime projection exists without making Three.js authoritative. |
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
@@ -345,7 +345,6 @@ Not yet implemented:
 Convention: each sample game is its own workspace package under `examples/<name>/` (picked up by `pnpm-workspace.yaml`) with its own `build`/`typecheck`/`test` scripts.
 
 What has meaningful proof (Slice 1, Node only):
-- a project save that fails inside `KinetraAgentService` rolls the command back and throws a structured `ProjectPersistError` (`PERSIST_FAILED`, `rolledBack`, `projectRevision`, remediation); the revision is not rewound (rollback is an undo, so it advances), and the error tells an optimistic client which `expectedProjectRevision` to retry with (unit-proven with a failing store, not against a real full disk);
 - the whole project is authored from an empty project through the real MCP server (`scene.create`, `entity.create`, `entity.patch` over the in-memory transport, one revision per call with `expectedProjectRevision`); the file `FileProjectStore` writes equals the checked-in `orb-run.kinetra.json`, and replaying the same plan through `CommandBus` gives the same bytes;
 - gameplay scripts on the `@kinetra/core` `GameScript` contract run in a headless `ScriptHost` harness (`HeadlessSceneSimulation`, example-local) at a fixed 1/30 s step: a semantic-input playtest bot wins; exit-before-orbs, timeout loss, arena clamp, determinism, mid-run save/restore into a fresh simulation, corrupt-save rejection, and a rules change made through the command bus are asserted;
 - Slice 2: the gameplay contracts are checked-in `AcceptanceManifest` JSON (`examples/orb-run/acceptance/`: win, timeout, save-load) executed by the engine's own `AcceptanceRunner` through an example-local headless `RuntimeProbe` (`OrbRunHeadlessProbe`, virtual fixed-step time); negative cases (missing path diagnostic, screenshot step without a renderer, corrupt save, rules rebalanced through the command bus, typo'd script id) fail at the expected step;
