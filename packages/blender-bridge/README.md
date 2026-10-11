@@ -10,6 +10,7 @@ Thin headless/Python automation boundary for Blender inspection, export and even
   - `blender.spawnFailed`: the Blender executable could not be started.
   - `blender.exportFailed`: Blender exited non-zero; the message keeps the `Blender export failed with code N` prefix and quotes at most the last 4,000 characters of stderr.
   - `blender.outputMissing`: Blender exited 0 but neither `<target>` nor `<target>.glb` exists.
+- Through `AssetReimportService` an importer failure never surfaces as a raw exception: the result is `status: "failed"` and the `asset.reimportFailed` event and result carry the error's `code` as `errorCode` (for example `blender.invalidOption` for a recipe that sets `blenderExecutable` / `pythonScript` without `allowRecipeExecutableOverrides`). The last known-good artifact is kept and Blender is never spawned for a rejected recipe. This is a behaviour change for older projects whose recipe `settings` name those keys: they now fail with `blender.invalidOption` until the host opts in. `test/reimport-service-recipe-override.test.ts` pins this.
 - `NodeProcessRunner` resolves on `close` (after stdout/stderr are drained), reports the terminating signal, and keeps at most the last 1,000,000 characters per stream.
 - The export manifest is optional. A present but malformed manifest, or fields of the wrong type, become `warning` diagnostics (`blender.manifestInvalid`, `blender.manifestFieldInvalid`) on the import result instead of being dropped silently.
 

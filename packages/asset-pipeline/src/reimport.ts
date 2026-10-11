@@ -12,6 +12,13 @@ import type {
   ImportRecipe,
 } from "./types.js";
 
+/** The `code` an importer attached to its error (BlenderBridgeError, ...), when it is a non-empty string. */
+function importerErrorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" && code.length > 0 ? code : undefined;
+}
+
 export type ReimportStatus = "noop" | "reimported" | "failed";
 
 export interface ReimportEvent {
@@ -37,6 +44,8 @@ export interface ReimportEvent {
   fingerprint?: string | undefined;
   affectedAssetIds?: string[] | undefined;
   error?: string | undefined;
+  /** Stable machine-readable code of the importer failure (e.g. `blender.invalidOption`), when the importer threw a coded error. */
+  errorCode?: string | undefined;
   diagnostics?: AssetDiagnostic[] | undefined;
 }
 
@@ -64,6 +73,8 @@ export interface ReimportResult {
   sourceHash?: string | undefined;
   affectedAssetIds: string[];
   error?: string | undefined;
+  /** Stable machine-readable code of the importer failure (e.g. `blender.invalidOption`), when the importer threw a coded error. */
+  errorCode?: string | undefined;
   diagnostics?: AssetDiagnostic[] | undefined;
 }
 
@@ -398,10 +409,12 @@ export class AssetReimportService {
       // Clean up temp file if written
       await this.#fs.unlink(tempPath);
       const error = `Import or validation failed for asset "${assetId}": ${err instanceof Error ? err.message : String(err)}`;
+      const errorCode = importerErrorCode(err);
       this.#emit({
         type: "asset.reimportFailed",
         assetId,
         error,
+        ...(errorCode !== undefined ? { errorCode } : {}),
       });
       // Last known-good artifact remains intact!
       return {
@@ -409,6 +422,7 @@ export class AssetReimportService {
         assetId,
         affectedAssetIds: [],
         error,
+        ...(errorCode !== undefined ? { errorCode } : {}),
       };
     }
 
