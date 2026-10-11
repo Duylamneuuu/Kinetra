@@ -9,7 +9,7 @@ import {
   type RuntimeProbe,
 } from "@kinetra/verification";
 
-import { OrbRunHeadlessProbe } from "./acceptance-probe.js";
+import { createOrbRunNavigationProbe } from "./navigation.js";
 
 // Node-only (reads the acceptance directory): deliberately NOT re-exported from `index.ts`, which is bundled for the web player.
 
@@ -43,7 +43,7 @@ export interface OrbRunSuiteReport {
 }
 
 export interface RunOrbRunSuiteOptions {
-  /** A fresh probe per manifest, so no state leaks between manifests. Defaults to `OrbRunHeadlessProbe`. */
+  /** A fresh probe per manifest, so no state leaks between manifests. Defaults to `createOrbRunNavigationProbe()` (`OrbRunHeadlessProbe` + `state.navigation`). */
   readonly probeFactory?: () => RuntimeProbe;
 }
 
@@ -72,7 +72,7 @@ export async function runOrbRunAcceptanceSuite(
   directory: string = orbRunAcceptanceDirectory(),
   options: RunOrbRunSuiteOptions = {},
 ): Promise<OrbRunSuiteReport> {
-  const probeFactory = options.probeFactory ?? (() => new OrbRunHeadlessProbe());
+  const probeFactory = options.probeFactory ?? (() => createOrbRunNavigationProbe());
   let files: string[];
   try {
     files = (await readdir(directory, { withFileTypes: true }))

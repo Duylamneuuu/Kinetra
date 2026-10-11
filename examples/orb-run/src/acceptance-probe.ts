@@ -33,6 +33,21 @@ function assetFailureLogs(catalog: OrbRunAssetCatalog): RuntimeLog[] {
   }));
 }
 
+/**
+ * Prices the route of an authored project (the shape of `planOrbRunRoute` in `navigation.ts`). It is injected, not
+ * imported: the planner loads Recast's WASM (Node-only) while this probe is part of the web-bundled package entry.
+ * The plan must be JSON-safe: the probe clones it into `state.navigation`.
+ */
+export type OrbRunRoutePlanner = (project: ProjectDocument) => Promise<unknown>;
+
+export interface OrbRunHeadlessProbeOptions {
+  /** The project to play (defaults to the shipped level; pass a walled variant to test it). */
+  project?: ProjectDocument;
+  animation?: OrbRunAnimatorOptions;
+  /** When set, snapshots carry `state.navigation` (the planner's answer for `project`, computed once). */
+  routePlanner?: OrbRunRoutePlanner;
+}
+
 /** Upper bound for one `step`/`wait`/`hold` (matches the player's `runtime.step`: ~10 minutes at 60 Hz). */
 export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
 
@@ -54,6 +69,10 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  * - `state.hud.<objective|orbs|timer|exit|marker|banner>.*`: the HUD model of `computeOrbRunHud` (`marker` and `banner` are `null` when absent)
  * - `state.level.*`: the static level check of the authored project (`analyzeOrbRunLevel`): `ok`, `verdict`, `errorCount`, `warningCount`,
  *   `orbCount`, `lowerBoundSeconds`, `playtestSeconds`, `slackSeconds`, `rules.*`, `route.orbIds.<n>`, `diagnostics.<n>.<code|severity|entityId|message>`
+ * - `state.level.walls.<n>.<entityId|x|z|halfWidth|halfDepth>`: the authored `OrbRunWall`s (also under a walled `project`)
+ * - `state.navigation.*`: only when the probe was built with a `routePlanner` (Node-only: `createOrbRunNavigationProbe` in `navigation.ts`
+ *   plugs in `planOrbRunRoute`): `ok`, `diagnostics.<n>.<code|severity|entityId|message>`, `orbIds.<n>`, `legs.<n>.<to|lengthMeters|path.<m>.<x|z>>`,
+ *   `path.<n>.<x|z>`, `lengthMeters`, `estimatedSeconds`, `slackSeconds`, `orderExact`, `wallCount`; absent otherwise (reading it is `missing_path`)
  * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
  *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
  * - `state.animation.*`: the runner's locomotion + foot IK (`OrbRunAnimator`): `speed`, `smoothedSpeed`, `weights.<idle|walk|run>`, `dominant`,
@@ -85,9 +104,24 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   /** Asset edits made since the last `start()`; they belong to the next start and must survive it. */
   #editsForNextStart = false;
 
-  constructor(options: { project?: ProjectDocument; animation?: OrbRunAnimatorOptions } = {}) {
+  readonly #routePlanner: OrbRunRoutePlanner | undefined;
+  #navigation: Promise<unknown> | undefined;
+
+  constructor(options: OrbRunHeadlessProbeOptions = {}) {
     this.#project = options.project ?? createOrbRunProject();
     this.#animation = options.animation ?? {};
+    this.#routePlanner = options.routePlanner;
+  }
+
+  /**
+   * The route plan of the authored project (computed once per probe; the project never changes under a probe).
+   * `undefined` when the probe was built without a planner, so `state.navigation` is absent and a manifest that
+   * reads it fails with `missing_path` instead of passing on nothing.
+   */
+  async #navigationPlan(): Promise<unknown> {
+    if (!this.#routePlanner) return undefined;
+    this.#navigation ??= this.#routePlanner(this.#project).then((plan) => structuredClone(plan));
+    return this.#navigation;
   }
 
   /** The running simulation (for tests that want to cross-check the probe). */
@@ -251,6 +285,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     const catalog = await this.#assets();
     const audio = orbRunAudio(simulation);
     const audioState = audio.state();
+    const navigation = await this.#navigationPlan();
     const cues = audio.cues();
     const played: Record<string, number> = {};
     for (const cue of cues) played[cue.assetId] = (played[cue.assetId] ?? 0) + 1;
@@ -263,6 +298,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
         events,
         hud: buildOrbRunHud(simulation),
         level: this.#level(),
+        ...(navigation === undefined ? {} : { navigation: structuredClone(navigation) }),
         animation: orbRunAnimator(simulation).state(),
         assets: catalog.state(cues.map((cue) => cue.assetId)),
         audio: {

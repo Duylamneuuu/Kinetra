@@ -2,6 +2,7 @@ import { RecastNavMesh } from "@kinetra/navigation-recast";
 import type { ProjectDocument } from "@kinetra/project-model";
 
 import { ORB_RUN_ENTITY, ORB_RUN_SCENE_ID, ORB_RUN_SCRIPT } from "./ids.js";
+import { OrbRunHeadlessProbe, type OrbRunHeadlessProbeOptions } from "./acceptance-probe.js";
 import { analyzeOrbRunLevel, type OrbRunLevelDiagnostic } from "./level-check.js";
 import { walkStraightTo } from "./game.js";
 import { readOrbRunWalls, type OrbRunWall } from "./walls.js";
@@ -379,4 +380,13 @@ export function followOrbRunRoute(
     reached += 1;
   }
   return { steps, reached, total: waypoints.length };
+}
+
+/**
+ * An `OrbRunHeadlessProbe` that also reports `state.navigation.*`: the plan `planOrbRunRoute` prices for the probe's
+ * project (computed once, on the first snapshot). Lives here, not in `acceptance-probe.ts`, because the planner loads
+ * Recast's WASM and the probe is part of the web-bundled package entry.
+ */
+export function createOrbRunNavigationProbe(options: Omit<OrbRunHeadlessProbeOptions, "routePlanner"> = {}): OrbRunHeadlessProbe {
+  return new OrbRunHeadlessProbe({ ...options, routePlanner: (project) => planOrbRunRoute(project) });
 }
