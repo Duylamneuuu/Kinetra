@@ -191,13 +191,20 @@ export class OrbRunAnimator {
     this.#dominant = dominant;
 
     let plan: FootPlan | undefined;
+    // The ground function is sampled exactly once per point, inside the try: a function that
+    // throws (or has state and throws on its Nth call) can only ever cost a pose, never the step.
+    let leftGround = 0;
+    let rightGround = 0;
     try {
       const [x, , z] = this.#previous;
+      const baseGround = this.#ground(x, z);
+      leftGround = this.#ground(x - RUNNER_LEG_RIG.hipOffsetX, z);
+      rightGround = this.#ground(x + RUNNER_LEG_RIG.hipOffsetX, z);
       plan = planFootPlacement({
         position: [x, 0, z],
-        baseGround: this.#ground(x, z),
-        leftGround: this.#ground(x - RUNNER_LEG_RIG.hipOffsetX, z),
-        rightGround: this.#ground(x + RUNNER_LEG_RIG.hipOffsetX, z),
+        baseGround,
+        leftGround,
+        rightGround,
       });
     } catch (error) {
       this.#failures.push({ step, message: error instanceof Error ? error.message : String(error) });
@@ -218,9 +225,8 @@ export class OrbRunAnimator {
       };
     }
 
-    const [px, , pz] = this.#previous;
-    const left = this.#foot(plan.feet[0], this.#ground(px - RUNNER_LEG_RIG.hipOffsetX, pz));
-    const right = this.#foot(plan.feet[1], this.#ground(px + RUNNER_LEG_RIG.hipOffsetX, pz));
+    const left = this.#foot(plan.feet[0], leftGround);
+    const right = this.#foot(plan.feet[1], rightGround);
     const maxBoneLengthError = Math.max(...plan.feet.map((foot) => this.#boneError(foot)));
     return {
       step,
