@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 18 walls and routes as acceptance state (`state.navigation`) ([#396](https://github.com/Duylamneuuu/Kinetra/pull/396))
 - **orb-run**: slice 17 the fuzzer plays on walled levels (`player_clear_of_walls` invariant, walled campaigns, replay and save/resume) ([#388](https://github.com/Duylamneuuu/Kinetra/pull/388))
 - **orb-run**: slice 16 walls (`OrbRunWall` component) and a route planned on the engine's navmesh (`@kinetra/navigation-recast`); the level check is wall-aware ([#382](https://github.com/Duylamneuuu/Kinetra/pull/382))
 - **orb-run**: slice 15 art hot-reloads through the engine's `AssetHotReloadCoordinator` (headless runtime target, injected faults, gameplay untouched) ([#372](https://github.com/Duylamneuuu/Kinetra/pull/372))
@@ -23,6 +24,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: main→renderer requests fail fast when the window closes or send throws; bridge socket keeps an error listener ([#395](https://github.com/Duylamneuuu/Kinetra/pull/395))
+- **mcp-server**: `formatToolError` reports `projectRevision` and `rolledBack` of a `ProjectPersistError` as fields ([#391](https://github.com/Duylamneuuu/Kinetra/pull/391))
+- **verification**: a budget that is both exceeded and partly unusable reports both; unusable values under any key of a budgets map are reported (refs #231) ([#394](https://github.com/Duylamneuuu/Kinetra/pull/394))
 - **asset-pipeline**: reimport failures carry the importer's error code; `blender.invalidOption` is pinned through `AssetReimportService` and staging cleanup (#255) ([#389](https://github.com/Duylamneuuu/Kinetra/pull/389))
 - **player**: the navigation request started last wins over a slower earlier bake; a failing install releases the replacement ([#387](https://github.com/Duylamneuuu/Kinetra/pull/387))
 - **orb-run**: the animator samples ground once inside its `try`; failing step listeners no longer abort `advance()` (#252) ([#385](https://github.com/Duylamneuuu/Kinetra/pull/385))
@@ -73,6 +77,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **verification**: performance budget edges (percentile properties, thresholds, platform overrides, report writer) ([#397](https://github.com/Duylamneuuu/Kinetra/pull/397))
+- **player**: pin `runtime.step` bounds parity between player and probe schema (refs #383) ([#393](https://github.com/Duylamneuuu/Kinetra/pull/393))
 - **mcp-server**: MCP tools forward every optional field (`dryRun`, `expectedProjectRevision`, `cascade`, `parentId`, query filters) through the real server ([#390](https://github.com/Duylamneuuu/Kinetra/pull/390))
 - **reference-game**: `damageDealt` through the real ScriptHost ([#339](https://github.com/Duylamneuuu/Kinetra/pull/339))
 - **save-state**: storage contracts property/IPC tests ([#344](https://github.com/Duylamneuuu/Kinetra/pull/344))
