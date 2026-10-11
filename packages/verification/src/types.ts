@@ -306,8 +306,10 @@ export const runtimeResumeStepSchema = z.object({
 
 export const runtimeStepStepSchema = z.object({
   type: z.literal("runtime.step"),
-  steps: z.number().int().positive().optional(),
-  deltaSeconds: z.number().positive().optional(),
+  // Same bounds the Electron player enforces in apps/player/src/step-params.ts, so an
+  // oversized probe step fails validation up front instead of mid-run with a raw TypeError.
+  steps: z.number().int().positive().max(36_000).optional(),
+  deltaSeconds: z.number().positive().max(1).optional(),
 }).strict();
 
 export const assetRegisterStepSchema = z.object({
