@@ -14,6 +14,7 @@ import type {
 } from "./runtime-controller.js";
 import { singleFlight } from "./single-flight.js";
 import { normalizeGain } from "./gain-value.js";
+import { setKeyedEntry } from "./keyed-record.js";
 
 export class GameShellController {
   #runtime: PlayerRuntimeController;
@@ -233,10 +234,13 @@ export class GameShellController {
     if (!this.#settings.input) {
       this.#settings.input = {};
     }
-    if (!this.#settings.input.customBindings) {
-      this.#settings.input.customBindings = {};
-    }
-    this.#settings.input.customBindings[actionId] = bindings;
+    // Action ids are author-chosen; a plain `obj[actionId] = …` would swap the prototype for
+    // "__proto__" and the binding would never be saved (#228).
+    this.#settings.input.customBindings = setKeyedEntry<unknown[]>(
+      this.#settings.input.customBindings,
+      actionId,
+      bindings,
+    );
     await this.#settingsStore.save(this.#settings);
     this.#syncBindingsDisplay();
   }
