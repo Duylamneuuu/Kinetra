@@ -51,6 +51,30 @@ test("the package entry never imports node:* (it is bundled for the web player);
   assert.doesNotMatch(index, /acceptance-suite/, "index must not re-export the Node-only acceptance suite");
 });
 
+test("digestOrbRunState sees an audio cue started between steps (stateRevision unchanged)", async () => {
+  const { startOrbRunSimulation, digestOrbRunState, orbRunAudio, ORB_RUN_AUDIO_ASSET_IDS } = await import(
+    "../src/index.js"
+  );
+  const simulation = await startOrbRunSimulation();
+  try {
+    simulation.advance(1);
+    const before = digestOrbRunState(simulation);
+    const revision = simulation.stateRevision;
+    const audio = orbRunAudio(simulation);
+    const result = await audio.play({ assetId: ORB_RUN_AUDIO_ASSET_IDS[0]! });
+    assert.equal(result.success, true, JSON.stringify(result));
+    assert.equal(simulation.stateRevision, revision, "audio.play outside a step does not move the revision");
+    const after = digestOrbRunState(simulation);
+    assert.notEqual(after, before, "the new cue must change the digest");
+    assert.equal(digestOrbRunState(simulation), after);
+    // A refused play (unknown asset) is not a cue and leaves the digest alone.
+    assert.equal((await audio.play({ assetId: "missing" })).success, false);
+    assert.equal(digestOrbRunState(simulation), after);
+  } finally {
+    await simulation.dispose();
+  }
+});
+
 test("digestOrbRunState is cached per state revision and refreshed by steps and restores", async () => {
   const { startOrbRunSimulation, digestOrbRunState } = await import("../src/index.js");
   const simulation = await startOrbRunSimulation();

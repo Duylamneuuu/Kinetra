@@ -197,6 +197,11 @@ export class HeadlessAudioService implements GameScriptAudioService {
     this.mixer.setMuted(busId, muted);
   }
 
+  /** How many cues have started so far; O(1), unlike `cues()`, which copies the whole list. */
+  get cueCount(): number {
+    return this.#cues.length;
+  }
+
   /** Every cue ever started, in order (copy). */
   cues(assetId?: string): PlayedCue[] {
     const cues = assetId ? this.#cues.filter((cue) => cue.assetId === assetId) : this.#cues;

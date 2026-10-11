@@ -88,18 +88,22 @@ function canonical(value: unknown): unknown {
  * retuning a locomotion curve does not invalidate recorded runs.
  */
 export function digestOrbRunState(simulation: HeadlessSceneSimulation): string {
+  // `audio.play` outside a step starts a cue (part of the digest) without moving `stateRevision`, so the cue count is
+  // part of the cache key.
+  const revision = simulation.stateRevision;
+  const cueCount = orbRunAudio(simulation).cueCount;
   const cached = DIGEST_CACHE.get(simulation);
-  if (cached && cached.revision === simulation.stateRevision) return cached.digest;
+  if (cached && cached.revision === revision && cached.cueCount === cueCount) return cached.digest;
   const digest = computeOrbRunDigest(simulation);
-  DIGEST_CACHE.set(simulation, { revision: simulation.stateRevision, digest });
+  DIGEST_CACHE.set(simulation, { revision, cueCount, digest });
   return digest;
 }
 
 /**
- * Digest of the last observed state per simulation. `stateRevision` moves on every step and every restore, so a repeated
+ * Digest of the last observed state per simulation. `stateRevision` moves on every step and every restore (cues started between steps are tracked by count), so a repeated
  * query (the acceptance probe asks for it on each `state` read) costs O(1) instead of re-hashing the whole event log.
  */
-const DIGEST_CACHE = new WeakMap<HeadlessSceneSimulation, { revision: number; digest: string }>();
+const DIGEST_CACHE = new WeakMap<HeadlessSceneSimulation, { revision: number; cueCount: number; digest: string }>();
 
 function computeOrbRunDigest(simulation: HeadlessSceneSimulation): string {
   const summary = summarizeOrbRun(simulation);
