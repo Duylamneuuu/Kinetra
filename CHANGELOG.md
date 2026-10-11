@@ -10,11 +10,17 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 12 one-command acceptance gate (`runOrbRunAcceptanceSuite` + acceptance CLI) ([#347](https://github.com/Duylamneuuu/Kinetra/pull/347))
 - **orb-run**: replays as acceptance manifests, digest over every entity position, non-blocking replay playback (slice 11) ([#307](https://github.com/Duylamneuuu/Kinetra/pull/307))
 - **project-model**: validate built-in component payloads at the authoring boundary (#81) ([#172](https://github.com/Duylamneuuu/Kinetra/pull/172))
 
 ### Fixed
 
+- **asset-pipeline**: `AssetHotReloadCoordinator` transaction history is bounded (`maxTransactionHistory`, default 100) ([#349](https://github.com/Duylamneuuu/Kinetra/pull/349))
+- **player**: nav bake/load keep the installed mesh when the replacement fails or is cancelled; volume setters reject NaN ([#348](https://github.com/Duylamneuuu/Kinetra/pull/348))
+- **physics-rapier**: fixed Collider/Primitive sphere and capsule keep their shape (`addFixedSphere`/`addFixedCapsule`) ([#346](https://github.com/Duylamneuuu/Kinetra/pull/346))
+- **animation,core**: clip metadata validates `rootMotionMode`/event names; aim rotations survive non-finite joints; prefab rejects empty `parentLocalId` ([#345](https://github.com/Duylamneuuu/Kinetra/pull/345))
+- **project-model**: entity `components` must be a plain object ([#338](https://github.com/Duylamneuuu/Kinetra/pull/338))
 - **orb-run**: probe resets the asset catalog per run, bounded failure log, README slice labels (#262) ([#334](https://github.com/Duylamneuuu/Kinetra/pull/334))
 - **renderer-three**: reloading into an asset without clips drops the stale animation metadata ([#335](https://github.com/Duylamneuuu/Kinetra/pull/335))
 - **animation**: root yaw sampled at the union of position+rotation keys as Y-twist (#313); `ClipEventTracker` constructor is safe and warns on `beyondDuration` (#189) ([#333](https://github.com/Duylamneuuu/Kinetra/pull/333))
@@ -36,6 +42,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **reference-game**: `damageDealt` through the real ScriptHost ([#339](https://github.com/Duylamneuuu/Kinetra/pull/339))
+- **save-state**: storage contracts property/IPC tests ([#344](https://github.com/Duylamneuuu/Kinetra/pull/344))
+- **editor**: `EditorSession` edge cases + undo/redo property test ([#342](https://github.com/Duylamneuuu/Kinetra/pull/342))
 - **player**: script-transform service extracted and tested; `translate` validates before the object lookup (#294) ([#336](https://github.com/Duylamneuuu/Kinetra/pull/336))
 - **mcp-server**: `LocalRuntimeHost` and `formatToolError` edge cases (+12 tests) ([#331](https://github.com/Duylamneuuu/Kinetra/pull/331))
 - **physics-rapier**: moveCharacter sees remove()d walls immediately and never integrates dynamic bodies (#286) ([#305](https://github.com/Duylamneuuu/Kinetra/pull/305))
