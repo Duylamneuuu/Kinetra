@@ -51,3 +51,7 @@ Rules:
   `normal` is the reverse of the cast direction.
 - Sphere-cast contact points are exact; box/capsule contact points come from Rapier's iterative solver (~1e-2). `distance` is accurate to ~1e-4.
 - Not proven yet: script/bridge exposure and a real-Electron test.
+
+## Scene diagnostics
+
+`createPhysicsWorldFromScene(scene, { onDiagnostic })` reports every collider it could not build as authored as a `PhysicsSceneDiagnostic` (`code: "physics.unsupportedColliderShape"`, `entityId`, `shape`, `source`, `bodyType`, `fallback`, `message`, `remediation`). Supported shapes are `box`, `sphere` (`ball`) and `capsule`; anything else still builds a box (or a capsule for characters) so existing scenes keep loading. `collectPhysicsSceneDiagnostics(scene)` returns the same list without creating a world. Entity rotation and scale are not applied to scene-built bodies.
