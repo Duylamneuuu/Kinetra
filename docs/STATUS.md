@@ -12,7 +12,7 @@ Legend:
 
 | Phase | Status | What is actually true |
 |---|---|---|
-| P0 project model | DONE | Versioned text project model, stable IDs, deterministic serialization/migration baseline. |
+| P0 project model | DONE | Versioned text project model, stable IDs, deterministic serialization/migration baseline. Component/metadata JSON nesting is bounded at `MAX_JSON_DEPTH` = 512 containers (boundary-tested 511/512/513); `cloneProject` on an unvalidated document too deep to copy throws `ProjectValidationError` (`project.json.too-deep`) instead of a raw `RangeError`. |
 | P0 command/query bus | DONE | Typed mutation path, revisions/transactions/diff/undo baseline established. When `KinetraAgentService` cannot save a mutation it rolls the command back and throws a structured `ProjectPersistError` (`PERSIST_FAILED`, `rolledBack`, `projectRevision`, remediation); revisions stay monotonic (the rollback is an undo and advances them), so the error names the `expectedProjectRevision` to retry with (unit-proven with a failing store, not a real full disk). |
 | P0 Three.js projection | DONE | Minimal runtime projection exists without making Three.js authoritative. |
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
