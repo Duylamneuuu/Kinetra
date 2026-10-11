@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatToolError } from "../src/index.js";
+import { formatToolError, ProjectPersistError } from "../src/index.js";
 
 function withFields(message: string, fields: Record<string, unknown>): Error {
   return Object.assign(new Error(message), fields);
@@ -65,6 +65,34 @@ test("formatToolError copies only the known issue fields and keeps remediation w
     { path: "scenes.0", code: "scene.id", message: "bad id", remediation: "use scene_*" },
     { path: "scenes.1", code: "scene.name", message: "bad name" },
   ]);
+});
+
+test("formatToolError carries projectRevision and rolledBack of a ProjectPersistError as fields", () => {
+  const persist = new ProjectPersistError(new Error("disk full"), { projectRevision: 7, rolledBack: true });
+  const body = JSON.parse(formatToolError(persist)) as Record<string, unknown>;
+  assert.equal(body.code, "PERSIST_FAILED");
+  assert.equal(body.projectRevision, 7);
+  assert.equal(body.rolledBack, true);
+  assert.equal(typeof body.remediation, "string");
+
+  const kept = JSON.parse(
+    formatToolError(new ProjectPersistError("nope", { projectRevision: 0, rolledBack: false })),
+  ) as Record<string, unknown>;
+  assert.equal(kept.projectRevision, 0, "revision 0 is a real revision, not absent");
+  assert.equal(kept.rolledBack, false, "rolledBack false is still reported");
+});
+
+test("formatToolError drops projectRevision and rolledBack of the wrong type", () => {
+  const body = JSON.parse(
+    formatToolError(
+      withFields("odd", { code: "E_X", projectRevision: "7", rolledBack: "yes" }),
+    ),
+  ) as Record<string, unknown>;
+  assert.deepEqual(body, { code: "E_X", message: "odd" });
+  for (const bad of [Number.NaN, 1.5, Infinity, -0.5 + Number.MAX_SAFE_INTEGER * 2]) {
+    const out = JSON.parse(formatToolError(withFields("odd", { code: "E_X", projectRevision: bad }))) as Record<string, unknown>;
+    assert.equal("projectRevision" in out, false, `projectRevision ${String(bad)} must not be emitted`);
+  }
 });
 
 test("formatToolError stringifies non-Error throwables", () => {
