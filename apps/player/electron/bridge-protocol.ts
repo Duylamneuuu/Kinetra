@@ -98,7 +98,8 @@ export interface RendererResponse {
 /**
  * Validates a reply the renderer sent over IPC. A malformed reply (null, missing id, non-boolean
  * ok) used to throw inside the ipcMain listener, an uncaught main-process exception; it is now
- * reported as `null` so the caller can ignore it and let the pending request time out normally.
+ * reported as `null`; the caller then uses `recoverRendererResponseId` to fail the matching pending
+ * request with a structured error, or drops the reply when it carries no usable id.
  */
 export function normalizeRendererResponse(raw: unknown): RendererResponse | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
@@ -108,6 +109,25 @@ export function normalizeRendererResponse(raw: unknown): RendererResponse | null
   if (candidate.result !== undefined) response.result = candidate.result;
   if (typeof candidate.error === "string") response.error = candidate.error;
   return response;
+}
+
+export const BRIDGE_MALFORMED_RENDERER_RESPONSE = "BRIDGE_MALFORMED_RENDERER_RESPONSE";
+
+/**
+ * For a renderer reply that `normalizeRendererResponse` rejected, recovers the request id when it is
+ * still a usable string (for example `{ id: "renderer_3", ok: "yes" }`). The caller can then fail
+ * that pending request immediately with a structured error instead of leaving it to the 10 s
+ * renderer timeout. Returns `null` when no id can be recovered. Never throws.
+ */
+export function recoverRendererResponseId(raw: unknown): string | null {
+  try {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+    const id = (raw as { id?: unknown }).id;
+    return typeof id === "string" && id.length > 0 ? id : null;
+  } catch {
+    // A throwing getter on a hostile payload must not escape the IPC listener.
+    return null;
+  }
 }
 
 /** Parses one non-empty bridge line. Never throws. */

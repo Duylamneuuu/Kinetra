@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname } from "node:path";
 import { NodeIO, getBounds } from "@gltf-transform/core";
 import type { AssetDatabase } from "./database.js";
+import { measureGlbBoundsFromJson } from "./glb-bounds.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
 import type {
@@ -127,7 +128,9 @@ const nodeFileSystem: FileSystemAdapter = {
 
 /**
  * World-space bounding-box size of every scene in a GLB, or undefined when it cannot be measured
- * (unparseable body, no geometry, non-finite positions). Never throws.
+ * (unparseable body, no geometry, non-finite positions). Never throws. Files gltf-transform cannot read
+ * (a required extension it has no decoder for: Draco, meshopt, quantization) fall back to the bounds
+ * declared by the POSITION accessors in the JSON chunk, so they keep their dimensions.
  */
 export async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, number, number] | undefined> {
   try {
@@ -145,7 +148,7 @@ export async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, 
     if (!size.every((value) => Number.isFinite(value) && value >= 0)) return undefined;
     return [size[0]!, size[1]!, size[2]!];
   } catch {
-    return undefined;
+    return measureGlbBoundsFromJson(bytes);
   }
 }
 
@@ -161,7 +164,18 @@ export class GlbDirectImporter implements AssetImporter {
     const dimensions = await measureGlbDimensions(context.sourceBytes);
     return {
       artifactBytes: context.sourceBytes,
-      ...(dimensions ? { metadata: { dimensions } } : {}),
+      ...(dimensions
+        ? { metadata: { dimensions } }
+        : {
+            diagnostics: [
+              {
+                severity: "warning" as const,
+                code: "asset.dimensions.unmeasured",
+                message:
+                  "The model's bounding box could not be measured (no POSITION geometry with min/max, or an unreadable body); metadata.dimensions was left unchanged.",
+              },
+            ],
+          }),
     };
   }
 }

@@ -105,6 +105,13 @@ export class RapierPhysicsWorld {
   /** True when colliders moved/appeared/vanished since the broad phase last ran. */
   #queriesStale = true;
   #fixedSteps = 0;
+  /**
+   * Kinematic moves requested with `moveKinematicBody` that no real step has applied yet. Rapier
+   * derives a kinematic body's velocity from the displacement over the step that consumes its next
+   * translation, and the zero-timestep query refresh would consume (and teleport) it with no
+   * velocity, so the real step re-arms it from the original start (`from`).
+   */
+  #pendingKinematic = new Map<string, { from: Vec3; target: Vec3 }>();
 
   private constructor(options: {
     gravity: Vec3;
@@ -467,8 +474,26 @@ export class RapierPhysicsWorld {
     if (!entry.body.isKinematic()) {
       throw new Error(`Body "${id}" is not kinematic`);
     }
+    const pending = this.#pendingKinematic.get(id);
+    const from = pending?.from ?? entry.body.translation();
+    this.#pendingKinematic.set(id, {
+      from: { x: from.x, y: from.y, z: from.z },
+      target: { x: target.x, y: target.y, z: target.z },
+    });
     entry.body.setNextKinematicTranslation(target);
     this.#queriesStale = true;
+  }
+
+  /** Re-arms pending kinematic moves so the next real step derives the right velocity. */
+  #armPendingKinematic(): void {
+    if (this.#pendingKinematic.size === 0) return;
+    for (const [id, move] of this.#pendingKinematic) {
+      const entry = this.#bodies.get(id);
+      if (!entry) continue;
+      entry.body.setTranslation(move.from, true);
+      entry.body.setNextKinematicTranslation(move.target);
+    }
+    this.#pendingKinematic.clear();
   }
 
   moveCharacter(id: string, desired: Vec3): CharacterMoveResult {
@@ -501,6 +526,7 @@ export class RapierPhysicsWorld {
       z: current.z + computed.z,
     };
 
+    this.#pendingKinematic.delete(id);
     entry.body.setNextKinematicTranslation(next);
     entry.body.setTranslation(next, true);
     this.#queriesStale = true;
@@ -524,6 +550,7 @@ export class RapierPhysicsWorld {
    */
   step(fixedDeltaSeconds?: number): void {
     if (fixedDeltaSeconds === undefined) {
+      this.#armPendingKinematic();
       this.world.step();
       this.#fixedSteps++;
       this.#queriesStale = false;
@@ -534,6 +561,7 @@ export class RapierPhysicsWorld {
     }
     this.world.timestep = fixedDeltaSeconds;
     try {
+      this.#armPendingKinematic();
       this.world.step();
       this.#fixedSteps++;
       this.#queriesStale = false;
@@ -552,6 +580,7 @@ export class RapierPhysicsWorld {
     let steps = 0;
 
     while (this.#accumulator + Number.EPSILON >= this.fixedDeltaSeconds) {
+      this.#armPendingKinematic();
       this.world.step();
       this.#accumulator -= this.fixedDeltaSeconds;
       this.#fixedSteps++;
@@ -600,6 +629,7 @@ export class RapierPhysicsWorld {
   ): void {
     const entry = this.#require(id);
     assertFiniteVec3(position, "setBodyTranslation position");
+    this.#pendingKinematic.delete(id);
     entry.body.setTranslation(position, true);
     this.#queriesStale = true;
     if (resetVelocity) {
@@ -643,6 +673,7 @@ export class RapierPhysicsWorld {
       this.#controllers.delete(id);
     }
     if (entry.collider) this.#colliderOwners.delete(entry.collider.handle);
+    this.#pendingKinematic.delete(id);
     this.world.removeRigidBody(entry.body);
     this.#bodies.delete(id);
     this.#queriesStale = true;
@@ -657,6 +688,7 @@ export class RapierPhysicsWorld {
       }
     }
     this.#controllers.clear();
+    this.#pendingKinematic.clear();
     this.#bodies.clear();
     this.#colliderOwners.clear();
 
