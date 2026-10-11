@@ -11,6 +11,7 @@ import { createOrbRunProject } from "./authoring.js";
 import type { OrbRunAnimatorOptions } from "./animator.js";
 import { OrbRunAssetCatalog } from "./assets.js";
 import { buildOrbRunHud } from "./hud.js";
+import { analyzeOrbRunLevel, type OrbRunLevelReport } from "./level-check.js";
 import {
   captureOrbRunSave,
   restoreOrbRunSave,
@@ -51,6 +52,8 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  * - `state.entities.<EntityName>.position.<0|1|2>` and `.script` (the entity's script state)
  * - `state.events.<orbCollected|exitUnlocked|won|lost>`: how many times each gameplay event fired
  * - `state.hud.<objective|orbs|timer|exit|marker|banner>.*`: the HUD model of `computeOrbRunHud` (`marker` and `banner` are `null` when absent)
+ * - `state.level.*`: the static level check of the authored project (`analyzeOrbRunLevel`): `ok`, `verdict`, `errorCount`, `warningCount`,
+ *   `orbCount`, `lowerBoundSeconds`, `playtestSeconds`, `slackSeconds`, `rules.*`, `route.orbIds.<n>`, `diagnostics.<n>.<code|severity|entityId|message>`
  * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
  *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
  * - `state.animation.*`: the runner's locomotion + foot IK (`OrbRunAnimator`): `speed`, `smoothedSpeed`, `weights.<idle|walk|run>`, `dominant`,
@@ -78,6 +81,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   #slots = new Map<string, OrbRunSaveData>();
   #previousLogs: RuntimeLog[] = [];
   #catalog: OrbRunAssetCatalog | undefined;
+  #levelReport: OrbRunLevelReport | undefined;
   /** Asset edits made since the last `start()`; they belong to the next start and must survive it. */
   #editsForNextStart = false;
 
@@ -101,6 +105,12 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
     await this.#assets();
     this.#simulation = await startOrbRunSimulation(this.#project, this.#animation);
     this.#paused = false;
+  }
+
+  /** The static level check of the authored project (computed once; the project never changes under a probe). */
+  #level(): OrbRunLevelReport {
+    this.#levelReport ??= analyzeOrbRunLevel(this.#project);
+    return this.#levelReport;
   }
 
   /** The asset catalog (built on first use), for tests that want to cross-check the probe. */
@@ -252,6 +262,7 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
         entities,
         events,
         hud: buildOrbRunHud(simulation),
+        level: this.#level(),
         animation: orbRunAnimator(simulation).state(),
         assets: catalog.state(cues.map((cue) => cue.assetId)),
         audio: {

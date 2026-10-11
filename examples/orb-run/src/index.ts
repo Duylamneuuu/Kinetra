@@ -13,3 +13,4 @@ export * from "./foot-ik.js";
 export * from "./hud.js";
 export * from "./replay.js";
 export * from "./replay-fixtures.js";
+export * from "./level-check.js";
