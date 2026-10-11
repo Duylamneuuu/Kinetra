@@ -13,7 +13,7 @@ Legend:
 | Phase | Status | What is actually true |
 |---|---|---|
 | P0 project model | DONE | Versioned text project model, stable IDs, deterministic serialization/migration baseline. |
-| P0 command/query bus | DONE | Typed mutation path, revisions/transactions/diff/undo baseline established. |
+| P0 command/query bus | DONE | Typed mutation path, revisions/transactions/diff/undo baseline established. When `KinetraAgentService` cannot save a mutation it rolls the command back and throws a structured `ProjectPersistError` (`PERSIST_FAILED`, `rolledBack`, `projectRevision`, remediation); revisions stay monotonic (the rollback is an undo and advances them), so the error names the `expectedProjectRevision` to retry with (unit-proven with a failing store, not a real full disk). |
 | P0 Three.js projection | DONE | Minimal runtime projection exists without making Three.js authoritative. |
 | P0 license guardrails | DONE | License policy/checking baseline exists. |
 | P1 Windows packaging spike | DONE | Electron/Vite Windows packaging and smoke path were proven early. |
