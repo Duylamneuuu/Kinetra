@@ -6,8 +6,14 @@
  */
 
 const JSON_CHUNK = 0x4e4f534a;
-/** Hierarchies deeper than this are treated as unmeasurable (also stops cyclic node graphs). */
+/** Hierarchies deeper than this are treated as unmeasurable. */
 const MAX_NODE_DEPTH = 256;
+/**
+ * A valid glTF node graph is a forest, so each node is visited at most once per scene that lists it.
+ * Malformed files that share children (`children: [i + 1, i + 1]` chains) would otherwise be walked
+ * 2^depth times and hang import/hot-reload; past this many visits per node the file is unmeasurable.
+ */
+const MAX_VISITS_PER_NODE = 4;
 
 type Matrix = number[];
 
@@ -116,6 +122,19 @@ function accessorBox(accessor: GltfAccessor | undefined): { min: number[]; max: 
 }
 
 /**
+ * True when the GLB's JSON chunk declares at least one mesh. A file without meshes (animation-only clips,
+ * empty node trees) has no bounding box to measure, which is not an import problem. Never throws.
+ */
+export function glbDeclaresMeshes(bytes: Uint8Array): boolean {
+  try {
+    const meshes = readJsonChunk(bytes)?.meshes;
+    return Array.isArray(meshes) && meshes.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Size of the world-space bounding box of every scene, or undefined when the JSON is unreadable, has no
  * measurable POSITION accessor, or yields non-finite values. Never throws.
  */
@@ -145,16 +164,26 @@ export function measureGlbBoundsFromJson(bytes: Uint8Array): [number, number, nu
       }
     };
 
+    const visitBudget = Math.max(nodes.length, 1) * Math.max(MAX_VISITS_PER_NODE, document.scenes.length);
+    let visits = 0;
+    const onPath = new Set<number>();
     const visit = (index: unknown, parent: Matrix, depth: number): void => {
       if (depth > MAX_NODE_DEPTH) throw new Error("node hierarchy too deep");
       const node = typeof index === "number" ? nodes[index] : undefined;
       if (!node || typeof node !== "object") return;
+      const nodeIndex = index as number;
+      if (onPath.has(nodeIndex)) throw new Error("cyclic node hierarchy");
+      if (++visits > visitBudget) throw new Error("node graph is not a tree");
       const local = nodeMatrix(node);
       if (!local) throw new Error("invalid node transform");
       const world = multiply(parent, local);
       const mesh = typeof node.mesh === "number" ? document.meshes?.[node.mesh] : undefined;
       for (const primitive of mesh?.primitives ?? []) include(primitive.attributes?.POSITION, world);
-      if (Array.isArray(node.children)) for (const child of node.children) visit(child, world, depth + 1);
+      if (Array.isArray(node.children)) {
+        onPath.add(nodeIndex);
+        for (const child of node.children) visit(child, world, depth + 1);
+        onPath.delete(nodeIndex);
+      }
     };
 
     for (const scene of document.scenes) {
