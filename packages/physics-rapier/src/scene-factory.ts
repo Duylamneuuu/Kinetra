@@ -43,17 +43,130 @@ function vec3Value(
   return fallback;
 }
 
+/** Collider shapes the scene factory builds as declared. */
+export const SUPPORTED_COLLIDER_SHAPES = ["box", "sphere", "ball", "capsule"] as const;
+
+/**
+ * A scene entity whose physics could not be built exactly as authored. The world is still built
+ * (with `fallback` in place of the declared shape) so existing scenes keep loading, but the caller
+ * gets a structured, stable code to log or surface instead of a silent substitution.
+ */
+export interface PhysicsSceneDiagnostic {
+  readonly code: "physics.unsupportedColliderShape";
+  readonly severity: "warning";
+  readonly entityId: string;
+  /** The declared value, stringified (`7` for a non-string shape). */
+  readonly shape: string;
+  readonly source: "Collider.shape" | "Primitive.kind";
+  readonly bodyType: "fixed" | "dynamic" | "kinematic" | "character";
+  /** The shape actually built in its place. */
+  readonly fallback: "box" | "capsule";
+  readonly message: string;
+  readonly remediation: string;
+}
+
+export interface PhysicsSceneFactoryOptions extends RapierPhysicsWorldOptions {
+  /** Called once per entity whose collider could not be built as authored. Errors it throws are ignored. */
+  onDiagnostic?: (diagnostic: PhysicsSceneDiagnostic) => void;
+}
+
+const SUPPORTED_SHAPES = new Set<string>(SUPPORTED_COLLIDER_SHAPES);
+
+function declaredShapeOf(
+  collider: Record<string, unknown> | null,
+  primitive: Record<string, unknown> | null,
+): { value: unknown; source: PhysicsSceneDiagnostic["source"] } | undefined {
+  // Mirrors `collider?.shape ?? primitive?.kind` below: an empty string counts as undeclared,
+  // exactly as stringValue() treats it.
+  const pick = (value: unknown) => value !== undefined && value !== null && value !== "";
+  if (collider && pick(collider.shape)) return { value: collider.shape, source: "Collider.shape" };
+  if (collider && collider.shape !== undefined && collider.shape !== null) return undefined;
+  if (primitive && pick(primitive.kind)) return { value: primitive.kind, source: "Primitive.kind" };
+  return undefined;
+}
+
+function diagnoseEntity(entity: SceneDefinition["entities"][number]): PhysicsSceneDiagnostic | undefined {
+  const rigidBody = asObject(entity.components.RigidBody);
+  const collider = asObject(entity.components.Collider);
+  const character = asObject(entity.components.CharacterBody);
+  const primitive = asObject(entity.components.Primitive);
+  if (!rigidBody && !collider && !character) return undefined;
+
+  const declared = declaredShapeOf(collider, primitive);
+  if (!declared) return undefined;
+  const shape = String(declared.value);
+
+  const rbType = stringValue(rigidBody?.type, "fixed").toLowerCase();
+  const isCharacter =
+    Boolean(character) ||
+    rbType === "kinematic" ||
+    rbType === "kinematicpositionbased" ||
+    rbType === "kinematicvelocitybased";
+
+  let bodyType: PhysicsSceneDiagnostic["bodyType"];
+  let fallback: PhysicsSceneDiagnostic["fallback"];
+  if (isCharacter) {
+    if (!character && (shape === "box" || shape === "sphere" || shape === "ball")) return undefined;
+    // A character is always a capsule; a Primitive kind is only the render mesh, so only an
+    // explicit non-capsule Collider.shape is a mismatch worth reporting.
+    if (declared.source !== "Collider.shape" || shape === "capsule") return undefined;
+    bodyType = character ? "character" : "kinematic";
+    fallback = "capsule";
+  } else {
+    if (typeof declared.value === "string" && SUPPORTED_SHAPES.has(shape)) return undefined;
+    // A plane Primitive is built as a box from Primitive.size (its render mesh is a thin box too).
+    if (declared.source === "Primitive.kind" && shape === "plane") return undefined;
+    bodyType = rbType === "dynamic" ? "dynamic" : "fixed";
+    fallback = "box";
+  }
+
+  return {
+    code: "physics.unsupportedColliderShape",
+    severity: "warning",
+    entityId: entity.id,
+    shape,
+    source: declared.source,
+    bodyType,
+    fallback,
+    message: `Entity "${entity.id}" declares ${declared.source} "${shape}", which the ${bodyType} physics path does not support; a ${fallback} collider was built instead.`,
+    remediation:
+      bodyType === "character"
+        ? `CharacterBody colliders are capsules: set Collider.shape to "capsule" (radius, halfHeight) or remove it.`
+        : `Use a supported Collider.shape (${SUPPORTED_COLLIDER_SHAPES.join(", ")}), sized with size/halfExtents, radius or radius+halfHeight.`,
+  };
+}
+
+/** Every collider in `scene` that would not be built as authored, without creating a physics world. */
+export function collectPhysicsSceneDiagnostics(scene: SceneDefinition): PhysicsSceneDiagnostic[] {
+  const diagnostics: PhysicsSceneDiagnostic[] = [];
+  for (const entity of scene.entities) {
+    const diagnostic = diagnoseEntity(entity);
+    if (diagnostic) diagnostics.push(diagnostic);
+  }
+  return diagnostics;
+}
+
 export async function createPhysicsWorldFromScene(
   scene: SceneDefinition,
-  options: RapierPhysicsWorldOptions = {},
+  options: PhysicsSceneFactoryOptions = {},
 ): Promise<RapierPhysicsWorld> {
-  const world = await RapierPhysicsWorld.create(options);
+  const { onDiagnostic, ...worldOptions } = options;
+  const world = await RapierPhysicsWorld.create(worldOptions);
   try {
     populateWorld(world, scene);
   } catch (error) {
     // Do not leak the WASM world when one entity is rejected.
     world.dispose();
     throw error;
+  }
+  if (onDiagnostic) {
+    for (const diagnostic of collectPhysicsSceneDiagnostics(scene)) {
+      try {
+        onDiagnostic(diagnostic);
+      } catch {
+        // A broken logger must not take the physics world (or the scene start) down with it.
+      }
+    }
   }
   return world;
 }
