@@ -36,6 +36,8 @@ export interface ReplaceDisposableOptions<T extends DisposableResource> {
   install(next: T): void;
   /** True once the owner no longer wants a result (for example the runtime was stopped). */
   isCancelled?(): boolean;
+  /** Message of the {@link ResourceSwapCancelledError} thrown when `isCancelled` is true at install time. */
+  cancelledMessage?: string;
 }
 
 /** Builds a replacement, then installs it and disposes the old resource. Returns the new one. */
@@ -46,11 +48,19 @@ export async function replaceDisposable<T extends DisposableResource>(
 
   if (options.isCancelled?.()) {
     next.dispose();
-    throw new ResourceSwapCancelledError();
+    throw options.cancelledMessage === undefined
+      ? new ResourceSwapCancelledError()
+      : new ResourceSwapCancelledError(options.cancelledMessage);
   }
 
   const previous = options.current();
-  options.install(next);
+  try {
+    options.install(next);
+  } catch (error) {
+    // The replacement never became the installed resource: release it, keep the previous one.
+    next.dispose();
+    throw error;
+  }
   if (previous !== undefined && previous !== next) {
     previous.dispose();
   }
