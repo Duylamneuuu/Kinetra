@@ -5,9 +5,17 @@ import {
   type CommandResult,
   type EngineCommand,
 } from "@kinetra/command-bus";
-import type { ComponentMap, EntityDefinition, JsonObject } from "@kinetra/project-model";
+import type { ComponentMap, EntityDefinition, JsonObject, JsonValue } from "@kinetra/project-model";
 
 import { buildHierarchy, type HierarchyNode } from "./hierarchy.js";
+import {
+  buildInspector,
+  normalizePropertyPath,
+  setAtPath,
+  type InspectorComponentSchema,
+  type InspectorModel,
+  type PropertyPath,
+} from "./inspector.js";
 
 export interface SceneSummary {
   id: string;
@@ -104,6 +112,15 @@ export class EditorSession {
     return item ? { sceneId: item.sceneId, entity: item.entity } : undefined;
   }
 
+  /**
+   * Schema-driven property rows for one entity (see {@link buildInspector}), or undefined when the
+   * entity does not exist. A fresh read of the bus snapshot on every call; nothing is cached.
+   */
+  inspector(entityId: string, schemas?: readonly InspectorComponentSchema[]): InspectorModel | undefined {
+    const inspected = this.inspect(entityId);
+    return inspected ? buildInspector(inspected.entity, schemas) : undefined;
+  }
+
   /** Selected entity ids in selection order; ids that no longer exist (deleted, undone) are dropped. */
   get selection(): readonly string[] {
     if (this.#selection.length > 0) {
@@ -173,6 +190,48 @@ export class EditorSession {
         payload: { entityId, component, patch: structuredClone(patch) },
       },
     ]);
+  }
+
+  /**
+   * Inspector edit of one property: `path` is "field", "field.sub", "position.1" or an array of
+   * segments, where the first segment is the component's top-level field. Sends a single
+   * `component.patch` through the bus, so validation, change records, undo and error codes are the
+   * bus's own. A path that cannot be applied (empty, "__proto__", through a scalar or past the end
+   * of an array) fails with INVALID_COMMAND before anything is sent.
+   */
+  setProperty(entityId: string, component: string, path: PropertyPath, value: JsonValue): CommandResult {
+    const parts = normalizePropertyPath(path);
+    if (!parts) {
+      throw new CommandError(
+        "INVALID_COMMAND",
+        `Invalid property path ${JSON.stringify(path)}: use a non-empty "field" or "field.sub" path without empty or "__proto__" segments`,
+      );
+    }
+    const [field, ...rest] = parts as [string | number, ...Array<string | number>];
+    const key = String(field);
+    let patchValue: JsonValue | undefined;
+    if (rest.length === 0) {
+      patchValue = structuredClone(value);
+    } else {
+      const components = this.inspect(entityId)?.entity.components;
+      const existing =
+        components !== undefined && Object.prototype.hasOwnProperty.call(components, component)
+          ? components[component]
+          : undefined;
+      const top =
+        typeof existing === "object" && existing !== null && !Array.isArray(existing) &&
+        Object.prototype.hasOwnProperty.call(existing, key)
+          ? (existing as JsonObject)[key]
+          : undefined;
+      patchValue = setAtPath(top, rest, value);
+    }
+    if (patchValue === undefined) {
+      throw new CommandError(
+        "INVALID_COMMAND",
+        `Cannot set "${parts.join(".")}" on component "${component}": the path steps through a scalar or past the end of an array`,
+      );
+    }
+    return this.patchComponent(entityId, component, { [key]: patchValue });
   }
 
   /** Hierarchy drag-and-drop; omit `parentId` to move the entity to the scene root. */
