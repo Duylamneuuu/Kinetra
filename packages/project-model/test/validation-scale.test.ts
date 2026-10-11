@@ -36,21 +36,42 @@ test("reasonably nested component JSON is still accepted", () => {
   assert.deepEqual(validateProject(project([{ id: "e", name: "E", components: { data: value as never } }])), []);
 });
 
+function chain(count: number): ProjectDocument {
+  return project(
+    Array.from({ length: count }, (_, index) => ({
+      id: `e${index}`,
+      name: "E",
+      ...(index > 0 ? { parentId: `e${index - 1}` } : {}),
+      components: {},
+    })),
+  );
+}
+
+/** Best of a few runs, so one GC pause or a busy CI machine does not decide the result. */
+function bestMs(document: ProjectDocument, runs = 3): number {
+  let best = Infinity;
+  for (let run = 0; run < runs; run += 1) {
+    const started = performance.now();
+    assert.deepEqual(validateProject(document), []);
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
 test("validateProject stays near-linear for a long parent chain", () => {
-  const count = 20_000;
-  const entities = Array.from({ length: count }, (_, index) => ({
-    id: `e${index}`,
-    name: "E",
-    ...(index > 0 ? { parentId: `e${index - 1}` } : {}),
-    components: {},
-  }));
-
-  const started = Date.now();
-  const issues = validateProject(project(entities));
-  const elapsed = Date.now() - started;
-
-  assert.deepEqual(issues, []);
-  assert.ok(elapsed < 5_000, `validation of ${count} chained entities took ${elapsed}ms`);
+  // Compare n against 4n instead of a wall-clock budget (which flaked on slow Windows runners):
+  // linear work grows ~4x, the quadratic ancestor walk this guards against grows ~16x.
+  const small = 5_000;
+  const large = small * 4;
+  const smallDoc = chain(small);
+  const largeDoc = chain(large);
+  bestMs(smallDoc, 1); // warm up the JIT before measuring
+  const smallMs = Math.max(bestMs(smallDoc), 1);
+  const largeMs = bestMs(largeDoc);
+  assert.ok(
+    largeMs / smallMs < 10,
+    `validating ${large} chained entities took ${largeMs.toFixed(1)}ms vs ${smallMs.toFixed(1)}ms for ${small} (ratio ${(largeMs / smallMs).toFixed(1)}, linear ~4, quadratic ~16)`,
+  );
 });
 
 test("parent cycle detection flags every entity whose chain never ends, and only those", () => {
