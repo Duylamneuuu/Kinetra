@@ -92,6 +92,8 @@ test("BlenderGlbImporter Unit Suite", async (t) => {
     assert.equal(mockRunner.lastExecutable, "blender-custom");
     assert.deepEqual(mockRunner.lastArgs, [
       "--background",
+      "--python-exit-code",
+      "1",
       "/source/test.blend",
       "--python",
       "/scripts/custom_export.py",
@@ -137,7 +139,7 @@ test("BlenderGlbImporter Unit Suite", async (t) => {
     });
 
     assert.equal(mockRunner.lastExecutable, "/opt/blender/blender");
-    assert.equal(mockRunner.lastArgs?.[3], "/opt/scripts/export.py");
+    assert.equal(mockRunner.lastArgs?.[5], "/opt/scripts/export.py");
   });
 
   await t.test("throws descriptive error when Blender process exits non-zero", async () => {

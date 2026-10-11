@@ -11,10 +11,22 @@ const options={
 
 test("builds deterministic Blender headless arguments",()=>{
   assert.deepEqual(blenderHeadlessArgs(options),[
-    "--background","assets/source/hero.blend",
+    "--background",
+    "--python-exit-code","1",
+    "assets/source/hero.blend",
     "--python","scripts/export_glb.py",
     "--","--output","assets/imported/hero.glb",
   ]);
+});
+
+test("Blender is told to exit non-zero when the export script raises, before the script runs",()=>{
+  // Blender exits 0 after a Python exception unless --python-exit-code is set, which would make a
+  // failed export look like a success.
+  const args=blenderHeadlessArgs(options);
+  const exitCodeAt=args.indexOf("--python-exit-code");
+  assert.ok(exitCodeAt>=0,"--python-exit-code must be passed");
+  assert.equal(args[exitCodeAt+1],"1");
+  assert.ok(exitCodeAt<args.indexOf("--python"),"--python-exit-code must precede --python");
 });
 
 test("runner boundary can be verified without requiring Blender",async()=>{

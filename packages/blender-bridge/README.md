@@ -17,7 +17,7 @@ Thin headless/Python automation boundary for Blender inspection, export and even
 
 | Export | Role |
 | --- | --- |
-| `blenderHeadlessArgs(options)` | pure argv for `blender --background <blend> --python <script> -- --output <glb>` |
+| `blenderHeadlessArgs(options)` | pure argv for `blender --background --python-exit-code 1 <blend> --python <script> -- --output <glb>` (a raised Python exception makes Blender exit non-zero instead of 0) |
 | `runBlenderExport(options, runner?)` | runs the export through a `ProcessRunner` and throws `BlenderBridgeError` on failure |
 | `NodeProcessRunner({ maxOutputChars?, timeoutMs? })` | default runner; kills the whole process group after `timeoutMs` (default `DEFAULT_BLENDER_TIMEOUT_MS`, 5 minutes) and reports `timedOut` |
 | `BlenderBridgeError` | stable `code` (`blender.invalidOption`, `blender.spawnFailed`, `blender.exportFailed`, `blender.timeout`, `blender.outputMissing`) plus `details` |
@@ -45,7 +45,7 @@ const options = {
   pythonScript: "export_glb.py",
 };
 assert.deepEqual(blenderHeadlessArgs(options), [
-  "--background", "./-hero.blend", "--python", "export_glb.py", "--", "--output", "out/hero.glb",
+  "--background", "--python-exit-code", "1", "./-hero.blend", "--python", "export_glb.py", "--", "--output", "out/hero.glb",
 ]);
 
 const ok: ProcessRunner = { run: async () => ({ code: 0, stdout: "", stderr: "" }) };
