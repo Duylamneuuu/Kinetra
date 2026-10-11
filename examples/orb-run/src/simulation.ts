@@ -92,6 +92,7 @@ export class HeadlessSceneSimulation {
   #revision = 0;
   #started = false;
   #stepListeners = new Set<(simulation: HeadlessSceneSimulation) => void>();
+  #failedListeners = new WeakSet<(simulation: HeadlessSceneSimulation) => void>();
 
   constructor(options: HeadlessSimulationOptions) {
     assertValidProject(options.project);
@@ -185,7 +186,21 @@ export class HeadlessSceneSimulation {
       this.#step += 1;
       this.#revision += 1;
       this.#host.update(this.fixedDeltaSeconds);
-      for (const listener of [...this.#stepListeners]) listener(this);
+      for (const listener of [...this.#stepListeners]) {
+        // Listeners are read-only observers: one that throws must not abort the step loop
+        // (the step counter and scripts already advanced) nor starve the listeners after it.
+        try {
+          listener(this);
+        } catch (error) {
+          // Logged once per listener so a listener that fails every step can't grow the log without bound.
+          if (!this.#failedListeners.has(listener)) {
+            this.#failedListeners.add(listener);
+            this.#log("warning", "simulation.stepListenerFailed", {
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
     }
   }
 
