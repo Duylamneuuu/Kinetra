@@ -10,6 +10,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 16 walls (`OrbRunWall` component) and a route planned on the engine's navmesh (`@kinetra/navigation-recast`); the level check is wall-aware ([#382](https://github.com/Duylamneuuu/Kinetra/pull/382))
+- **orb-run**: slice 15 art hot-reloads through the engine's `AssetHotReloadCoordinator` (headless runtime target, injected faults, gameplay untouched) ([#372](https://github.com/Duylamneuuu/Kinetra/pull/372))
+- **editor**: asset browser model (`buildAssetBrowser`/`filterAssetBrowser`) and console model (`EditorConsole`) (refs #274, #104) ([#366](https://github.com/Duylamneuuu/Kinetra/pull/366))
 - **orb-run**: slice 14 seeded input fuzzing (`runOrbRunFuzz`) with per-step invariants, replay determinism and save/resume equivalence ([#360](https://github.com/Duylamneuuu/Kinetra/pull/360))
 - **editor**: inspector model (`buildInspector`) and `EditorSession.setProperty` (refs #273) ([#358](https://github.com/Duylamneuuu/Kinetra/pull/358))
 - **orb-run**: slice 13 static level check (`analyzeOrbRunLevel`) with clock bounds, probe `state.level` and `level.acceptance.json` ([#351](https://github.com/Duylamneuuu/Kinetra/pull/351))
@@ -19,6 +22,18 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **project-model**: `cloneProject` reports a too-deep document as `ProjectValidationError`; `MAX_JSON_DEPTH` bounds pinned by tests (#205) ([#381](https://github.com/Duylamneuuu/Kinetra/pull/381))
+- **asset-pipeline**: JSON bounds fallback stops on shared-children node DAGs and cycles; no unmeasured warning for mesh-less GLBs ([#380](https://github.com/Duylamneuuu/Kinetra/pull/380))
+- **physics-rapier**: unsupported collider shapes report a structured diagnostic instead of silently becoming a box (#354) ([#379](https://github.com/Duylamneuuu/Kinetra/pull/379))
+- **player,verification**: `runtime.step` params parsed by a tested pure helper; the probe schema enforces the player's step bounds ([#378](https://github.com/Duylamneuuu/Kinetra/pull/378))
+- **verification**: the visual-baseline CLI rejects options that belong to the other command; dHash limits documented (#255) ([#377](https://github.com/Duylamneuuu/Kinetra/pull/377))
+- **mcp-server**: a failed project save throws a structured `ProjectPersistError` carrying the revision to retry with (#187) ([#376](https://github.com/Duylamneuuu/Kinetra/pull/376))
+- **animation**: `ClipEventTracker` keeps an integer loop count so long loops no longer drop boundary events (#189) ([#375](https://github.com/Duylamneuuu/Kinetra/pull/375))
+- **player**: saved custom bindings keep an action id named `__proto__` (#228) ([#374](https://github.com/Duylamneuuu/Kinetra/pull/374))
+- **core**: `ScriptHost.startAll()` starts scripts registered mid-pass and never shares a start pass queued before another pass (#337) ([#373](https://github.com/Duylamneuuu/Kinetra/pull/373))
+- **renderer-three**: blend space phase no longer becomes NaN when `speed * delta` overflows to Infinity ([#371](https://github.com/Duylamneuuu/Kinetra/pull/371))
+- **orb-run**: the digest cache sees audio cues started between steps (#329) ([#370](https://github.com/Duylamneuuu/Kinetra/pull/370))
+- **blender-bridge**: pass `--python-exit-code 1` so a raising export script fails the export instead of exiting 0 ([#369](https://github.com/Duylamneuuu/Kinetra/pull/369))
 - **verification**: baseline artifacts drop stale failing PNGs; concurrent baseline saves use their own temp file ([#365](https://github.com/Duylamneuuu/Kinetra/pull/365))
 - **asset-pipeline**: reimport reports `asset.dependency.missing` for declared dependencies absent from the database (#288) ([#364](https://github.com/Duylamneuuu/Kinetra/pull/364))
 - **animation**: `validateAnimationGraph` reports states/transitions without a string id instead of letting `undefined` satisfy a missing `entryState` or endpoint ([#362](https://github.com/Duylamneuuu/Kinetra/pull/362))
@@ -64,6 +79,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- **docs**: add PRs #353-#365 to CHANGELOG, STATUS snapshot and HANDOFF range ([#368](https://github.com/Duylamneuuu/Kinetra/pull/368))
 - **docs**: record Orb Run slice 14 (seeded input fuzzing) in STATUS ([#363](https://github.com/Duylamneuuu/Kinetra/pull/363))
 - **docs**: add PRs #351-#352 to CHANGELOG, HANDOFF hardening batch and STATUS snapshot ([#353](https://github.com/Duylamneuuu/Kinetra/pull/353))
 
