@@ -491,6 +491,24 @@ test("assert.performanceBudget reuses the last sample, samples on demand, and re
   assert.doesNotMatch(step.error ?? step.message ?? "", /scene\.objectCount/);
 });
 
+test("assert.performanceBudget names the unusable thresholds even when other thresholds are exceeded (#231)", async () => {
+  const report = await new AcceptanceRunner(new PerfProbe([textured()], PERF)).run(
+    manifest([
+      {
+        type: "assert.performanceBudget",
+        budgets: { "renderer.drawCalls": { max: 10 }, "frame.p95Ms": "fast", frameP95: "slow" },
+      },
+    ]),
+  );
+  assert.equal(report.passed, false);
+  const message = failedStep(report).error ?? failedStep(report).message ?? "";
+  assert.match(message, /performance\.budgetExceeded/);
+  assert.match(message, /renderer\.drawCalls/);
+  assert.match(message, /performance\.budgetInvalid/, "the skipped thresholds must be reported with the violations");
+  assert.match(message, /frame\.p95Ms/);
+  assert.match(message, /frameP95/, "a threshold key without a dot is a typo, not something to drop silently");
+});
+
 test("assert.performanceBudget fails when there is no evidence and the probe cannot sample", async () => {
   const report = await new AcceptanceRunner(new FrameProbe([textured()])).run(
     manifest([{ type: "assert.performanceBudget", budgets: { "frame.p95Ms": { max: 100 } } }]),
