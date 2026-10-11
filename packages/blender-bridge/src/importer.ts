@@ -116,7 +116,12 @@ export interface BlenderGlbImporterOptions {
   timeoutMs?: number;
   fileSystem?: {
     readFile(path: string): Promise<Uint8Array>;
-    /** Removes a staging sidecar; a missing file is not an error. Defaults to node's `rm(force)`. */
+    /**
+     * Removes a staging sidecar; a missing file is not an error. Without a `fileSystem` the importer
+     * uses node's `rm(force)`. A custom `fileSystem` WITHOUT `unlink` turns sidecar cleanup into a
+     * no-op (the adapter owns its files), so an adapter backed by a real directory must provide
+     * `unlink` or `<staging>.manifest.json` / `<staging>.glb` files will accumulate there.
+     */
     unlink?(path: string): Promise<void>;
   };
 }

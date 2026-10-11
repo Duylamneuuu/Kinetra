@@ -153,6 +153,8 @@ A baseline file (`schemaVersion: 1`) stores, per frame name, the PNG's `sha256`,
 | `mismatch` | Size changed or dHash beyond tolerance | no |
 | `missing` | No baseline recorded yet, so a new frame cannot slip through un-reviewed | no |
 
+Limits of `similar`: dHash keeps only the sign of horizontal luminance gradients on a 9x8 thumbnail, so a uniform brightness or tint shift, a colour swap that keeps the light/dark order, or a small element (a HUD icon, a line of text) disappearing can still read as `similar`. Treat a passing baseline as "layout unchanged", not "pixels unchanged"; use `compareVisualFrames` / `assert.visualSimilarity` (changed-pixel ratio, mean absolute difference) when colour or small details matter.
+
 `updateVisualBaselines` needs `confirm: true` and throws `baseline.updateForbiddenInCi` when `isCiEnvironment()` sees a CI marker, so CI can never auto-accept a regression. Errors are `VisualBaselineError` with a stable `code` (`baseline.invalidFile`, `baseline.invalidName`, `baseline.updateNotConfirmed`, ...). Frame names match `/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/`.
 
 ```ts doc-check
@@ -209,7 +211,7 @@ visual-baseline check  <baselines.json> <frames-dir> [--report-dir <dir>] [--tol
 visual-baseline update <baselines.json> <frames-dir> --confirm [--only <name,name>]
 ```
 
-`<frames-dir>` holds PNG files; each file name without `.png` is the frame name. `check` exits 1 on any failing frame and, with `--report-dir`, writes the report plus diff artifacts. Exit 2 means usage, I/O or validation trouble, including a frames directory with no `.png` files (`baseline.noFrames`: an empty directory never reads as a pass), an undecodable PNG (`visual.decodeFailed`) and an empty `--only`; directories named `*.png` are skipped; `update` is the only command that changes baselines. The baselines are not yet wired into `AcceptanceRunner` or CI with frames captured from the real Electron player (#100 still open).
+`<frames-dir>` holds PNG files; each file name without `.png` is the frame name. `check` exits 1 on any failing frame and, with `--report-dir`, writes the report plus diff artifacts. Exit 2 means usage, I/O or validation trouble, including a frames directory with no `.png` files (`baseline.noFrames`: an empty directory never reads as a pass), an undecodable PNG (`visual.decodeFailed`) an empty `--only`, and an option given to the command it does not belong to (`check --confirm`/`--only`, `update --tolerance`/`--report-dir`); directories named `*.png` are skipped; `update` is the only command that changes baselines. The baselines are not yet wired into `AcceptanceRunner` or CI with frames captured from the real Electron player (#100 still open).
 
 ## Proof level
 

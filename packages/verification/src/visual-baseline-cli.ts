@@ -19,7 +19,8 @@ export const VISUAL_BASELINE_USAGE = [
   "",
   "<frames-dir> holds PNG files; each file's name without .png is the frame name.",
   "`check` never writes baselines (exit 1 on any failing frame). `update` is the only",
-  "command that changes baselines and refuses to run when CI is set.",
+  "command that changes baselines and refuses to run when CI is set. An option given to",
+  "the command it does not belong to (check --only, update --tolerance) is an error (exit 2).",
 ].join("\n");
 
 export interface VisualBaselineCliIo {
@@ -78,6 +79,20 @@ function parseArguments(args: readonly string[]): ParsedArguments {
     } else {
       positional.push(argument);
     }
+  }
+  // An option that belongs to the other command is a mistake in the caller's script, not
+  // something to ignore: `check --only a` would otherwise check every frame (#255).
+  const misplaced =
+    parsed.command === "check"
+      ? [parsed.confirm ? "--confirm" : undefined, parsed.only !== undefined ? "--only" : undefined]
+      : [
+          parsed.tolerance !== undefined ? "--tolerance" : undefined,
+          parsed.reportDirectory !== undefined ? "--report-dir" : undefined,
+        ];
+  const wrong = misplaced.find((option) => option !== undefined);
+  if (wrong !== undefined) {
+    const owner = parsed.command === "check" ? "update" : "check";
+    throw new UsageError(`${wrong} only applies to \`${owner}\`, not \`${parsed.command}\``);
   }
   if (positional.length !== 2) {
     throw new UsageError("expected <baselines.json> and <frames-dir>");
