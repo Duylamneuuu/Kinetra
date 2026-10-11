@@ -10,12 +10,14 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 13 static level check (`analyzeOrbRunLevel`) with clock bounds, probe `state.level` and `level.acceptance.json` ([#351](https://github.com/Duylamneuuu/Kinetra/pull/351))
 - **orb-run**: slice 12 one-command acceptance gate (`runOrbRunAcceptanceSuite` + acceptance CLI) ([#347](https://github.com/Duylamneuuu/Kinetra/pull/347))
 - **orb-run**: replays as acceptance manifests, digest over every entity position, non-blocking replay playback (slice 11) ([#307](https://github.com/Duylamneuuu/Kinetra/pull/307))
 - **project-model**: validate built-in component payloads at the authoring boundary (#81) ([#172](https://github.com/Duylamneuuu/Kinetra/pull/172))
 
 ### Fixed
 
+- **player**: preload replies with a structured failure (`BRIDGE_UNCLONEABLE_RESPONSE`) when a result cannot be cloned; `performance.sample` validates frame counts and delta (`resolvePerformanceSampleOptions`) ([#352](https://github.com/Duylamneuuu/Kinetra/pull/352))
 - **asset-pipeline**: `AssetHotReloadCoordinator` transaction history is bounded (`maxTransactionHistory`, default 100) ([#349](https://github.com/Duylamneuuu/Kinetra/pull/349))
 - **player**: nav bake/load keep the installed mesh when the replacement fails or is cancelled; volume setters reject NaN ([#348](https://github.com/Duylamneuuu/Kinetra/pull/348))
 - **physics-rapier**: fixed Collider/Primitive sphere and capsule keep their shape (`addFixedSphere`/`addFixedCapsule`) ([#346](https://github.com/Duylamneuuu/Kinetra/pull/346))
