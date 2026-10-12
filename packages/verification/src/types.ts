@@ -200,7 +200,7 @@ export interface RuntimeProbeHost {
   enableTestScriptFixtures?(preset: string): Promise<void>;
   detachModel?(entityId: string): Promise<unknown>;
   attachModel?(entityId: string, assetId: string): Promise<unknown>;
-  reloadAsset?(assetId: string): Promise<{ success: boolean; affectedEntities: string[]; error?: string }>;
+  reloadAsset?(assetId: string): Promise<ReloadAssetResult>;
   updateAsset?(
     assetId: string,
     dataBase64: string,
@@ -248,7 +248,7 @@ export interface RuntimeProbe {
     dataBase64: string,
     options?: { fingerprint?: string; sourceHash?: string },
   ): Promise<void>;
-  reloadAsset?(assetId: string): Promise<{ success: boolean; affectedEntities: string[]; error?: string }>;
+  reloadAsset?(assetId: string): Promise<ReloadAssetResult>;
   computePathNavigation?(params: {
     start: [number, number, number];
     end: [number, number, number];
@@ -617,4 +617,20 @@ export interface AcceptanceReport {
   failedSteps?:StepResult[];
   failureReason?:string;
   observations?:Record<string,unknown>;
+}
+
+/**
+ * Result of `reloadAsset`. A successful reload can still have switched features off on the new
+ * asset (root bone gone, IK chain missing, morph target missing); those maps are absent when empty.
+ */
+export interface ReloadAssetResult {
+  success: boolean;
+  affectedEntities: string[];
+  error?: string | undefined;
+  /** Entity -> why root motion could not be re-enabled on the reloaded asset. */
+  droppedRootMotion?: Record<string, string> | undefined;
+  /** Entity -> IK chains with active targets the reloaded asset no longer supports. */
+  droppedIkChains?: Record<string, string[]> | undefined;
+  /** Entity -> morph overrides the reloaded asset no longer supports. */
+  droppedMorphOverrides?: Record<string, string[]> | undefined;
 }

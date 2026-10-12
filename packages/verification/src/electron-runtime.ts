@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import type { ProjectDocument } from "@kinetra/project-model";
 import type { RuntimePerformanceEvidence } from "./performance.js";
+import type { ReloadAssetResult } from "./types.js";
 
 export type RuntimeLogLevel = "debug" | "info" | "warning" | "error";
 
@@ -789,11 +790,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return this.#request<RuntimeQueryResult>("model.attach", { entityId, assetId });
   }
 
-  async reloadAsset(
-    assetId: string,
-  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+  async reloadAsset(assetId: string): Promise<ReloadAssetResult> {
     await this.#ensureProcess();
-    return this.#request<{ success: boolean; affectedEntities: string[]; error?: string }>(
+    return this.#request<ReloadAssetResult>(
       "model.reloadAsset",
       { assetId },
     );

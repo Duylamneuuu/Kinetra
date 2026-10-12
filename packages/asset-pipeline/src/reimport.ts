@@ -34,7 +34,8 @@ export interface ReimportEvent {
     | "asset.dependentReimportFailed"
     | "asset.runtimeReloadStarted"
     | "asset.runtimeReloadSucceeded"
-    | "asset.runtimeReloadFailed";
+    | "asset.runtimeReloadFailed"
+    | "asset.runtimeReloadDegraded";
   assetId: string;
   oldContentHash?: string | undefined;
   newContentHash?: string | undefined;
@@ -47,6 +48,12 @@ export interface ReimportEvent {
   /** Stable machine-readable code of the importer failure (e.g. `blender.invalidOption`), when the importer threw a coded error. */
   errorCode?: string | undefined;
   diagnostics?: AssetDiagnostic[] | undefined;
+  /** `asset.runtimeReloadDegraded`: entity -> why root motion could not be re-enabled on the reloaded asset. */
+  droppedRootMotion?: Record<string, string> | undefined;
+  /** `asset.runtimeReloadDegraded`: entity -> IK chains with active targets the reloaded asset no longer supports. */
+  droppedIkChains?: Record<string, string[]> | undefined;
+  /** `asset.runtimeReloadDegraded`: entity -> morph overrides the reloaded asset no longer supports. */
+  droppedMorphOverrides?: Record<string, string[]> | undefined;
 }
 
 export interface DependencyRebuildResult {
