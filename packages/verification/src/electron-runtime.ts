@@ -848,7 +848,11 @@ export class ElectronRuntimeHost implements RuntimeHost {
    * Tear the bridge down. Concurrent calls share one teardown, and requests that arrive while it
    * runs wait for it to finish before they launch a replacement process: the teardown's last
    * steps reset the process fields, which would otherwise wipe out the replacement's state and
-   * orphan it.
+   * orphan it. A request that arrives mid-teardown therefore starts a fresh bridge after the
+   * teardown, and nothing closes that bridge unless the caller calls `close()` again: do not treat
+   * one `close()` as the final cleanup while other callers can still issue requests. Callers that
+   * were waiting for the bridge to become ready when `close()` ran fail with "Electron runtime
+   * bridge closed" instead of waiting for the request timeout.
    */
   close(): Promise<void> {
     if (!this.#closing) {
@@ -968,6 +972,9 @@ export class ElectronRuntimeHost implements RuntimeHost {
       }
     }
 
+    // A caller still waiting for the "ready" signal (close() during startup) must fail now, not
+    // sit out the full request timeout on a promise nobody will settle. A no-op once ready.
+    this.#rejectReady?.(new Error("Electron runtime bridge closed"));
     this.#readyPromise = undefined;
     this.#resolveReady = undefined;
     this.#rejectReady = undefined;
