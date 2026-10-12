@@ -106,7 +106,7 @@ function assertJsonObject(value: unknown, message: string): asserts value is Rec
   }
 }
 
-export function parseEngineCommand(input: unknown): EngineCommand {
+function parseCommandRecord(input: unknown): EngineCommand {
   if (!isRecord(input)) {
     throw new CommandError("INVALID_COMMAND", "Command must be an object");
   }
@@ -190,4 +190,26 @@ export function parseEngineCommand(input: unknown): EngineCommand {
   }
 
   return structuredClone(input) as unknown as EngineCommand;
+}
+
+/**
+ * Validates untrusted input and returns a deep, detached copy of it as a typed command.
+ * Every failure is a structured `INVALID_COMMAND`: besides the shape checks, input a caller
+ * built in-process can hold values that cannot be read or cloned (functions or symbols in an
+ * envelope field, a throwing getter, a revoked proxy), which used to escape as a raw
+ * DOMException or Error instead of a `CommandError`.
+ */
+export function parseEngineCommand(input: unknown): EngineCommand {
+  try {
+    return parseCommandRecord(input);
+  } catch (error) {
+    if (error instanceof CommandError) {
+      throw error;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new CommandError(
+      "INVALID_COMMAND",
+      `Command could not be read as plain JSON data: ${reason}`,
+    );
+  }
 }
