@@ -10,10 +10,16 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 21 mud: `OrbRunSlowZone { radius, speedMultiplier ∈ (0, 1] }` authored as data slows the player to `playerSpeed × multiplier` while inside ([#436](https://github.com/Duylamneuuu/Kinetra/pull/436))
 - **orb-run**: slice 20 the entry stays portable: `entry-portability` test guards the source import graph (no Node builtins/globals/Node-only modules), `Buffer` replaced by a strict portable base64 helper ([#416](https://github.com/Duylamneuuu/Kinetra/pull/416))
 
 ### Fixed
 
+- **animation**: `extractRootMotionFromClip` rejects NaN/Infinity keyframe values and too-short position tracks ([#435](https://github.com/Duylamneuuu/Kinetra/pull/435))
+- **player**: `PlayerAudioController.reset()` drops the dead scene's asset resolver, so `play()` after stop fails as not initialized instead of bypassing the bus volumes ([#430](https://github.com/Duylamneuuu/Kinetra/pull/430))
+- **orb-run**: the `entry-portability` test runs on Windows (POSIX-style paths), fixing the red Windows player package job ([#432](https://github.com/Duylamneuuu/Kinetra/pull/432))
+- **orb-run**: `navmesh_error` instead of `route_blocked` for non-navmesh route failures, WAV `WAVE_FORMAT_EXTENSIBLE`/empty/odd bit-depth handling, warning for a wrongly declared model size (#411 #413 #415) ([#429](https://github.com/Duylamneuuu/Kinetra/pull/429))
+- **player**: `isEqualJson` treats `NaN` as equal and rejects array-vs-object; the runtime-controller pure helpers are extracted and tested ([#417](https://github.com/Duylamneuuu/Kinetra/pull/417))
 - **orb-run**: the importer measures and reads real asset metadata instead of copying declared numbers (Refs #231 items 3–5) ([#407](https://github.com/Duylamneuuu/Kinetra/pull/407))
 - **orb-run**: `planOrbRunRoute` reports a stop walled in tighter than the route agent as `route_blocked` instead of throwing ([#406](https://github.com/Duylamneuuu/Kinetra/pull/406))
 - **verification**: `ElectronRuntimeHost.close()` no longer clobbers a replacement bridge launched during teardown; a close during pipe bind launches nothing ([#405](https://github.com/Duylamneuuu/Kinetra/pull/405))
@@ -22,6 +28,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **mcp-server**: `runtime.*` and `test.runAcceptance` MCP tool forwarding ([#425](https://github.com/Duylamneuuu/Kinetra/pull/425))
+- **core**: `ScriptHost` / `ScriptRegistry` / prefab API edge tests closing a coverage gap ([#410](https://github.com/Duylamneuuu/Kinetra/pull/410))
+- **asset-pipeline**: `SourceAssetWatcher` edge cases (initial hash baseline, `removeAsset`, listener isolation, `stop()` cancels the re-arm) and `hashFile` ([#409](https://github.com/Duylamneuuu/Kinetra/pull/409))
 - **animation**: regression suite for malformed animation graphs (supersedes #261) ([#403](https://github.com/Duylamneuuu/Kinetra/pull/403))
 
 ## 2026-10-12
