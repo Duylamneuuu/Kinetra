@@ -466,6 +466,10 @@ export class PlayerAudioController {
     this.#busNodes.clear();
 
     this.#mixer = new AudioMixerModel(DEFAULT_AUDIO_BUSES);
+    // The bus graph is gone and the resolver belonged to the scene being torn down: until the next
+    // init() a play() must fail as "not initialized" instead of streaming that scene's assets
+    // straight to the destination, past the master/sfx/music volume the player chose.
+    this.#assetResolver = undefined;
     this.#initialized = false;
   }
 }

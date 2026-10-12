@@ -4,6 +4,7 @@ import type { OrbRunRules } from "./authoring.js";
 import { ORB_RUN_RULES_COMPONENT, ORB_RUN_SCENE_ID, ORB_RUN_SCRIPT } from "./ids.js";
 import { OrbRunRulesError, parseOrbRunRules } from "./scripts.js";
 import { OrbRunWallError, circleHitsWall, readOrbRunWalls, ORB_RUN_PLAYER_RADIUS, type OrbRunWall } from "./walls.js";
+import { OrbRunSlowZoneError, readOrbRunSlowZones, type OrbRunSlowZone } from "./zones.js";
 
 /**
  * Level check: a static analysis of the *authored* Orb Run project (positions,
@@ -31,6 +32,13 @@ import { OrbRunWallError, circleHitsWall, readOrbRunWalls, ORB_RUN_PLAYER_RADIUS
  * and `route` are null, the verdict is at best `unproven`, and the
  * `walls_present` warning points at `planOrbRunRoute` (navigation.ts), which
  * bakes a navmesh and prices the real route.
+ *
+ * Slow zones (`OrbRunSlowZone` entities, see `zones.ts`) only ever slow the
+ * player down (a multiplier above 1 is rejected), so the lower bound stays
+ * valid, but they make the bot's octile time optimistic: a level with slow
+ * zones makes no playtest claim either (`playtestSeconds`, `slackSeconds` and
+ * `route` are null, the verdict is at best `unproven`) and warns
+ * `slow_zones_present`.
  */
 
 export type OrbRunLevelCode =
@@ -49,6 +57,8 @@ export type OrbRunLevelCode =
   | "wall_invalid"
   | "player_in_wall"
   | "walls_present"
+  | "slow_zone_invalid"
+  | "slow_zones_present"
   | "time_impossible"
   | "time_unproven"
   | "time_tight";
@@ -90,6 +100,8 @@ export interface OrbRunLevelReport {
   route: OrbRunLevelRoute | null;
   /** Walls found in the scene (centre and half extents), in entity-id order. */
   walls: OrbRunWall[];
+  /** Slow zones found in the scene (centre, radius, multiplier), in entity-id order. */
+  slowZones: OrbRunSlowZone[];
 }
 
 export interface OrbRunLevelOptions {
@@ -211,6 +223,7 @@ function invalidReport(
   diagnostics: OrbRunLevelDiagnostic[],
   orbCount: number,
   walls: OrbRunWall[] = [],
+  slowZones: OrbRunSlowZone[] = [],
 ): OrbRunLevelReport {
   return {
     ok: false,
@@ -226,6 +239,7 @@ function invalidReport(
     orderExact: true,
     route: null,
     walls,
+    slowZones,
   };
 }
 
@@ -261,6 +275,13 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     if (!(cause instanceof OrbRunWallError)) throw cause;
     for (const issue of cause.issues) error("wall_invalid", issue.message, issue.entityId);
   }
+  let slowZones: OrbRunSlowZone[] = [];
+  try {
+    slowZones = readOrbRunSlowZones(scene.entities);
+  } catch (cause) {
+    if (!(cause instanceof OrbRunSlowZoneError)) throw cause;
+    for (const issue of cause.issues) error("slow_zone_invalid", issue.message, issue.entityId);
+  }
 
   let rules: OrbRunRules | null = null;
   if (managers.length !== 1) {
@@ -292,7 +313,7 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
   const orbPositions = orbs.map((orb) => locate(orb, `Orb ${orb.id}`));
 
   if (!rules || !player || !exit || orbs.length === 0 || orbPositions.some((entry) => !entry)) {
-    return invalidReport(rules, diagnostics, orbs.length, walls);
+    return invalidReport(rules, diagnostics, orbs.length, walls, slowZones);
   }
   const found = orbPositions as Found[];
   const limit = rules.arenaHalfExtent;
@@ -327,7 +348,7 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     }
   }
   if (diagnostics.some((entry) => entry.severity === "error")) {
-    return invalidReport(rules, diagnostics, orbs.length, walls);
+    return invalidReport(rules, diagnostics, orbs.length, walls, slowZones);
   }
 
   const targets = found.map((orb) => clampToArena(orb.position, limit));
@@ -368,6 +389,8 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
   const playtestSeconds = playCost(play.order) / rules.playerSpeed + (legs + 1) * fixedDelta;
   const slackSeconds = rules.timeLimitSeconds - playtestSeconds;
 
+  // Walls and slow zones both make the full-speed straight-line bot time a wrong claim.
+  const boundVoid = walls.length > 0 || slowZones.length > 0;
   let verdict: OrbRunLevelVerdict;
   if (lowerBoundSeconds >= rules.timeLimitSeconds) {
     verdict = "impossible";
@@ -376,13 +399,22 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
       `The clock (${rules.timeLimitSeconds} s) is shorter than the fastest conceivable run (${round(lowerBoundSeconds)} s)`,
       managers[0]!.id,
     );
-  } else if (walls.length > 0) {
+  } else if (boundVoid) {
     verdict = "unproven";
-    warn(
-      "walls_present",
-      `The level has ${walls.length} wall(s): the straight-line playtest bound does not apply, price the route with planOrbRunRoute (lower bound ${round(lowerBoundSeconds)} s)`,
-      managers[0]!.id,
-    );
+    if (walls.length > 0) {
+      warn(
+        "walls_present",
+        `The level has ${walls.length} wall(s): the straight-line playtest bound does not apply, price the route with planOrbRunRoute (lower bound ${round(lowerBoundSeconds)} s)`,
+        managers[0]!.id,
+      );
+    }
+    if (slowZones.length > 0) {
+      warn(
+        "slow_zones_present",
+        `The level has ${slowZones.length} slow zone(s): the full-speed playtest bound does not apply (lower bound ${round(lowerBoundSeconds)} s still holds)`,
+        managers[0]!.id,
+      );
+    }
   } else if (playtestSeconds > rules.timeLimitSeconds) {
     verdict = "unproven";
     warn(
@@ -411,16 +443,17 @@ export function analyzeOrbRunLevel(project: ProjectDocument, options: OrbRunLeve
     rules,
     orbCount: found.length,
     lowerBoundSeconds: round(lowerBoundSeconds),
-    playtestSeconds: walls.length > 0 ? null : round(playtestSeconds),
-    slackSeconds: walls.length > 0 ? null : round(slackSeconds),
+    playtestSeconds: boundVoid ? null : round(playtestSeconds),
+    slackSeconds: boundVoid ? null : round(slackSeconds),
     orderExact: play.exact && lower.exact,
     route:
-      walls.length > 0
+      boundVoid
         ? null
         : {
             orbIds: play.order.map((index) => found[index]!.entityId),
             waypoints: [...play.order.map((index) => targets[index]!), exitTarget].map((point) => ({ x: point.x, z: point.z })),
           },
     walls,
+    slowZones,
   };
 }
