@@ -6,6 +6,19 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-13
+
+### Fixed
+
+- **command-bus**: `parseEngineCommand` reports unreadable input as `INVALID_COMMAND`, not a raw `DOMException` ([#404](https://github.com/Duylamneuuu/Kinetra/pull/404))
+- **orb-run**: slice 19 the HUD fails loudly on corrupt state (`OrbRunHudError`, `ORB_RUN_HUD_INVALID`); a run won on the tick the clock hits 0 reads `normal`, not `expired` (#205) ([#402](https://github.com/Duylamneuuu/Kinetra/pull/402))
+
+## 2026-10-12
+
+### Added
+
+- **orb-run**: slice 18 follow-up navigation probe: `state.navigation` from the navmesh route planner and the navigation acceptance manifest ([#398](https://github.com/Duylamneuuu/Kinetra/pull/398))
+
 ## 2026-10-11
 
 ### Added
@@ -24,6 +37,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: `ElectronRuntimeHost` survives EPIPE on a dead bridge and releases its server and temp dir when the bridge exits ([#386](https://github.com/Duylamneuuu/Kinetra/pull/386))
 - **player**: main→renderer requests fail fast when the window closes or send throws; bridge socket keeps an error listener ([#395](https://github.com/Duylamneuuu/Kinetra/pull/395))
 - **mcp-server**: `formatToolError` reports `projectRevision` and `rolledBack` of a `ProjectPersistError` as fields ([#391](https://github.com/Duylamneuuu/Kinetra/pull/391))
 - **verification**: a budget both exceeded and partly unusable reports both (#231) ([#394](https://github.com/Duylamneuuu/Kinetra/pull/394))
