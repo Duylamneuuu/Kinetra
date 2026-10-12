@@ -251,6 +251,47 @@ export function validateAnimationGraph(graph:AnimationGraphDefinition):Animation
   return diagnostics;
 }
 
+function stateClipIds(graph:AnimationGraphDefinition,state:AnimationStateDefinition):string[]{
+  if(state.blendSpaceId!==undefined){
+    const space=graph.blendSpaces?.find(candidate=>candidate.id===state.blendSpaceId);
+    return space && Array.isArray(space.samples)?space.samples.map(sample=>sample.clipId):[];
+  }
+  return state.clipId!==undefined?[state.clipId]:[];
+}
+
+/**
+ * Non-fatal findings about a graph that already passes `validateAnimationGraph`.
+ *
+ * A transition INTO a blend-space state whose source side plays one of the same
+ * clips (for example `idle` -> a locomotion blend space that also samples
+ * `idle`) cannot crossfade: one mixer action would be driven from two weights,
+ * so the runtime cuts instead. The graph stays valid, but the author asked for
+ * `blendSeconds > 0` and gets a hard cut, so each such transition is reported as
+ * `anim.graph.transition.sharedClipCut`. Returns `[]` for a graph that fails
+ * validation (fix the errors first). Never throws.
+ */
+export function analyzeAnimationGraph(graph:AnimationGraphDefinition):AnimationGraphDiagnostic[]{
+  if(validateAnimationGraph(graph).length>0) return [];
+  const warnings:AnimationGraphDiagnostic[]=[];
+  const states=new Map<string,AnimationStateDefinition>();
+  for(const state of graph.states) states.set(state.id,state);
+  for(const transition of graph.transitions){
+    const from=states.get(transition.from);
+    const to=states.get(transition.to);
+    if(!from || !to || to.blendSpaceId===undefined) continue;
+    if((transition.blendSeconds??0.15)<=0) continue;
+    const fromClips=new Set(stateClipIds(graph,from));
+    const shared=[...new Set(stateClipIds(graph,to).filter(clip=>fromClips.has(clip)))].sort(compareCodePoints);
+    if(shared.length===0) continue;
+    warnings.push({
+      code:"anim.graph.transition.sharedClipCut",
+      message:`Transition "${transition.id}" (${transition.from} -> ${transition.to}) shares clip(s) ${shared.map(clip=>`"${clip}"`).join(", ")} between both sides, so it cuts instead of crossfading over ${transition.blendSeconds??0.15}s`,
+      remediation:"Give the blend space its own copy of the shared clip, or set blendSeconds to 0 on this transition if the cut is intended.",
+    });
+  }
+  return warnings;
+}
+
 export interface AnimationTransitionResult {
   from:string;
   to:string;
