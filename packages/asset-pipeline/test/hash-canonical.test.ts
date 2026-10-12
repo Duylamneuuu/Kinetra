@@ -55,6 +55,33 @@ test("values JSON cannot represent are rejected, undefined properties are treate
   assert.equal(hashJson({ a: 1, b: undefined }), hashJson({ a: 1 }));
 });
 
+test("Map, Set, RegExp and other slot-backed objects are rejected instead of all hashing as {}", () => {
+  const values: Array<[string, unknown]> = [
+    ["Map", new Map([["a", 1]])],
+    ["Set", new Set([1, 2])],
+    ["WeakMap", new WeakMap()],
+    ["WeakSet", new WeakSet()],
+    ["RegExp", /abc/u],
+    ["Promise", Promise.resolve(1)],
+    ["Error", new Error("boom")],
+  ];
+  for (const [name, value] of values) {
+    assert.throws(
+      () => hashJson({ settings: { value } }),
+      (error: unknown) =>
+        error instanceof CanonicalJsonError &&
+        error.code === "hash.unsupportedValue" &&
+        error.path === "$.settings.value" &&
+        error.message.includes(name),
+      name,
+    );
+  }
+  // Without the guard these two different settings objects shared one fingerprint.
+  assert.throws(() => hashJson({ tags: new Set(["a"]) }), CanonicalJsonError);
+  assert.throws(() => hashJson({ tags: new Set(["b"]) }), CanonicalJsonError);
+  assert.notEqual(hashJson({ tags: ["a"] }), hashJson({ tags: ["b"] }));
+});
+
 test("circular structures raise a structured error, shared references do not", () => {
   const loop: Record<string, unknown> = { name: "loop" };
   loop.self = loop;
