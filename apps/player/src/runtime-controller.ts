@@ -73,6 +73,12 @@ import {
   type StopAudioResult,
 } from "./audio-controller.js";
 import { resolvePerformanceSampleOptions, type PerformanceSampleOptionsInput } from "./sample-options.js";
+import {
+  base64ToUint8Array,
+  calculatePercentiles,
+  isEqualJson,
+  uint8ArrayToBase64,
+} from "./runtime-helpers.js";
 import * as THREE from "three";
 
 const NAV_SUPERSEDED_MESSAGE =
@@ -320,43 +326,6 @@ export interface PlayerRuntimeInput {
   phase: "press" | "release" | "hold";
   value?: number | [number, number];
   durationMs?: number;
-}
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
-}
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-function isEqualJson(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) {
-    return false;
-  }
-  const keysA = Object.keys(a as object).sort();
-  const keysB = Object.keys(b as object).sort();
-  if (keysA.length !== keysB.length) return false;
-  for (let i = 0; i < keysA.length; i++) {
-    const key = keysA[i]!;
-    if (key !== keysB[i]) return false;
-    if (!isEqualJson((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export class PlayerRuntimeController {
@@ -2664,30 +2633,4 @@ export class PlayerRuntimeController {
       ...(data ? { data: structuredClone(data) } : {}),
     });
   }
-}
-
-function calculatePercentiles(samples: number[]): PlayerRuntimePerformanceTiming {
-  if (samples.length === 0) {
-    return { p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 };
-  }
-
-  const sorted = [...samples].sort((a, b) => a - b);
-
-  const getPercentile = (p: number): number => {
-    if (sorted.length === 1) {
-      return sorted[0]!;
-    }
-    const index = (p / 100) * (sorted.length - 1);
-    const lower = Math.floor(index);
-    const upper = Math.ceil(index);
-    const weight = index - lower;
-    return sorted[lower]! * (1 - weight) + sorted[upper]! * weight;
-  };
-
-  return {
-    p50Ms: Number(getPercentile(50).toFixed(3)),
-    p95Ms: Number(getPercentile(95).toFixed(3)),
-    p99Ms: Number(getPercentile(99).toFixed(3)),
-    maxMs: Number(sorted[sorted.length - 1]!.toFixed(3)),
-  };
 }

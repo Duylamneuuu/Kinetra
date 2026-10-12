@@ -7,11 +7,13 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
+  extractFailedTests,
   extractTestReferences,
   isPackageSourceFile,
   isRealElectronTest,
   parseLcov,
   percent,
+  renderFailureAnnotation,
   renderMarkdown,
   resolveTestFiles,
   summarize,
@@ -217,6 +219,87 @@ test("coverage.mjs rejects workspace patterns it cannot expand", async () => {
     const result = runCoverage(root);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Unsupported pnpm workspace pattern/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("extractFailedTests lists unique failing test names from a spec log, capped", () => {
+  const log = [
+    "✔ passes (1.2ms)",
+    "✖ failing tests:",
+    "✖ first fails (3.4ms)",
+    "  ✖ nested fails (0.5ms)",
+    "✖ first fails (3.4ms)",
+    "✖ no duration",
+    "✖ c",
+    "✖ d",
+    "✖ e",
+    "✖ f",
+  ].join("\r\n");
+  assert.deepEqual(extractFailedTests(log), ["first fails", "nested fails", "no duration", "c", "d"]);
+  assert.deepEqual(extractFailedTests(log, 2), ["first fails", "nested fails"]);
+  assert.deepEqual(extractFailedTests(""), []);
+});
+
+test("renderFailureAnnotation escapes workflow-command characters and states whether it retries", () => {
+  assert.equal(
+    renderFailureAnnotation("@x/a", 1, 1, 2, ["50% done", "a\nb"]),
+    "::warning title=coverage test failure::@x/a tests exited with 1 (attempt 1/2): 50%25 done | a%0Ab; retrying once",
+  );
+  assert.equal(
+    renderFailureAnnotation("@x/a", 1, 2, 2, []),
+    "::warning title=coverage test failure::@x/a tests exited with 1 (attempt 2/2)",
+  );
+});
+
+test("renderMarkdown notes a package that only passed after a retry", () => {
+  const summary = summarize(parseLcov(LCOV));
+  assert.match(renderMarkdown([{ packageName: "@x/a", summary, retried: 1 }]), /83\.3 \(passed after 1 retry\) \|/);
+  assert.match(renderMarkdown([{ packageName: "@x/a", summary, retried: 2 }]), /\(passed after 2 retries\)/);
+});
+
+test("coverage.mjs re-runs a package whose tests failed once and records the retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kinetra-coverage-e2e-"));
+  try {
+    const marker = join(root, "first-run-marker");
+    await writeFixture(root, {
+      "pnpm-workspace.yaml": 'packages:\n  - "packages/*"\n',
+      "packages/a/package.json": JSON.stringify({ name: "@x/a", scripts: { test: "node --test dist/test/*.test.js" } }),
+      "packages/a/dist/src/lib.js": "export const one = () => 1;\n",
+      "packages/a/dist/test/lib.test.js": [
+        'import test from "node:test";',
+        'import assert from "node:assert/strict";',
+        'import { existsSync, writeFileSync } from "node:fs";',
+        'import { one } from "../src/lib.js";',
+        `const marker = ${JSON.stringify(marker)};`,
+        'test("flaky once", () => {',
+        "  const seen = existsSync(marker);",
+        '  if (!seen) writeFileSync(marker, "x");',
+        "  assert.equal(one(), seen ? 1 : 2);",
+        "});",
+        "",
+      ].join("\n"),
+    });
+    const result = runCoverage(root, ["--out", "cov"]);
+    assert.equal(result.status, 0, result.stderr + result.stdout);
+    assert.match(result.stdout, /::warning title=coverage test failure::@x\/a tests exited with 1 \(attempt 1\/2\): flaky once; retrying once/);
+    const summary = JSON.parse(await readFile(join(root, "cov/summary.json"), "utf8"));
+    assert.equal(summary[0].retried, 1);
+    assert.equal(summary[0].error, undefined);
+    assert.match(await readFile(join(root, "cov/summary.md"), "utf8"), /passed after 1 retry/);
+
+    // --retries 0 restores the single-attempt behaviour: a persistent failure still fails the run.
+    await rm(marker);
+    const strict = runCoverage(root, ["--out", "cov0", "--retries", "0"]);
+    assert.equal(strict.status, 1);
+    const strictSummary = JSON.parse(await readFile(join(root, "cov0/summary.json"), "utf8"));
+    assert.match(strictSummary[0].error, /tests exited with/);
+    assert.equal(strictSummary[0].retried, undefined);
+
+    const bad = runCoverage(root, ["--retries", "x"]);
+    assert.notEqual(bad.status, 0);
+    assert.match(bad.stderr, /--retries expects a non-negative integer/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
