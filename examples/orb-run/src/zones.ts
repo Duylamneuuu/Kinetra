@@ -121,6 +121,11 @@ export function walkSecondsAlong(
   zones: readonly OrbRunSlowZone[],
 ): number {
   if (!(playerSpeed > 0) || !Number.isFinite(playerSpeed)) throw new RangeError("playerSpeed must be a finite number > 0");
+  for (const entry of zones) {
+    if (!Number.isFinite(entry.speedMultiplier) || !(entry.speedMultiplier > 0) || entry.speedMultiplier > 1) {
+      throw new RangeError(`slow zone ${entry.entityId}: speedMultiplier must be a finite number in (0, 1]`);
+    }
+  }
   let length = 0;
   let seconds = 0;
   for (let index = 1; index < path.length; index += 1) {
