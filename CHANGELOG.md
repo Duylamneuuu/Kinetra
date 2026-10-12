@@ -10,8 +10,15 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **orb-run**: the importer measures and reads real asset metadata instead of copying declared numbers (Refs #231 items 3–5) ([#407](https://github.com/Duylamneuuu/Kinetra/pull/407))
+- **orb-run**: `planOrbRunRoute` reports a stop walled in tighter than the route agent as `route_blocked` instead of throwing ([#406](https://github.com/Duylamneuuu/Kinetra/pull/406))
+- **verification**: `ElectronRuntimeHost.close()` no longer clobbers a replacement bridge launched during teardown; a close during pipe bind launches nothing ([#405](https://github.com/Duylamneuuu/Kinetra/pull/405))
 - **command-bus**: `parseEngineCommand` reports unreadable input as `INVALID_COMMAND`, not a raw `DOMException` ([#404](https://github.com/Duylamneuuu/Kinetra/pull/404))
 - **orb-run**: slice 19 the HUD fails loudly on corrupt state (`OrbRunHudError`, `ORB_RUN_HUD_INVALID`); a run won on the tick the clock hits 0 reads `normal`, not `expired` (#205) ([#402](https://github.com/Duylamneuuu/Kinetra/pull/402))
+
+### Tests
+
+- **animation**: regression suite for malformed animation graphs (supersedes #261) ([#403](https://github.com/Duylamneuuu/Kinetra/pull/403))
 
 ## 2026-10-12
 
