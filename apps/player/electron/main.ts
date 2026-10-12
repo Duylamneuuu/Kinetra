@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { FileKeyValueStorage } from "@kinetra/save-state/file";
 import {
   BRIDGE_MALFORMED_RENDERER_RESPONSE,
+  describeBridgeError,
   normalizeRendererResponse,
   parseBridgeLine,
   recoverRendererResponseId,
@@ -63,6 +64,7 @@ interface BridgeResponse {
   ok: boolean;
   result?: unknown;
   error?: string;
+  code?: string;
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -283,7 +285,7 @@ ipcMain.on(
       response.id,
       response.ok
         ? { ok: true, result: response.result }
-        : { ok: false, error: response.error },
+        : { ok: false, error: response.error, code: response.code },
     );
   },
 );
@@ -436,10 +438,7 @@ function attachBridgeInput(
           type: "response",
           id: request.id,
           ok: false,
-          error:
-            error instanceof Error
-              ? error.stack ?? error.message
-              : String(error),
+          ...describeBridgeError(error),
         };
       }
 

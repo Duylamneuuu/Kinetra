@@ -11,6 +11,7 @@ interface RuntimeBridgeResponse {
   ok: boolean;
   result?: unknown;
   error?: string;
+  code?: string;
 }
 
 const platformApi = {
@@ -78,14 +79,22 @@ const runtimeBridge = {
               result: await handler(request),
             };
           } catch (error) {
-            response = {
-              id: request.id,
-              ok: false,
-              error:
-                error instanceof Error
-                  ? error.stack ?? error.message
-                  : String(error),
-            };
+            // An error with a stable string `code` (ResourceSwapCancelledError, ...) travels as
+            // message + code so the main process can answer with "<code>: <message>" instead of a
+            // raw stack trace. Any other error keeps its stack.
+            const code =
+              error instanceof Error ? (error as { code?: unknown }).code : undefined;
+            response =
+              typeof code === "string" && code.length > 0 && error instanceof Error
+                ? { id: request.id, ok: false, error: error.message, code }
+                : {
+                    id: request.id,
+                    ok: false,
+                    error:
+                      error instanceof Error
+                        ? error.stack ?? error.message
+                        : String(error),
+                  };
           }
 
           sendRuntimeResponse(response);

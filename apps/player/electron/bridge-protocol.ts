@@ -93,6 +93,35 @@ export interface RendererResponse {
   ok: boolean;
   result?: unknown;
   error?: string;
+  /** Stable machine-readable code of a failed reply (for example `runtime.resource.cancelled`). */
+  code?: string;
+}
+
+/**
+ * Renders a thrown value as the `error` (and, when the error carries one, `code`) fields of a bridge
+ * failure response. An error with a non-empty string `code` (a `ResourceSwapCancelledError` from a
+ * nav bake superseded by `stop()` or a newer request) becomes the structured `"<code>: <message>"`
+ * string that every other bridge failure uses, plus a `code` field, instead of a raw stack trace the
+ * MCP / IPC caller can only string-match. Any other error keeps its stack. Never throws.
+ */
+export function describeBridgeError(error: unknown): { error: string; code?: string } {
+  try {
+    if (error instanceof Error) {
+      const code = (error as { code?: unknown }).code;
+      if (typeof code === "string" && code.length > 0) {
+        const prefix = `${code}: `;
+        return {
+          error: error.message.startsWith(prefix) ? error.message : `${prefix}${error.message}`,
+          code,
+        };
+      }
+      return { error: error.stack ?? error.message };
+    }
+    return { error: String(error) };
+  } catch {
+    // A hostile error whose getters throw must not stop the failure reply.
+    return { error: "Unknown runtime failure" };
+  }
 }
 
 /**
@@ -108,6 +137,7 @@ export function normalizeRendererResponse(raw: unknown): RendererResponse | null
   const response: RendererResponse = { id: candidate.id, ok: candidate.ok };
   if (candidate.result !== undefined) response.result = candidate.result;
   if (typeof candidate.error === "string") response.error = candidate.error;
+  if (typeof candidate.code === "string" && candidate.code.length > 0) response.code = candidate.code;
   return response;
 }
 
