@@ -868,6 +868,12 @@ export class ElectronRuntimeHost implements RuntimeHost {
     const server = this.#server;
     const stdioLines = this.#stdioLines;
 
+    // A startup still waiting for the "ready" signal would otherwise hang until its timeout
+    // (close() releases the process, so its exit handler no longer fires) and keep the shared
+    // `#starting` promise alive, so a request issued after close() would join that dead startup
+    // instead of launching a fresh bridge. A no-op once the bridge is ready.
+    this.#rejectReady?.(new Error("Electron runtime bridge closed while starting"));
+
     const bridgeWritable =
       this.transport === "stdio"
         ? Boolean(child && !child.stdin.destroyed)
