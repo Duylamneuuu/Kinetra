@@ -9,6 +9,7 @@ import type { JsonValue, ProjectDocument } from "@kinetra/project-model";
 import { ORB_RUN_DEFAULT_RULES, type OrbRunRules } from "./authoring.js";
 import { ORB_RUN_AUDIO_ASSET, ORB_RUN_AUDIO_BUS, pickupAssetForCount } from "./audio.js";
 import { readOrbRunWalls, resolveWallMotion, type OrbRunWall } from "./walls.js";
+import { readOrbRunSlowZones, slowZoneMultiplierAt, type OrbRunSlowZone } from "./zones.js";
 import {
   ORB_RUN_ACTION,
   ORB_RUN_EVENT,
@@ -90,6 +91,7 @@ export class OrbRunPlayer implements GameScript {
   constructor(
     private readonly rules: OrbRunRules,
     private readonly walls: readonly OrbRunWall[] = [],
+    private readonly slowZones: readonly OrbRunSlowZone[] = [],
   ) {}
 
   onUpdate(context: GameScriptContext, deltaSeconds: number): void {
@@ -104,8 +106,9 @@ export class OrbRunPlayer implements GameScript {
     if (dx === 0 && dz === 0) return;
 
     const length = Math.hypot(dx, dz);
-    const step = this.rules.playerSpeed * deltaSeconds;
     const before = context.transform.getPosition();
+    // Mud: the zone under the player at the start of the step scales this step's speed.
+    const step = this.rules.playerSpeed * slowZoneMultiplierAt(this.slowZones, before[0], before[2]) * deltaSeconds;
     const limit = this.rules.arenaHalfExtent;
     const wanted = {
       x: Math.max(-limit, Math.min(limit, before[0] + (dx / length) * step)),
@@ -357,9 +360,10 @@ export function createOrbRunScriptRegistry(project: ProjectDocument, sceneId: st
     .sort();
 
   const walls = readOrbRunWalls(scene.entities);
+  const slowZones = readOrbRunSlowZones(scene.entities);
 
   const registry = new ScriptRegistry();
-  registry.register(ORB_RUN_SCRIPT.player, () => new OrbRunPlayer(rules, walls));
+  registry.register(ORB_RUN_SCRIPT.player, () => new OrbRunPlayer(rules, walls, slowZones));
   registry.register(ORB_RUN_SCRIPT.orb, () => new OrbRunOrb(rules));
   registry.register(
     ORB_RUN_SCRIPT.manager,
