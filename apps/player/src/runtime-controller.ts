@@ -39,6 +39,7 @@ import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
 import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
+import { preflightEntitySaveEntry } from "./save-entry.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -1787,34 +1788,21 @@ export class PlayerRuntimeController {
         return { success: false, error };
       }
 
-      let prepPos: [number, number, number] | undefined;
-      let prepRot: [number, number, number] | undefined;
-
-      if (entry.position) {
-        if (
-          !Array.isArray(entry.position) ||
-          entry.position.length !== 3 ||
-          entry.position.some((v) => typeof v !== "number" || !Number.isFinite(v))
-        ) {
-          const error = `Invalid position coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-        prepPos = [entry.position[0], entry.position[1], entry.position[2]];
+      // A malformed entry (null, a primitive, bad coordinates) is a structured preparation failure,
+      // not an exception out of loadSave.
+      const preflight = preflightEntitySaveEntry(entityId, entry);
+      if (!preflight.ok) {
+        this.#log("error", "save.restoreFailed", {
+          slotId,
+          entityId,
+          phase: "preparation",
+          error: preflight.error,
+        });
+        return { success: false, error: preflight.error };
       }
 
-      if (entry.rotation) {
-        if (
-          !Array.isArray(entry.rotation) ||
-          entry.rotation.length !== 3 ||
-          entry.rotation.some((v) => typeof v !== "number" || !Number.isFinite(v))
-        ) {
-          const error = `Invalid rotation coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-        prepRot = [entry.rotation[0], entry.rotation[1], entry.rotation[2]];
-      }
+      const prepPos = preflight.position;
+      const prepRot = preflight.rotation;
 
       if (prepPos || prepRot) {
         preparedTransforms.push({
@@ -1825,17 +1813,8 @@ export class PlayerRuntimeController {
         });
       }
 
-      if (entry.gameplay) {
-        if (
-          typeof entry.gameplay !== "object" ||
-          entry.gameplay === null ||
-          Array.isArray(entry.gameplay)
-        ) {
-          const error = `Invalid gameplay payload for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-
+      const gameplay = preflight.gameplay;
+      if (gameplay) {
         if (!this.#scripts.hasScript(entityId)) {
           const error = `Entity "${entityId}" has gameplay save state but no active script`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
@@ -1854,20 +1833,24 @@ export class PlayerRuntimeController {
           return { success: false, error };
         }
 
-        const validation = this.#scripts.validateScriptRestoreState(
-          entityId,
-          entry.gameplay,
-        );
+        const validation = this.#scripts.validateScriptRestoreState(entityId, gameplay);
         if (!validation.valid) {
           const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return { success: false, error };
         }
 
-        const preparedRestore = await this.#scripts.prepareScriptRestore(
-          entityId,
-          entry.gameplay,
-        );
+        // A script whose prepareRestoreState throws or rejects fails the preparation phase; nothing
+        // has been committed yet, so this is a structured failure rather than an exception.
+        let preparedRestore: PreparedScriptRestore;
+        try {
+          preparedRestore = await this.#scripts.prepareScriptRestore(entityId, gameplay);
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          const error = `Script on entity "${entityId}" failed to prepare its state restore: ${detail}`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return { success: false, error };
+        }
 
         preparedScripts.push({
           entityId,
