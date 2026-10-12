@@ -160,12 +160,20 @@ export class OrbRunGlbImporter implements AssetImporter {
     inspectGlb(context.sourceBytes);
     const normalized = await normalizeGlb(context.sourceBytes);
     if (normalized.meshCount < 1) throw new Error(`Model "${context.assetId}" contains no mesh`);
-    const declared = readDeclaredSize(context.recipe.settings.size);
+    const declaredSetting = context.recipe.settings.size;
+    const declared = readDeclaredSize(declaredSetting);
     const measuredRaw = await measureGlbDimensions(normalized.bytes);
     const measured = measuredRaw ? measuredRaw.map(round6) as [number, number, number] : undefined;
     const metadata: Partial<AssetMetadata> = { polycount: BOX_TRIANGLES * normalized.meshCount };
     const diagnostics: AssetDiagnostic[] = [];
     let dimensions: [number, number, number] | undefined = measured;
+    if (declaredSetting !== undefined && !declared) {
+      diagnostics.push({
+        severity: "warning",
+        code: "orbrun.model.invalidDeclaredSize",
+        message: `recipe.settings.size ${describeSetting(declaredSetting)} is not three finite, non-negative numbers; it is ignored, so the size is not cross-checked`,
+      });
+    }
     if (measured && declared) {
       if (measured.some((value, axis) => Math.abs(value - declared[axis]!) > SIZE_TOLERANCE)) {
         diagnostics.push({
@@ -196,6 +204,16 @@ function readDeclaredSize(value: unknown): [number, number, number] | undefined 
   return [value[0] as number, value[1] as number, value[2] as number];
 }
 
+function describeSetting(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map((entry) => (typeof entry === "string" ? JSON.stringify(entry) : String(entry))).join(", ")}]`;
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
+/** KSDATAFORMAT_SUBTYPE_PCM: the sub-format GUID (little-endian bytes) of integer PCM inside a WAVE_FORMAT_EXTENSIBLE `fmt `. */
+const WAV_SUBFORMAT_PCM_GUID = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71];
+const WAVE_FORMAT_PCM = 1;
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
+
 /** What `parseWav` reads from the RIFF chunk list. */
 interface WavFormat {
   sampleRateHz: number;
@@ -207,7 +225,9 @@ interface WavFormat {
 /**
  * Walks the RIFF chunk list (chunks may appear in any order and carry padding,
  * e.g. a `LIST` chunk before `fmt `) and requires an integer-PCM `fmt ` chunk
- * and a `data` chunk that fits inside the file. Throws a plain Error naming the
+ * (plain, or WAVE_FORMAT_EXTENSIBLE whose sub-format is PCM, as DAWs write
+ * multi-channel and 24-bit files) and a non-empty `data` chunk that fits
+ * inside the file. Throws a plain Error naming the
  * problem; the reimport service turns it into a structured failed import.
  */
 function parseWav(bytes: Uint8Array, assetId: string): WavFormat {
@@ -228,13 +248,22 @@ function parseWav(bytes: Uint8Array, assetId: string): WavFormat {
         throw new Error(`Audio asset "${assetId}" has a truncated fmt chunk`);
       }
       const formatTag = view.getUint16(body, true);
-      if (formatTag !== 1) {
+      if (formatTag === WAVE_FORMAT_EXTENSIBLE) {
+        // fmt is 40 bytes: 16 base + cbSize(2) + validBits(2) + channelMask(4) + SubFormat GUID(16).
+        if (size < 40 || body + 40 > bytes.byteLength) {
+          throw new Error(`Audio asset "${assetId}" has a truncated WAVE_FORMAT_EXTENSIBLE fmt chunk`);
+        }
+        const subFormat = bytes.subarray(body + 24, body + 40);
+        if (!WAV_SUBFORMAT_PCM_GUID.every((value, index) => subFormat[index] === value)) {
+          throw new Error(`Audio asset "${assetId}" is not PCM WAV (extensible sub-format tag ${view.getUint16(body + 24, true)})`);
+        }
+      } else if (formatTag !== WAVE_FORMAT_PCM) {
         throw new Error(`Audio asset "${assetId}" is not PCM WAV (format tag ${formatTag})`);
       }
       const channels = view.getUint16(body + 2, true);
       const sampleRateHz = view.getUint32(body + 4, true);
       const bitsPerSample = view.getUint16(body + 14, true);
-      if (channels < 1 || sampleRateHz < 1 || bitsPerSample < 8) {
+      if (channels < 1 || sampleRateHz < 1 || bitsPerSample < 8 || bitsPerSample % 8 !== 0) {
         throw new Error(
           `Audio asset "${assetId}" has an invalid fmt chunk (channels ${channels}, ${sampleRateHz} Hz, ${bitsPerSample} bits)`,
         );
@@ -244,6 +273,7 @@ function parseWav(bytes: Uint8Array, assetId: string): WavFormat {
       if (body + size > bytes.byteLength) {
         throw new Error(`Audio asset "${assetId}" has a truncated data chunk`);
       }
+      if (size === 0) throw new Error(`Audio asset "${assetId}" has an empty data chunk`);
       dataBytes = size;
     }
     if (format && dataBytes !== undefined) break;
