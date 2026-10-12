@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, posix, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +11,12 @@ import { fileURLToPath } from "node:url";
  * (Recast WASM navigation, the acceptance suite / CLI, the snapshot writer, the MCP test client).
  * This test reads the *source* import graph from the entry so the rule is enforced statically.
  */
+
+/**
+ * The scanner works on forward-slash paths everywhere. On Windows `resolve` yields backslashes,
+ * which broke the base-name lookups and the virtual file maps of the sabotage tests.
+ */
+const toPosix = (file: string): string => file.replace(/\\/g, "/");
 
 const here = dirname(fileURLToPath(import.meta.url));
 // dist/test -> package root
@@ -94,7 +100,7 @@ export const scanPortability = async (
     }
     for (const spec of importSpecifiers(source)) {
       if (spec.startsWith(".")) {
-        queue.push(resolve(dirname(file), spec.replace(/\.js$/, ".ts")));
+        queue.push(posix.join(posix.dirname(file), spec.replace(/\.js$/, ".ts")));
       } else if (spec.startsWith("node:") || NODE_BUILTINS.has(spec.split("/")[0] ?? "")) {
         findings.push({ file, code: "node_builtin", detail: spec });
       } else {
@@ -111,7 +117,7 @@ export const scanPortability = async (
 const readDisk = (file: string): Promise<string> => readFile(file, "utf8");
 
 test("the package entry's import graph is free of Node builtins, Node globals and Node-only modules", async () => {
-  const { files, findings } = await scanPortability(resolve(srcDir, "index.ts"), readDisk);
+  const { files, findings } = await scanPortability(toPosix(resolve(srcDir, "index.ts")), readDisk);
   assert.deepEqual(findings, [], `entry is not portable:\n${JSON.stringify(findings, null, 2)}`);
   // The walk really covered the game, not just the barrel file.
   const names = files.map((file) => file.slice(file.lastIndexOf("/") + 1));
