@@ -45,6 +45,23 @@ function stable(value: unknown, path: string, ancestors: Set<object>): unknown {
     if (typeof toJson === "function") {
       return stable((toJson as () => unknown).call(object), path, ancestors);
     }
+    // Map/Set/WeakMap/WeakSet/RegExp/Promise/Error keep their data in internal slots, so the own-key walk
+    // below would see `{}` and give different contents the same fingerprint. Refuse them, like bigint.
+    if (
+      object instanceof Map ||
+      object instanceof Set ||
+      object instanceof WeakMap ||
+      object instanceof WeakSet ||
+      object instanceof RegExp ||
+      object instanceof Promise ||
+      object instanceof Error
+    ) {
+      throw new CanonicalJsonError(
+        "hash.unsupportedValue",
+        path,
+        `Cannot hash a ${object.constructor.name} value; convert it to plain JSON first`,
+      );
+    }
     if (Array.isArray(object)) {
       return object.map((item, index) => stable(item, `${path}[${index}]`, ancestors));
     }
