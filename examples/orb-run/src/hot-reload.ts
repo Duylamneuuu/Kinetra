@@ -15,6 +15,7 @@ import {
   importOrbRunAssets,
   type OrbRunAssetPipeline,
 } from "./assets.js";
+import { decodeBase64, encodeBase64 } from "./base64.js";
 import { ORB_RUN_ENTITY } from "./ids.js";
 
 /**
@@ -79,7 +80,7 @@ export class OrbRunReloadTarget implements RuntimeReloadTarget {
     options: { fingerprint?: string; sourceHash?: string } = {},
   ): Promise<void> {
     if (this.faults.refuseUpdate.has(assetId)) throw new Error(`runtime refused new bytes for "${assetId}"`);
-    const bytes = new Uint8Array(Buffer.from(dataBase64, "base64"));
+    const bytes = decodeBase64(dataBase64);
     if (bytes.byteLength === 0) throw new Error(`"${assetId}" arrived empty`);
     // A loader would reject a model that is not a GLB; audio is decoded when played.
     if (ORB_RUN_MODEL_ASSET_IDS.includes(assetId)) inspectGlb(bytes);
@@ -172,7 +173,7 @@ export async function createOrbRunHotReload(): Promise<OrbRunHotReload> {
   // Scene start: publish and apply every imported artifact once.
   for (const record of pipeline.database.list()) {
     const bytes = await pipeline.fileSystem.readFile(record.importedPath);
-    await target.updateAsset(record.id, Buffer.from(bytes).toString("base64"), {
+    await target.updateAsset(record.id, encodeBase64(bytes), {
       fingerprint: record.fingerprint,
       sourceHash: record.source.contentHash,
     });

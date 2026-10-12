@@ -1,6 +1,7 @@
 import { hashBytes } from "@kinetra/asset-pipeline";
 
 import { ORB_RUN_AUDIO_ASSET, ORB_RUN_AUDIO_ASSET_IDS } from "./audio.js";
+import { encodeBase64 } from "./base64.js";
 import {
   ORB_RUN_MODEL_ASSET,
   ORB_RUN_MODEL_ASSET_IDS,
@@ -12,7 +13,7 @@ import { ORB_RUN_SCENE_ID } from "./ids.js";
 /** The colour an artist repaints the orb in `assets.acceptance.json`. */
 export const ORB_RUN_EDITED_ORB_COLOR: [number, number, number, number] = [0.9, 0.1, 0.1, 1];
 
-const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
+const toBase64 = encodeBase64;
 
 /**
  * Builds `acceptance/assets.acceptance.json`: the content gate for Orb Run.
