@@ -5,6 +5,7 @@ import {
   hashBytes,
   importFingerprint,
   inspectGlb,
+  measureGlbDimensions,
   normalizeGlb,
   validateAssetRecord,
   type AssetDiagnostic,
@@ -138,39 +139,126 @@ export function createOrbRunAssetRecords(sources: OrbRunAssetSources): AssetReco
   return records;
 }
 
+const round6 = (value: number): number => Math.round(value * 1e6) / 1e6;
+
+/** Declared and measured box sizes closer than this (metres, per axis) count as the same size. */
+const SIZE_TOLERANCE = 1e-4;
+
 /**
  * GLB importer for Orb Run: validates the header, re-writes the file through
- * glTF-Transform (`normalizeGlb`) and records the authored dimensions/polycount.
+ * glTF-Transform (`normalizeGlb`) and records the polycount plus the dimensions
+ * *measured* from the model's geometry.
  *
- * The engine's built-in `glb` importer (`GlbDirectImporter`) stamps a hard-coded
- * `dimensions: [1, 1, 1]` on every model, so a game that wants true metadata
- * has to bring its own importer (see "Engine requests" in README.md).
+ * `recipe.settings.size` is only the declared size: when the measured box
+ * differs from it the import warns (`orbrun.model.sizeMismatch`) and the record
+ * keeps the measured value, so a wrongly sized asset cannot pass as the size it
+ * claims. When the box cannot be measured the declared size is used, with a
+ * warning (`orbrun.model.unmeasured`).
  */
 export class OrbRunGlbImporter implements AssetImporter {
   async import(context: AssetImporterContext): Promise<AssetImporterResult> {
     inspectGlb(context.sourceBytes);
     const normalized = await normalizeGlb(context.sourceBytes);
     if (normalized.meshCount < 1) throw new Error(`Model "${context.assetId}" contains no mesh`);
-    const size = context.recipe.settings.size as [number, number, number] | undefined;
+    const declared = readDeclaredSize(context.recipe.settings.size);
+    const measuredRaw = await measureGlbDimensions(normalized.bytes);
+    const measured = measuredRaw ? measuredRaw.map(round6) as [number, number, number] : undefined;
     const metadata: Partial<AssetMetadata> = { polycount: BOX_TRIANGLES * normalized.meshCount };
-    if (size) {
-      metadata.dimensions = [size[0], size[1], size[2]];
-      metadata.boundsRadius = Math.round((Math.hypot(size[0], size[1], size[2]) / 2) * 1e6) / 1e6;
+    const diagnostics: AssetDiagnostic[] = [];
+    let dimensions: [number, number, number] | undefined = measured;
+    if (measured && declared) {
+      if (measured.some((value, axis) => Math.abs(value - declared[axis]!) > SIZE_TOLERANCE)) {
+        diagnostics.push({
+          severity: "warning",
+          code: "orbrun.model.sizeMismatch",
+          message: `Declared size [${declared.join(", ")}] differs from the measured geometry [${measured.join(", ")}]; the measured size is recorded`,
+        });
+      }
+    } else if (!measured && declared) {
+      dimensions = declared;
+      diagnostics.push({
+        severity: "warning",
+        code: "orbrun.model.unmeasured",
+        message: `The bounding box of "${context.assetId}" could not be measured; the declared size [${declared.join(", ")}] is recorded`,
+      });
     }
-    return { artifactBytes: normalized.bytes, metadata };
+    if (dimensions) {
+      metadata.dimensions = dimensions;
+      metadata.boundsRadius = round6(Math.hypot(dimensions[0], dimensions[1], dimensions[2]) / 2);
+    }
+    return { artifactBytes: normalized.bytes, metadata, ...(diagnostics.length > 0 ? { diagnostics } : {}) };
   }
 }
 
-/** PCM WAV importer: checks the RIFF/WAVE header and reads the sample rate. */
+function readDeclaredSize(value: unknown): [number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 3) return undefined;
+  if (!value.every((entry) => typeof entry === "number" && Number.isFinite(entry) && entry >= 0)) return undefined;
+  return [value[0] as number, value[1] as number, value[2] as number];
+}
+
+/** What `parseWav` reads from the RIFF chunk list. */
+interface WavFormat {
+  sampleRateHz: number;
+  channels: number;
+  bitsPerSample: number;
+  dataBytes: number;
+}
+
+/**
+ * Walks the RIFF chunk list (chunks may appear in any order and carry padding,
+ * e.g. a `LIST` chunk before `fmt `) and requires an integer-PCM `fmt ` chunk
+ * and a `data` chunk that fits inside the file. Throws a plain Error naming the
+ * problem; the reimport service turns it into a structured failed import.
+ */
+function parseWav(bytes: Uint8Array, assetId: string): WavFormat {
+  const tag = (offset: number): string => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+  if (bytes.byteLength < 44 || tag(0) !== "RIFF" || tag(8) !== "WAVE") {
+    throw new Error(`Audio asset "${assetId}" is not a RIFF/WAVE file`);
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let format: Pick<WavFormat, "sampleRateHz" | "channels" | "bitsPerSample"> | undefined;
+  let dataBytes: number | undefined;
+  let offset = 12;
+  while (offset + 8 <= bytes.byteLength) {
+    const id = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (id === "fmt ") {
+      if (size < 16 || body + 16 > bytes.byteLength) {
+        throw new Error(`Audio asset "${assetId}" has a truncated fmt chunk`);
+      }
+      const formatTag = view.getUint16(body, true);
+      if (formatTag !== 1) {
+        throw new Error(`Audio asset "${assetId}" is not PCM WAV (format tag ${formatTag})`);
+      }
+      const channels = view.getUint16(body + 2, true);
+      const sampleRateHz = view.getUint32(body + 4, true);
+      const bitsPerSample = view.getUint16(body + 14, true);
+      if (channels < 1 || sampleRateHz < 1 || bitsPerSample < 8) {
+        throw new Error(
+          `Audio asset "${assetId}" has an invalid fmt chunk (channels ${channels}, ${sampleRateHz} Hz, ${bitsPerSample} bits)`,
+        );
+      }
+      format = { sampleRateHz, channels, bitsPerSample };
+    } else if (id === "data") {
+      if (body + size > bytes.byteLength) {
+        throw new Error(`Audio asset "${assetId}" has a truncated data chunk`);
+      }
+      dataBytes = size;
+    }
+    if (format && dataBytes !== undefined) break;
+    offset = body + size + (size % 2);
+  }
+  if (!format) throw new Error(`Audio asset "${assetId}" has no fmt chunk`);
+  if (dataBytes === undefined) throw new Error(`Audio asset "${assetId}" has no data chunk`);
+  return { ...format, dataBytes };
+}
+
+/** PCM WAV importer: parses the RIFF chunks and reads the sample rate from the `fmt ` chunk. */
 export class OrbRunWavImporter implements AssetImporter {
   async import(context: AssetImporterContext): Promise<AssetImporterResult> {
     const bytes = context.sourceBytes;
-    const tag = (offset: number): string => String.fromCharCode(...bytes.subarray(offset, offset + 4));
-    if (bytes.byteLength < 44 || tag(0) !== "RIFF" || tag(8) !== "WAVE") {
-      throw new Error(`Audio asset "${context.assetId}" is not a RIFF/WAVE file`);
-    }
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const sampleRateHz = view.getUint32(24, true);
+    const { sampleRateHz } = parseWav(bytes, context.assetId);
     const diagnostics: AssetDiagnostic[] = [];
     const expected = context.recipe.settings.sampleRateHz;
     if (typeof expected === "number" && expected !== sampleRateHz) {
@@ -192,7 +280,8 @@ export class MemoryFileSystem implements FileSystemAdapter {
   async readFile(path: string): Promise<Uint8Array> {
     const bytes = this.files.get(path);
     if (!bytes) throw Object.assign(new Error(`ENOENT: no such file "${path}"`), { code: "ENOENT" });
-    return bytes;
+    // A copy, like writeFile's: a caller that edits what it read must not corrupt the "disk".
+    return new Uint8Array(bytes);
   }
 
   async writeFile(path: string, data: Uint8Array): Promise<void> {

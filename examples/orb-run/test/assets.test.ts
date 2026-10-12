@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hashBytes, inspectGlb, normalizeGlb, validateAssetRecord } from "@kinetra/asset-pipeline";
+import { hashBytes, inspectGlb, measureGlbDimensions, normalizeGlb, validateAssetRecord } from "@kinetra/asset-pipeline";
 
 import {
   ORB_RUN_ASSET_IDS,
@@ -14,6 +14,7 @@ import {
   createOrbRunAssetRecords,
   createOrbRunAssetSources,
   createOrbRunModelBytes,
+  MemoryFileSystem,
   importOrbRunAssets,
   orbRunAssetReport,
   orbRunImportedPath,
@@ -224,4 +225,91 @@ test("registering records needs source bytes for every asset", async () => {
   const sources = await createOrbRunAssetSources();
   delete sources[ORB_RUN_AUDIO_ASSET.win];
   assert.throws(() => createOrbRunAssetRecords(sources), /Missing source bytes/);
+});
+
+// ---- #231 items 3-5: importer metadata is measured/parsed, not copied -------------------------------
+
+const ascii = (text: string): number[] => [...text].map((char) => char.charCodeAt(0));
+const le32 = (value: number): number[] => [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+
+/** Splices extra bytes into a synthetic WAV right after the 12-byte RIFF header (before `fmt `). */
+function wavWithChunkBefore(wav: Uint8Array, chunk: number[]): Uint8Array {
+  const out = new Uint8Array(wav.byteLength + chunk.length);
+  out.set(wav.subarray(0, 12), 0);
+  out.set(chunk, 12);
+  out.set(wav.subarray(12), 12 + chunk.length);
+  new DataView(out.buffer).setUint32(4, out.byteLength - 8, true);
+  return out;
+}
+
+test("the GLB importer records the measured size and warns when the declared size lies", async () => {
+  const pipeline = await createOrbRunAssetPipeline();
+  const id = ORB_RUN_MODEL_ASSET.orb; // geometry is a 0.6 m cube
+  const record = pipeline.database.get(id)!;
+  pipeline.database.upsert({ ...record, recipe: { ...record.recipe, settings: { size: [2, 2, 2] } } });
+  const result = await pipeline.service.reimport(id);
+  assert.equal(result.status, "reimported");
+  assert.deepEqual(result.diagnostics?.map((d) => [d.severity, d.code]), [["warning", "orbrun.model.sizeMismatch"]]);
+  const metadata = pipeline.database.get(id)!.metadata;
+  assert.deepEqual(metadata.dimensions, [0.6, 0.6, 0.6], "measured, not the declared [2, 2, 2]");
+  assert.equal(metadata.boundsRadius, Math.round((Math.hypot(0.6, 0.6, 0.6) / 2) * 1e6) / 1e6);
+});
+
+test("the GLB importer measures the geometry when no size is declared and stays quiet when it matches", async () => {
+  const pipeline = await createOrbRunAssetPipeline();
+  const id = ORB_RUN_MODEL_ASSET.player;
+  const record = pipeline.database.get(id)!;
+  pipeline.database.upsert({ ...record, recipe: { ...record.recipe, settings: {} } });
+  const bare = await pipeline.service.reimport(id);
+  assert.equal(bare.status, "reimported");
+  assert.deepEqual(bare.diagnostics ?? [], []);
+  assert.deepEqual(pipeline.database.get(id)!.metadata.dimensions, [0.6, 1.7, 0.6]);
+
+  const built = await buildOrbRunAssets();
+  assert.ok(built.results.every((r) => (r.diagnostics ?? []).length === 0), "declared sizes match the generated geometry");
+  const measured = await measureGlbDimensions(built.fileSystem.files.get(orbRunImportedPath(ORB_RUN_MODEL_ASSET.exitPad))!);
+  assert.ok(measured && Math.abs(measured[1]! - 0.1) < 1e-4);
+});
+
+test("the WAV importer finds fmt after an extra LIST chunk instead of reading a fixed offset", async () => {
+  const pipeline = await createOrbRunAssetPipeline();
+  const id = ORB_RUN_AUDIO_ASSET.win;
+  const list = [...ascii("LIST"), ...le32(8), ...ascii("INFO"), 0x49, 0x53, 0x46, 0x54];
+  pipeline.fileSystem.files.set(orbRunSourcePath(id), wavWithChunkBefore(pipeline.sources[id]!, list));
+  const result = await pipeline.service.reimport(id);
+  assert.equal(result.status, "reimported", result.error);
+  assert.deepEqual(result.diagnostics ?? [], [], "22050 Hz as authored, no bogus sample-rate warning");
+  assert.equal(pipeline.database.get(id)!.metadata["sampleRateHz"], 22050);
+});
+
+test("the WAV importer rejects non-PCM, empty-format and data-less files with a named reason", async () => {
+  const pipeline = await createOrbRunAssetPipeline();
+  const id = ORB_RUN_AUDIO_ASSET.win;
+  const good = pipeline.sources[id]!;
+  const cases: Array<[string, (bytes: Uint8Array) => void, RegExp]> = [
+    ["float format tag", (b) => new DataView(b.buffer).setUint16(20, 3, true), /not PCM WAV/],
+    ["zero channels", (b) => new DataView(b.buffer).setUint16(22, 0, true), /invalid fmt chunk/],
+    ["zero sample rate", (b) => new DataView(b.buffer).setUint32(24, 0, true), /invalid fmt chunk/],
+    ["no data chunk", (b) => b.set(ascii("junk"), 36), /no data chunk/],
+    ["data larger than the file", (b) => new DataView(b.buffer).setUint32(40, b.byteLength * 2, true), /truncated data chunk/],
+    ["no fmt chunk", (b) => b.set(ascii("junk"), 12), /no fmt chunk/],
+  ];
+  for (const [label, corrupt, expected] of cases) {
+    const bytes = new Uint8Array(good);
+    corrupt(bytes);
+    pipeline.fileSystem.files.set(orbRunSourcePath(id), bytes);
+    const result = await pipeline.service.reimport(id);
+    assert.equal(result.status, "failed", label);
+    assert.match(result.error ?? "", expected, label);
+  }
+});
+
+test("MemoryFileSystem.readFile returns a copy, so editing what was read cannot corrupt the disk", async () => {
+  const fileSystem = new MemoryFileSystem();
+  await fileSystem.writeFile("a.bin", new Uint8Array([1, 2, 3]));
+  const first = await fileSystem.readFile("a.bin");
+  first[0] = 99;
+  assert.deepEqual([...(await fileSystem.readFile("a.bin"))], [1, 2, 3]);
+  await fileSystem.rename("a.bin", "b.bin");
+  assert.deepEqual([...(await fileSystem.readFile("b.bin"))], [1, 2, 3]);
 });
