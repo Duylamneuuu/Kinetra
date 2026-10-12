@@ -569,9 +569,34 @@ export function extractRootMotionFromClip(
     }
   }
 
+  // Key VALUES must be usable too: a NaN/Infinity position or rotation would go straight into the
+  // sample table and from there into every entity transform the step contract produces, and a
+  // position track shorter than its key times would silently read the missing keys as the origin.
+  if (posTrack.values.length < posTrack.times.length * 3) {
+    const diag: RootMotionDiagnostics = {
+      code: "animation.rootMotion.malformedSamples",
+      message: `Track "${posTrackName}" has ${posTrack.values.length} values for ${posTrack.times.length} keys (expected ${posTrack.times.length * 3})`,
+      hint: "Re-export the clip so the root translation track carries one [x, y, z] value per key",
+    };
+    return { success: false, error: diag.message, diagnostics: diag };
+  }
+
   const rotTrack = clip.tracks.find(
     (t) => t.name === rotTrackName && t instanceof THREE.QuaternionKeyframeTrack,
   ) as THREE.QuaternionKeyframeTrack | undefined;
+
+  for (const track of rotTrack ? [posTrack, rotTrack] : [posTrack]) {
+    for (let i = 0; i < track.values.length; i++) {
+      if (!Number.isFinite(track.values[i])) {
+        const diag: RootMotionDiagnostics = {
+          code: "animation.rootMotion.malformedSamples",
+          message: `Value at index ${i} of track "${track.name}" is not a finite number`,
+          hint: "Ensure root bone keyframe values are finite numbers without NaN or Infinity",
+        };
+        return { success: false, error: diag.message, diagnostics: diag };
+      }
+    }
+  }
 
   const samples: RootMotionSample[] = [];
 
