@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CommandBus } from "@kinetra/command-bus";
-import type { ComponentMap, ProjectDocument } from "@kinetra/project-model";
+import type { ComponentMap, EntityDefinition, ProjectDocument } from "@kinetra/project-model";
 import { AcceptanceRunner, acceptanceManifestSchema, type AcceptanceManifest } from "@kinetra/verification";
 
 import {
@@ -17,7 +17,12 @@ import {
   walkSecondsAlong,
   type OrbRunSlowZone,
 } from "../src/index.js";
-import { createOrbRunNavigationProbe, followOrbRunRoute, planOrbRunRoute } from "../src/navigation.js";
+import {
+  ORB_RUN_ROUTE_EXACT_ORDER_LIMIT,
+  createOrbRunNavigationProbe,
+  followOrbRunRoute,
+  planOrbRunRoute,
+} from "../src/navigation.js";
 
 interface ZoneSpec {
   id: string;
@@ -203,4 +208,42 @@ test("a plan for a level that is invalid still reports its mud count", async () 
   assert.equal(plan.ok, false);
   assert.equal(plan.slowZoneCount, 1);
   assert.equal(plan.mudSeconds, null);
+});
+
+test("walkSecondsAlong: repeated points cost nothing, and a zone that could void the price is refused", () => {
+  const mud = [zone(0, 0, 1, 0.5)];
+  const once = walkSecondsAlong([{ x: -2, z: 0 }, { x: 2, z: 0 }], 4, mud);
+  const repeated = walkSecondsAlong([{ x: -2, z: 0 }, { x: -2, z: 0 }, { x: 2, z: 0 }, { x: 2, z: 0 }], 4, mud);
+  assert.ok(Math.abs(once - repeated) < 1e-9);
+  for (const speedMultiplier of [0, -0.5, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => walkSecondsAlong([{ x: 0, z: 0 }, { x: 1, z: 0 }], 4, [zone(0, 0, 1, speedMultiplier)]), RangeError, String(speedMultiplier));
+  }
+});
+
+test("route plan past the exact-order limit is greedy, still priced in seconds, and a dry route reports exactly 0 mud", async () => {
+  const project = structuredClone(withMud(MUD_ON_B));
+  const scene = project.scenes.find((candidate) => candidate.id === ORB_RUN_SCENE_ID)!;
+  const template = scene.entities.find((entity) => entity.id === ORB_RUN_ENTITY.orbA)!;
+  const extra: EntityDefinition[] = [];
+  for (let index = 0; index < ORB_RUN_ROUTE_EXACT_ORDER_LIMIT - 2; index += 1) {
+    const copy = structuredClone(template);
+    copy.id = `entity_extra_orb_${index}`;
+    copy.name = `Extra${index}`;
+    (copy.components.Transform as { position: number[] }).position = [-3.5 + index * 1.6, 0.5, 2.5 - (index % 3) * 2];
+    extra.push(copy);
+  }
+  scene.entities.push(...extra);
+
+  const plan = await planOrbRunRoute(project);
+  assert.equal(plan.ok, true, JSON.stringify(plan.diagnostics));
+  assert.equal(plan.orderExact, false);
+  assert.equal(plan.orbIds.length, 3 + extra.length);
+  assert.equal(new Set(plan.orbIds).size, plan.orbIds.length, "every orb is visited exactly once");
+  assert.ok(plan.mudSeconds! > 0, "the middle orb sits in the mud");
+  // The greedy order is priced by the same function as the exact one.
+  const zones = [zone(0, 0, 1, 0.5)];
+  assert.ok(Math.abs(plan.estimatedSeconds! - walkSecondsAlong(plan.path, 4, zones)) < 1e-5);
+
+  const dry = await planOrbRunRoute(withMud([{ id: "far-mud", centre: { x: 0, z: -2 }, radius: 0.3, speedMultiplier: 0.5 }]));
+  assert.equal(Object.is(dry.mudSeconds, 0), true, `mudSeconds ${dry.mudSeconds}`);
 });

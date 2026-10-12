@@ -366,7 +366,8 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
       path,
       lengthMeters,
       estimatedSeconds,
-      mudSeconds: round(estimatedSeconds - openSeconds),
+      // Mud only ever slows: clamp the ~1e-13 summation noise of a dry route (and a `-0`) to an honest 0.
+      mudSeconds: Math.max(0, round(estimatedSeconds - openSeconds)),
       slackSeconds: round(rules.timeLimitSeconds - estimatedSeconds),
       orderExact,
       wallCount: walls.length,
