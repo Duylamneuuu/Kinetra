@@ -19,7 +19,7 @@ import type { HeadlessSceneSimulation } from "./simulation.js";
  * this module is not exported from the package entry that web bundles read.
  */
 
-export type OrbRunRouteCode = "level_invalid" | "route_blocked";
+export type OrbRunRouteCode = "level_invalid" | "route_blocked" | "navmesh_error";
 
 export interface OrbRunRouteDiagnostic {
   severity: "error" | "warning";
@@ -75,6 +75,15 @@ export const ORB_RUN_NAV_AGENT_RADIUS = 0.5;
 export const ORB_RUN_NAV_WALL_HEIGHT = 2;
 
 const round = (value: number): number => Math.round(value * 1e6) / 1e6;
+
+/** `RecastNavMesh.closestPoint` throws this (message prefix) when no walkable polygon is inside the query extents. */
+function isNoClosestPointError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("No closest point found");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function boxGeometry(wall: OrbRunWall, height: number): { positions: number[]; indices: number[] } {
   const x0 = wall.x - wall.halfWidth;
@@ -222,14 +231,25 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
       try {
         const point = mesh.closestPoint({ x: stop.point.x, y: 0, z: stop.point.z }, { halfExtents });
         return { id: stop.id, point: { x: point.x, z: point.z } };
-      } catch {
+      } catch (error) {
         const label = index === 0 ? "The player's start" : index === stops.length - 1 ? "The exit" : `Orb ${stop.id}`;
-        diagnostics.push({
-          severity: "error",
-          code: "route_blocked",
-          message: `${label} has no walkable floor within 1 m: walls close it in tighter than the route agent fits`,
-          entityId: stop.id,
-        });
+        // Only the navmesh's own "nothing walkable within reach" answer means the stop is walled in. Any other
+        // failure (disposed mesh, WASM fault, non-finite input) keeps its cause instead of posing as a blocked route.
+        diagnostics.push(
+          isNoClosestPointError(error)
+            ? {
+                severity: "error",
+                code: "route_blocked",
+                message: `${label} has no walkable floor within 1 m: walls close it in tighter than the route agent fits`,
+                entityId: stop.id,
+              }
+            : {
+                severity: "error",
+                code: "navmesh_error",
+                message: `The navigation mesh failed while snapping ${label.toLowerCase()} to the floor: ${errorMessage(error)}`,
+                entityId: stop.id,
+              },
+        );
         return { id: stop.id, point: stop.point };
       }
     });
