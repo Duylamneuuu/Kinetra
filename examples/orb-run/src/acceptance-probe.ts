@@ -10,6 +10,7 @@ import type {
 import { createOrbRunProject } from "./authoring.js";
 import type { OrbRunAnimatorOptions } from "./animator.js";
 import { OrbRunAssetCatalog } from "./assets.js";
+import { decodeBase64, isBase64 } from "./base64.js";
 import { buildOrbRunHud } from "./hud.js";
 import { analyzeOrbRunLevel, type OrbRunLevelReport } from "./level-check.js";
 import {
@@ -153,13 +154,13 @@ export class OrbRunHeadlessProbe implements RuntimeProbe {
   }
 
   async registerAsset(assetId: string, dataBase64: string): Promise<void> {
-    if (typeof dataBase64 !== "string" || dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(dataBase64)) {
+    if (!isBase64(dataBase64)) {
       throw new TypeError(`Asset "${assetId}": dataBase64 is not valid base64`);
     }
     const catalog = await this.#assets();
     // Only an edit made while nothing runs is meant for the next start; a mid-run edit dies with that run.
     if (!this.#simulation) this.#editsForNextStart = true;
-    await catalog.replaceSource(assetId, new Uint8Array(Buffer.from(dataBase64, "base64")));
+    await catalog.replaceSource(assetId, decodeBase64(dataBase64));
   }
 
   async stop(): Promise<void> {
