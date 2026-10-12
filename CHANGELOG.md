@@ -8,6 +8,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ## 2026-10-13
 
+### Added
+
+- **orb-run**: slice 20 the entry stays portable: `entry-portability` test guards the source import graph (no Node builtins/globals/Node-only modules), `Buffer` replaced by a strict portable base64 helper ([#416](https://github.com/Duylamneuuu/Kinetra/pull/416))
+
 ### Fixed
 
 - **orb-run**: the importer measures and reads real asset metadata instead of copying declared numbers (Refs #231 items 3–5) ([#407](https://github.com/Duylamneuuu/Kinetra/pull/407))
