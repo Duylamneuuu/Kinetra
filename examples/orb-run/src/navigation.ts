@@ -6,6 +6,7 @@ import { OrbRunHeadlessProbe, type OrbRunHeadlessProbeOptions } from "./acceptan
 import { analyzeOrbRunLevel, type OrbRunLevelDiagnostic } from "./level-check.js";
 import { walkStraightTo } from "./game.js";
 import { readOrbRunWalls, type OrbRunWall } from "./walls.js";
+import { walkSecondsAlong } from "./zones.js";
 import type { HeadlessSceneSimulation } from "./simulation.js";
 
 /**
@@ -50,13 +51,20 @@ export interface OrbRunRoutePlan {
   /** The whole route as one polyline, start first. */
   path: OrbRunRoutePoint[];
   lengthMeters: number | null;
-  /** Walking time at `OrbRunRules.playerSpeed` (no quantisation); null when not ok. */
+  /**
+   * Walking time at `OrbRunRules.playerSpeed` (no quantisation), slowed by every `OrbRunSlowZone` the route crosses
+   * (`walkSecondsAlong`); null when not ok.
+   */
   estimatedSeconds: number | null;
+  /** What the mud costs: `estimatedSeconds - lengthMeters / playerSpeed` (0 without zones); null when not ok. */
+  mudSeconds: number | null;
   /** `timeLimitSeconds - estimatedSeconds`; null when not ok. */
   slackSeconds: number | null;
   /** True when every visiting order was priced (up to `ORB_RUN_ROUTE_EXACT_ORDER_LIMIT` orbs). */
   orderExact: boolean;
   wallCount: number;
+  /** How many slow zones the level has (they re-price every visiting order; the walkable shape is unchanged). */
+  slowZoneCount: number;
 }
 
 export interface OrbRunRouteOptions {
@@ -152,7 +160,7 @@ function permutations(count: number): number[][] {
   return result;
 }
 
-function failed(diagnostics: OrbRunRouteDiagnostic[], wallCount: number): OrbRunRoutePlan {
+function failed(diagnostics: OrbRunRouteDiagnostic[], wallCount: number, slowZoneCount: number): OrbRunRoutePlan {
   return {
     ok: false,
     diagnostics,
@@ -161,9 +169,11 @@ function failed(diagnostics: OrbRunRouteDiagnostic[], wallCount: number): OrbRun
     path: [],
     lengthMeters: null,
     estimatedSeconds: null,
+    mudSeconds: null,
     slackSeconds: null,
     orderExact: true,
     wallCount,
+    slowZoneCount,
   };
 }
 
@@ -185,7 +195,7 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
         message: `${entry.code}: ${entry.message}`,
         ...(entry.entityId ? { entityId: entry.entityId } : {}),
       }));
-    return failed(diagnostics, level.walls.length);
+    return failed(diagnostics, level.walls.length, level.slowZones.length);
   }
 
   const scene = project.scenes.find((candidate) => candidate.id === sceneId)!;
@@ -209,6 +219,7 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
     { id: exit.id, point: positionOf(exit.components) },
   ];
   const walls = readOrbRunWalls(scene.entities);
+  const zones = level.slowZones;
 
   const geometry = orbRunNavGeometry(limit, walls);
   const mesh = await RecastNavMesh.bake({
@@ -253,7 +264,7 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
         return { id: stop.id, point: stop.point };
       }
     });
-    if (diagnostics.length > 0) return failed(diagnostics, walls.length);
+    if (diagnostics.length > 0) return failed(diagnostics, walls.length, zones.length);
 
     const count = stops.length;
     const legPath: Array<Array<OrbRunRoutePoint[] | null>> = Array.from({ length: count }, () => Array.from({ length: count }, (): OrbRunRoutePoint[] | null => null));
@@ -279,17 +290,20 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
         });
       }
     }
-    if (diagnostics.length > 0) return failed(diagnostics, walls.length);
+    if (diagnostics.length > 0) return failed(diagnostics, walls.length, zones.length);
 
     const orbIndexes = orbs.map((_, index) => index + 1);
     const exitIndex = count - 1;
+    // What a leg costs when choosing the visiting order: metres on open ground (the order that is shortest is also
+    // fastest), seconds once mud can make a longer leg quicker. Priced once per leg, not once per order tried.
+    const legCost = legPath.map((row) =>
+      row.map((path) => (path === null ? Number.POSITIVE_INFINITY : zones.length === 0 ? polylineLength(path) : walkSecondsAlong(path, rules.playerSpeed, zones))),
+    );
     const cost = (order: number[]): number => {
       let total = 0;
       let from = 0;
       for (const to of [...order, exitIndex]) {
-        const path = legPath[from]![to];
-        if (!path) return Number.POSITIVE_INFINITY;
-        total += polylineLength(path);
+        total += legCost[from]![to]!;
         from = to;
       }
       return total;
@@ -315,14 +329,13 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
         let next = -1;
         let nextCost = Number.POSITIVE_INFINITY;
         for (const candidate of remaining) {
-          const path = legPath[from]![candidate];
-          const value = path ? polylineLength(path) : Number.POSITIVE_INFINITY;
+          const value = legCost[from]![candidate]!;
           if (value < nextCost) {
             nextCost = value;
             next = candidate;
           }
         }
-        if (next < 0) return failed([{ severity: "error", code: "route_blocked", message: "No orb is reachable from the current stop" }], walls.length);
+        if (next < 0) return failed([{ severity: "error", code: "route_blocked", message: "No orb is reachable from the current stop" }], walls.length, zones.length);
         best.push(next);
         remaining.delete(next);
         from = next;
@@ -330,7 +343,7 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
       bestCost = cost(best);
     }
     if (!Number.isFinite(bestCost)) {
-      return failed([{ severity: "error", code: "route_blocked", message: "No walkable visiting order reaches every orb and the exit" }], walls.length);
+      return failed([{ severity: "error", code: "route_blocked", message: "No walkable visiting order reaches every orb and the exit" }], walls.length, zones.length);
     }
 
     const legs: OrbRunRouteLeg[] = [];
@@ -343,7 +356,8 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
     const path: OrbRunRoutePoint[] = [];
     for (const leg of legs) path.push(...(path.length === 0 ? leg.path : leg.path.slice(1)));
     const lengthMeters = round(polylineLength(path));
-    const estimatedSeconds = round(lengthMeters / rules.playerSpeed);
+    const openSeconds = round(lengthMeters / rules.playerSpeed);
+    const estimatedSeconds = zones.length === 0 ? openSeconds : round(walkSecondsAlong(path, rules.playerSpeed, zones));
     return {
       ok: true,
       diagnostics: [],
@@ -352,9 +366,11 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
       path,
       lengthMeters,
       estimatedSeconds,
+      mudSeconds: round(estimatedSeconds - openSeconds),
       slackSeconds: round(rules.timeLimitSeconds - estimatedSeconds),
       orderExact,
       wallCount: walls.length,
+      slowZoneCount: zones.length,
     };
   } finally {
     mesh.dispose();

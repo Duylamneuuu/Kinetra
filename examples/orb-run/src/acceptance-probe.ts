@@ -73,7 +73,7 @@ export const ORB_RUN_MAX_STEPS_PER_CALL = 36_000;
  * - `state.level.walls.<n>.<entityId|x|z|halfWidth|halfDepth>`: the authored `OrbRunWall`s (also under a walled `project`)
  * - `state.navigation.*`: only when the probe was built with a `routePlanner` (Node-only: `createOrbRunNavigationProbe` in `navigation.ts`
  *   plugs in `planOrbRunRoute`): `ok`, `diagnostics.<n>.<code|severity|entityId|message>`, `orbIds.<n>`, `legs.<n>.<to|lengthMeters|path.<m>.<x|z>>`,
- *   `path.<n>.<x|z>`, `lengthMeters`, `estimatedSeconds`, `slackSeconds`, `orderExact`, `wallCount`; absent otherwise (reading it is `missing_path`)
+ *   `path.<n>.<x|z>`, `lengthMeters`, `estimatedSeconds`, `mudSeconds`, `slackSeconds`, `orderExact`, `wallCount`, `slowZoneCount`; absent otherwise (reading it is `missing_path`)
  * - `state.audio.playedCount`, `.played.<assetId>` (cue count per asset), `.failedCount`, `.cues.<n>.<assetId|bus|step|effectiveGainAtStart>`,
  *   `.buses.<master|music|sfx>.<gain|effectiveGain|muted>` and `.playbacks.<n>` (engine `AudioPlaybackState`)
  * - `state.animation.*`: the runner's locomotion + foot IK (`OrbRunAnimator`): `speed`, `smoothedSpeed`, `weights.<idle|walk|run>`, `dominant`,
