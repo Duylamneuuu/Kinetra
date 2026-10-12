@@ -6,6 +6,7 @@ export * from "./hot-reload.js";
 export * from "./base64.js";
 export * from "./asset-manifest.js";
 export * from "./walls.js";
+export * from "./zones.js";
 export * from "./scripts.js";
 export * from "./simulation.js";
 export * from "./game.js";
