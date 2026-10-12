@@ -313,6 +313,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
   #nextRequestId = 1;
   #readyPromise: Promise<void> | undefined;
   #starting: Promise<void> | undefined;
+  #closing: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
   #rejectReady: ((error: Error) => void) | undefined;
 
@@ -843,7 +844,25 @@ export class ElectronRuntimeHost implements RuntimeHost {
     return this.#request<RuntimePerformanceEvidence>("performance.sample", options ?? {});
   }
 
-  async close(): Promise<void> {
+  /**
+   * Tear the bridge down. Concurrent calls share one teardown, and requests that arrive while it
+   * runs wait for it to finish before they launch a replacement process: the teardown's last
+   * steps reset the process fields, which would otherwise wipe out the replacement's state and
+   * orphan it.
+   */
+  close(): Promise<void> {
+    if (!this.#closing) {
+      const closing = this.#closeNow().finally(() => {
+        if (this.#closing === closing) {
+          this.#closing = undefined;
+        }
+      });
+      this.#closing = closing;
+    }
+    return this.#closing;
+  }
+
+  async #closeNow(): Promise<void> {
     const child = this.#child;
     const socket = this.#socket;
     const server = this.#server;
@@ -956,6 +975,16 @@ export class ElectronRuntimeHost implements RuntimeHost {
       return;
     }
 
+    // A teardown in flight owns the process fields until it ends; launching now would have it
+    // reset (and orphan) the new process.
+    while (this.#closing) {
+      await this.#closing.catch(() => undefined);
+    }
+    if (this.#child && this.#readyPromise) {
+      await this.#readyPromise;
+      return;
+    }
+
     // The pipe transport awaits `server.listen` before it spawns the child, so a second caller
     // arriving in that window would start a second server and process, orphaning the first.
     // All concurrent first callers share one in-flight startup instead.
@@ -1006,8 +1035,18 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     await new Promise<void>((resolveListen, rejectListen) => {
       server.once("error", rejectListen);
+      // close() while still binding must not leave the startup waiting for a "listening" that
+      // never comes.
+      server.once("close", () => rejectListen(new Error("Electron runtime bridge closed while starting")));
       server.listen(pipePath, resolveListen);
     });
+
+    if (this.#server !== server) {
+      // close() ran while the server was still binding: do not launch a process nobody owns.
+      server.close();
+      server.unref();
+      throw new Error("Electron runtime bridge closed while starting");
+    }
 
     const effectiveUserDataDir = this.#claimUserDataDir();
 
@@ -1169,13 +1208,22 @@ export class ElectronRuntimeHost implements RuntimeHost {
       }
     });
 
+    // A process that is no longer current (close() released it, or a replacement was launched)
+    // can still report its error or exit late; that must not fail the replacement's startup or
+    // its requests in flight.
     child.once("error", (error) => {
+      if (this.#child !== child) {
+        return;
+      }
       this.#rejectReady?.(error);
       this.#rejectAllPending(error);
       this.#resetProcess(child);
     });
 
     child.once("exit", (code, signal) => {
+      if (this.#child !== child) {
+        return;
+      }
       const error = new Error(
         `Electron runtime bridge exited (code=${String(code)}, signal=${String(signal)})`,
       );
