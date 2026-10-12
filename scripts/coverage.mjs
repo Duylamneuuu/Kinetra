@@ -7,6 +7,7 @@
 //
 //   pnpm build && pnpm coverage                     # all packages, unit tests only
 //   pnpm coverage -- --package @kinetra/animation   # one package
+//   pnpm coverage -- --retries 0                    # do not re-run a package whose tests failed (default 1)
 //   pnpm coverage -- --include-real                 # also real-Electron tests (needs a display / xvfb)
 //
 // Writes coverage/<package>.lcov, coverage/summary.json and coverage/summary.md.
@@ -88,12 +89,32 @@ export function renderMarkdown(rows) {
     if (row.error) {
       lines.push(`| ${row.packageName} | – | – | – | – (${row.error}) |`);
     } else {
+      const retried = row.retried ? ` (passed after ${row.retried} retr${row.retried === 1 ? "y" : "ies"})` : "";
       lines.push(
-        `| ${row.packageName} | ${row.summary.files} | ${row.summary.lines.pct} | ${row.summary.branches.pct} | ${row.summary.functions.pct} |`,
+        `| ${row.packageName} | ${row.summary.files} | ${row.summary.lines.pct} | ${row.summary.branches.pct} | ${row.summary.functions.pct}${retried} |`,
       );
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+/** Names of the failing tests in a spec-reporter log (lines like `✖ name (1.2ms)`), de-duplicated; the reporter's own `✖ failing tests:` header is skipped. */
+export function extractFailedTests(log, limit = 5) {
+  const names = [];
+  for (const rawLine of String(log).split(/\r?\n/)) {
+    const match = /^\s*✖\s+(.+?)(?:\s+\([\d.]+m?s\))?\s*$/.exec(rawLine);
+    if (match && match[1] !== "failing tests:" && !names.includes(match[1])) names.push(match[1]);
+    if (names.length >= limit) break;
+  }
+  return names;
+}
+
+/** GitHub Actions `::warning::` line naming the package and failing tests of a failed attempt. */
+export function renderFailureAnnotation(packageName, status, attempt, maxAttempts, failedTests) {
+  const detail = failedTests.length > 0 ? `: ${failedTests.join(" | ")}` : "";
+  const retry = attempt < maxAttempts ? "; retrying once" : "";
+  const text = `${packageName} tests exited with ${status} (attempt ${attempt}/${maxAttempts})${detail}${retry}`;
+  return `::warning title=coverage test failure::${text.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`;
 }
 
 function globToRegExp(pattern) {
@@ -181,13 +202,17 @@ export const REPORT_NOTE =
   "_Measured on each package's compiled JavaScript under `dist/` (excluding `dist/test/`), so line/branch counts differ from the TypeScript sources. Real-Electron `real-*` tests are excluded unless `--include-real` is passed._";
 
 function parseArgs(argv) {
-  const options = { packages: [], includeReal: false, outDir: "coverage" };
+  const options = { packages: [], includeReal: false, outDir: "coverage", retries: 1 };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--") continue;
     if (arg === "--include-real") options.includeReal = true;
     else if (arg === "--package") options.packages.push(argv[++index]);
     else if (arg === "--out") options.outDir = argv[++index];
+    else if (arg === "--retries") {
+      options.retries = Number(argv[++index]);
+      if (!Number.isInteger(options.retries) || options.retries < 0) throw new Error("--retries expects a non-negative integer");
+    }
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return options;
@@ -221,22 +246,40 @@ async function main() {
       continue;
     }
 
-    const lcovPath = join(outDir, `${packageName.replace(/[@/]/g, (char) => (char === "@" ? "" : "__"))}.lcov`);
-    await rm(lcovPath, { force: true });
-    const result = spawnSync(
-      process.execPath,
-      [
-        "--test",
-        "--experimental-test-coverage",
-        "--test-concurrency=1",
-        "--test-reporter=dot",
-        "--test-reporter-destination=stdout",
-        "--test-reporter=lcov",
-        `--test-reporter-destination=${lcovPath}`,
-        ...testFiles,
-      ],
-      { cwd: packageDir, stdio: ["ignore", "inherit", "inherit"], env: childEnv() },
-    );
+    const base = join(outDir, packageName.replace(/[@/]/g, (char) => (char === "@" ? "" : "__")));
+    const lcovPath = `${base}.lcov`;
+    const logPath = `${base}.log`;
+    let result;
+    let attempts = 0;
+    do {
+      attempts += 1;
+      await rm(lcovPath, { force: true });
+      result = spawnSync(
+        process.execPath,
+        [
+          "--test",
+          "--experimental-test-coverage",
+          "--test-concurrency=1",
+          "--test-reporter=dot",
+          "--test-reporter-destination=stdout",
+          "--test-reporter=lcov",
+          `--test-reporter-destination=${lcovPath}`,
+          "--test-reporter=spec",
+          `--test-reporter-destination=${logPath}`,
+          ...testFiles,
+        ],
+        { cwd: packageDir, stdio: ["ignore", "inherit", "inherit"], env: childEnv() },
+      );
+      if (result.status !== 0) {
+        let log = "";
+        try {
+          log = await readFile(logPath, "utf8");
+        } catch {
+          log = "";
+        }
+        console.log(renderFailureAnnotation(packageName, result.status, attempts, options.retries + 1, extractFailedTests(log)));
+      }
+    } while (result.status !== 0 && attempts <= options.retries);
     let records = [];
     try {
       records = parseLcov(await readFile(lcovPath, "utf8"));
@@ -244,10 +287,11 @@ async function main() {
       records = [];
     }
     const summary = summarize(records, (file) => isPackageSourceFile(packageDir, file));
+    const retried = attempts > 1 ? { retried: attempts - 1 } : {};
     rows.push(
       result.status === 0
-        ? { packageName, testFiles: testFiles.length, summary }
-        : { packageName, testFiles: testFiles.length, summary, error: `tests exited with ${result.status}` },
+        ? { packageName, testFiles: testFiles.length, summary, ...retried }
+        : { packageName, testFiles: testFiles.length, summary, ...retried, error: `tests exited with ${result.status}` },
     );
   }
 
