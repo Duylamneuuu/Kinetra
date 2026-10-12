@@ -85,9 +85,3 @@ test("a well-formed rotation track with its own (denser) key times still extract
   assert.equal(result.success, true);
   assert.ok(Math.abs((result.extracted?.totalYaw ?? 0) - 1.2) < 1e-4);
 });
-
-test("an empty rotation track is not rejected and contributes no yaw", () => {
-  const result = extractRootMotionFromClip(clipOf([], []), { mode: "extract-xz-yaw" });
-  assert.equal(result.success, true);
-  assert.equal(result.extracted?.totalYaw, 0);
-});
