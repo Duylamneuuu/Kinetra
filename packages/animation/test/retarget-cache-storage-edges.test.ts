@@ -116,6 +116,9 @@ test("FileRetargetCacheStorage: every method rejects malformed keys and never to
   });
 });
 
+// Documents current behaviour on purpose: the key charset allows dots, and `${key}.json` can never
+// climb out of the directory. Tightening the validator to reject "." and ".." would make this test the
+// one to update.
 test("FileRetargetCacheStorage: dot-only keys stay inside the cache dir as ordinary file names", async () => {
   await withTempDir(async (dir) => {
     const cacheDir = join(dir, "cache");
@@ -129,14 +132,22 @@ test("FileRetargetCacheStorage: dot-only keys stay inside the cache dir as ordin
   });
 });
 
-test("FileRetargetCacheStorage: concurrent writers of one key leave exactly one complete value and no temp files", async () => {
+test("FileRetargetCacheStorage: concurrent writers of one key leave one complete value and no temp files", async () => {
   await withTempDir(async (dir) => {
     const storage = new FileRetargetCacheStorage({ cacheDir: dir });
     const payloads = Array.from({ length: 24 }, (_, index) => `payload-${index}-${"x".repeat(2048 + index)}`);
-    await Promise.all(payloads.map((payload) => storage.set("shared", payload)));
+    // On Windows a rename over a file another writer is replacing can exhaust the retry budget and
+    // reject; that is allowed. What must hold everywhere is that no reader ever sees a torn value.
+    const settled = await Promise.allSettled(payloads.map((payload) => storage.set("shared", payload)));
+    assert.ok(settled.some((outcome) => outcome.status === "fulfilled"), "at least one writer wins");
+    for (const outcome of settled) {
+      if (outcome.status === "rejected") {
+        assert.ok(outcome.reason instanceof Error, "a lost race rejects with a real error");
+      }
+    }
     const final = await storage.get("shared");
     assert.ok(final !== null && payloads.includes(final), "the stored value is one whole payload, never a mix");
-    assert.deepEqual(readdirSync(dir), ["shared.json"]);
+    assert.deepEqual(readdirSync(dir), ["shared.json"], "losing writers clean up their temp files");
   });
 });
 
