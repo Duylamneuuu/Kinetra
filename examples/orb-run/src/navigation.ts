@@ -214,15 +214,29 @@ export async function planOrbRunRoute(project: ProjectDocument, options: OrbRunR
   });
   try {
     // Snap every stop onto the walkable floor (never onto a wall top: the y extent is small).
+    // A stop with no walkable floor within reach (walled in tighter than the agent, or buried in a wall) is a
+    // `route_blocked` diagnostic naming it, not an exception.
     const halfExtents = { x: 1, y: 0.5, z: 1 };
-    const snapped = stops.map((stop) => {
-      const point = mesh.closestPoint({ x: stop.point.x, y: 0, z: stop.point.z }, { halfExtents });
-      return { id: stop.id, point: { x: point.x, z: point.z } };
+    const diagnostics: OrbRunRouteDiagnostic[] = [];
+    const snapped = stops.map((stop, index) => {
+      try {
+        const point = mesh.closestPoint({ x: stop.point.x, y: 0, z: stop.point.z }, { halfExtents });
+        return { id: stop.id, point: { x: point.x, z: point.z } };
+      } catch {
+        const label = index === 0 ? "The player's start" : index === stops.length - 1 ? "The exit" : `Orb ${stop.id}`;
+        diagnostics.push({
+          severity: "error",
+          code: "route_blocked",
+          message: `${label} has no walkable floor within 1 m: walls close it in tighter than the route agent fits`,
+          entityId: stop.id,
+        });
+        return { id: stop.id, point: stop.point };
+      }
     });
+    if (diagnostics.length > 0) return failed(diagnostics, walls.length);
 
     const count = stops.length;
     const legPath: Array<Array<OrbRunRoutePoint[] | null>> = Array.from({ length: count }, () => Array.from({ length: count }, (): OrbRunRoutePoint[] | null => null));
-    const diagnostics: OrbRunRouteDiagnostic[] = [];
     for (let from = 0; from < count; from += 1) {
       for (let to = 1; to < count; to += 1) {
         if (from === to) continue;
