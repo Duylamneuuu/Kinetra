@@ -69,6 +69,21 @@ export interface OrbRunHudInput {
   targets?: readonly OrbRunHudMarkerTarget[];
 }
 
+export interface OrbRunHudIssue {
+  field: string;
+  message: string;
+}
+
+/** Thrown by `computeOrbRunHud`/`buildOrbRunHud` when the state it is asked to show is corrupt (never a half-drawn HUD). */
+export class OrbRunHudError extends Error {
+  readonly code = "ORB_RUN_HUD_INVALID";
+  readonly issues: OrbRunHudIssue[];
+  constructor(issues: OrbRunHudIssue[]) {
+    super(`Orb Run HUD input invalid: ${issues.map((issue) => `${issue.field}: ${issue.message}`).join("; ")}`);
+    this.issues = issues;
+  }
+}
+
 const COMPASS: readonly HudCompass[] = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 
 function round(value: number, decimals: number): number {
@@ -91,8 +106,10 @@ export function compassFor(bearingDegrees: number): HudCompass {
 }
 
 function timerUrgency(status: OrbRunStatus, remaining: number, limit: number): HudTimerUrgency {
-  if (status === "lost" || remaining <= 0) return "expired";
+  // A win is checked before the clock on the same tick (OrbRunManager.onUpdate), so a run won on the
+  // very tick the clock hits 0 is a win: it must not read "expired".
   if (status === "won") return "normal";
+  if (status === "lost" || remaining <= 0) return "expired";
   if (remaining <= ORB_RUN_HUD_CRITICAL_SECONDS) return "critical";
   if (remaining <= limit * ORB_RUN_HUD_WARNING_FRACTION) return "warning";
   return "normal";
@@ -128,7 +145,44 @@ function pickMarker(input: OrbRunHudInput): OrbRunHudMarker | null {
   };
 }
 
+const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+const isCount = (value: unknown): value is number => isFiniteNumber(value) && Number.isInteger(value) && value >= 0;
+
+/** Every problem that would make the HUD render garbage (NaN clock, 0/0 fraction, impossible counts). */
+export function validateOrbRunHudInput(input: OrbRunHudInput): OrbRunHudIssue[] {
+  const issues: OrbRunHudIssue[] = [];
+  const { summary, rules, targets } = input;
+  if (summary.status !== "playing" && summary.status !== "won" && summary.status !== "lost") {
+    issues.push({ field: "summary.status", message: 'must be "playing", "won" or "lost"' });
+  }
+  if (!isCount(summary.collectedCount)) issues.push({ field: "summary.collectedCount", message: "must be an integer >= 0" });
+  if (!isCount(summary.totalOrbs)) issues.push({ field: "summary.totalOrbs", message: "must be an integer >= 0" });
+  if (isCount(summary.collectedCount) && isCount(summary.totalOrbs) && summary.collectedCount > summary.totalOrbs) {
+    issues.push({ field: "summary.collectedCount", message: "must not exceed totalOrbs" });
+  }
+  if (!isFiniteNumber(summary.remainingSeconds)) {
+    issues.push({ field: "summary.remainingSeconds", message: "must be a finite number" });
+  }
+  if (!isFiniteNumber(summary.elapsedSeconds)) {
+    issues.push({ field: "summary.elapsedSeconds", message: "must be a finite number" });
+  }
+  if (!Array.isArray(summary.player) || summary.player.length !== 3 || !summary.player.every(isFiniteNumber)) {
+    issues.push({ field: "summary.player", message: "must be three finite numbers" });
+  }
+  if (!isFiniteNumber(rules.timeLimitSeconds) || rules.timeLimitSeconds <= 0) {
+    issues.push({ field: "rules.timeLimitSeconds", message: "must be a finite number > 0" });
+  }
+  targets?.forEach((target, index) => {
+    if (!Array.isArray(target.position) || target.position.length !== 2 || !target.position.every(isFiniteNumber)) {
+      issues.push({ field: `targets[${index}].position`, message: "must be two finite numbers" });
+    }
+  });
+  return issues;
+}
+
 export function computeOrbRunHud(input: OrbRunHudInput): OrbRunHud {
+  const issues = validateOrbRunHudInput(input);
+  if (issues.length > 0) throw new OrbRunHudError(issues);
   const { summary, rules } = input;
   const remainingSeconds = Math.max(0, summary.remainingSeconds);
   // Tolerate float drift from accumulating 1/30 s steps (29.999999999999996 must read 0:30).
@@ -201,9 +255,11 @@ export function readOrbRunRules(simulation: HeadlessSceneSimulation): OrbRunRule
 /** Build the HUD of a running Orb Run simulation. */
 export function buildOrbRunHud(simulation: HeadlessSceneSimulation): OrbRunHud {
   const summary = summarizeOrbRun(simulation);
-  const collected = new Set(
-    (simulation.scriptState(ORB_RUN_ENTITY.manager)?.state?.collectedOrbIds as string[] | undefined) ?? [],
-  );
+  const collectedIds: unknown = simulation.scriptState(ORB_RUN_ENTITY.manager)?.state?.collectedOrbIds;
+  if (!Array.isArray(collectedIds) || !collectedIds.every((id) => typeof id === "string")) {
+    throw new OrbRunHudError([{ field: "state.collectedOrbIds", message: "must be an array of entity ids" }]);
+  }
+  const collected = new Set<string>(collectedIds as string[]);
   const targets: OrbRunHudMarkerTarget[] = [];
   for (const orbId of ORB_RUN_ORB_IDS) {
     if (collected.has(orbId)) continue;

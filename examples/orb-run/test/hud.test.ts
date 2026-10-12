@@ -14,8 +14,10 @@ import {
   compassFor,
   computeOrbRunHud,
   createOrbRunProject,
+  OrbRunHudError,
   formatClock,
   readOrbRunRules,
+  validateOrbRunHudInput,
   renderOrbRunHudText,
   restoreOrbRunSave,
   startOrbRunSimulation,
@@ -317,6 +319,95 @@ test("the HUD model is plain JSON (a renderer or the acceptance probe can serial
     playRoute(simulation);
     const hud = buildOrbRunHud(simulation);
     assert.deepEqual(JSON.parse(JSON.stringify(hud)), hud);
+  } finally {
+    await simulation.dispose();
+  }
+});
+
+test("a run won on the very tick the clock hits 0 stays a win: urgency normal, win banner", () => {
+  const hud = computeOrbRunHud({
+    summary: summary({ status: "won", collectedCount: 3, exitUnlocked: true, remainingSeconds: 0, elapsedSeconds: 20 }),
+    rules: ORB_RUN_DEFAULT_RULES,
+  });
+  assert.equal(hud.timer.urgency, "normal");
+  assert.equal(hud.banner?.kind, "won");
+  assert.equal(hud.objective.kind, "won");
+});
+
+test("a corrupt summary or rule set is a structured OrbRunHudError, never NaN or a half-drawn HUD", () => {
+  const failure = (fn: () => unknown): { code: string; fields: string[] } => {
+    try {
+      fn();
+    } catch (error) {
+      assert.ok(error instanceof OrbRunHudError, `expected OrbRunHudError, got ${String(error)}`);
+      return { code: error.code, fields: error.issues.map((issue) => issue.field) };
+    }
+    assert.fail("expected computeOrbRunHud to throw");
+  };
+  const rules = ORB_RUN_DEFAULT_RULES;
+  for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary({ remainingSeconds: bad }), rules })), {
+      code: "ORB_RUN_HUD_INVALID",
+      fields: ["summary.remainingSeconds"],
+    });
+  }
+  // 0/0: an unvalidated rule set with a zero clock used to make `timer.fraction` NaN (null in JSON).
+  assert.deepEqual(
+    failure(() => computeOrbRunHud({ summary: summary(), rules: { ...rules, timeLimitSeconds: 0 } })).fields,
+    ["rules.timeLimitSeconds"],
+  );
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary({ collectedCount: 4 }), rules })).fields, [
+    "summary.collectedCount",
+  ]);
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary({ collectedCount: 1.5 }), rules })).fields, [
+    "summary.collectedCount",
+  ]);
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary({ status: "paused" as never }), rules })).fields, [
+    "summary.status",
+  ]);
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary({ player: [0, Number.NaN, 0] }), rules })).fields, [
+    "summary.player",
+  ]);
+  assert.deepEqual(
+    failure(() =>
+      computeOrbRunHud({
+        summary: summary(),
+        rules,
+        targets: [{ kind: "orb", entityId: "Orb1", position: [Number.NaN, 0] }],
+      }),
+    ).fields,
+    ["targets[0].position"],
+  );
+  // Every issue is reported at once.
+  assert.equal(
+    validateOrbRunHudInput({
+      summary: summary({ remainingSeconds: Number.NaN, elapsedSeconds: Number.NaN, totalOrbs: -1 }),
+      rules: { ...rules, timeLimitSeconds: -5 },
+    }).length,
+    4,
+  );
+  assert.deepEqual(validateOrbRunHudInput({ summary: summary(), rules }), []);
+});
+
+test("buildOrbRunHud rejects a manager state whose collectedOrbIds is not an array of ids", async () => {
+  const simulation = await startOrbRunSimulation();
+  try {
+    const hud = buildOrbRunHud(simulation);
+    assert.equal(hud.orbs.collected, 0);
+    const real = simulation.scriptState.bind(simulation);
+    for (const corrupt of [null, "Orb1", { 0: "Orb1" }, [1, 2]]) {
+      (simulation as { scriptState: typeof simulation.scriptState }).scriptState = (id) => {
+        const state = real(id);
+        return state ? { ...state, state: { ...state.state, collectedOrbIds: corrupt } as never } : state;
+      };
+      assert.throws(
+        () => buildOrbRunHud(simulation),
+        (error: unknown) =>
+          error instanceof OrbRunHudError &&
+          error.issues.length === 1 &&
+          error.issues[0]!.field === "state.collectedOrbIds",
+      );
+    }
   } finally {
     await simulation.dispose();
   }
