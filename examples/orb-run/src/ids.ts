@@ -42,6 +42,9 @@ export const ORB_RUN_RULES_COMPONENT = "OrbRunRules";
 /** Custom component marking an entity as an axis-aligned wall (see `src/walls.ts`). */
 export const ORB_RUN_WALL_COMPONENT = "OrbRunWall";
 
+/** Custom component marking an entity as a circular slow zone, "mud" (see `src/zones.ts`). */
+export const ORB_RUN_SLOW_ZONE_COMPONENT = "OrbRunSlowZone";
+
 /** Semantic input actions (same ids as the engine's default player input map). */
 export const ORB_RUN_ACTION = {
   moveRight: "player.moveRight",
