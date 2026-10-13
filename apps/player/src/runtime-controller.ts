@@ -40,6 +40,7 @@ import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
+import { loadSaveFailure } from "./save-failure.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { resolveStartScene } from "./start-scene.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
@@ -1691,7 +1692,7 @@ export class PlayerRuntimeController {
     if (!this.#runtime) {
       const error = "Cannot load save: Runtime is not running";
       this.#log("error", "save.restoreFailed", { phase: "validation", error });
-      return { success: false, error };
+      return loadSaveFailure("validation", error, options?.slotId);
     }
 
     const slotId = options?.slotId ?? "default";
@@ -1702,14 +1703,14 @@ export class PlayerRuntimeController {
       } catch (err) {
         const error = `Failed to read save document for slot "${slotId}": ${err instanceof Error ? err.message : String(err)}`;
         this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-        return { success: false, slotId, error, phase: "validation" };
+        return loadSaveFailure("validation", error, slotId);
       }
     }
 
     if (!rawEnvelope) {
       const error = `Save document not found for slot "${slotId}"`;
       this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, slotId, error, phase: "validation" };
+      return loadSaveFailure("validation", error, slotId);
     }
 
     // Phase 1: Validation
@@ -1722,7 +1723,7 @@ export class PlayerRuntimeController {
     ) {
       const error = "Invalid save envelope structure";
       this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, error };
+      return loadSaveFailure("validation", error, slotId);
     }
 
     // Phase 2: Migration
@@ -1734,7 +1735,7 @@ export class PlayerRuntimeController {
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       this.#log("error", "save.restoreFailed", { slotId, phase: "migration", error });
-      return { success: false, error };
+      return loadSaveFailure("migration", error, slotId);
     }
 
     // Phase 3: Preparation & Target Validation (Preflight: apply nothing if any check fails)
@@ -1747,7 +1748,7 @@ export class PlayerRuntimeController {
         activeSceneId: this.#runtime.sceneId,
         error,
       });
-      return { success: false, error };
+      return loadSaveFailure("preparation", error, slotId);
     }
 
     if (
@@ -1757,7 +1758,7 @@ export class PlayerRuntimeController {
     ) {
       const error = "Save contains invalid entities record";
       this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
-      return { success: false, error };
+      return loadSaveFailure("preparation", error, slotId);
     }
 
     interface PreparedTransform {
@@ -1782,7 +1783,7 @@ export class PlayerRuntimeController {
       if (!obj) {
         const error = `Entity "${entityId}" from save does not exist in active scene`;
         this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-        return { success: false, error };
+        return loadSaveFailure("preparation", error, slotId);
       }
 
       // A malformed entry (null, a primitive, bad coordinates) is a structured preparation failure,
@@ -1795,7 +1796,7 @@ export class PlayerRuntimeController {
           phase: "preparation",
           error: preflight.error,
         });
-        return { success: false, error: preflight.error };
+        return loadSaveFailure("preparation", preflight.error, slotId);
       }
 
       const prepPos = preflight.position;
@@ -1815,26 +1816,26 @@ export class PlayerRuntimeController {
         if (!this.#scripts.hasScript(entityId)) {
           const error = `Entity "${entityId}" has gameplay save state but no active script`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
         if (!this.#scripts.canRestoreScriptState(entityId)) {
           const error = `Script on entity "${entityId}" does not support state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
         if (!this.#scripts.canPrepareTransactionalRestore(entityId)) {
           const error = `Script on entity "${entityId}" does not support transactional state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
         const validation = this.#scripts.validateScriptRestoreState(entityId, gameplay);
         if (!validation.valid) {
           const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
         // A script whose prepareRestoreState throws or rejects fails the preparation phase; nothing
@@ -1846,7 +1847,7 @@ export class PlayerRuntimeController {
           const detail = err instanceof Error ? err.message : String(err);
           const error = `Script on entity "${entityId}" failed to prepare its state restore: ${detail}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
         preparedScripts.push({
