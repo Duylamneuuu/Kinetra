@@ -26,6 +26,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: the frame loop keeps scheduling `requestAnimationFrame` when a tick throws ([#520](https://github.com/Duylamneuuu/Kinetra/pull/520))
 - **save-state**: the file storage refuses a `settings_` key alias whatever its letter case (`saves:Settings_user` is the same file on NTFS and macOS) ([#511](https://github.com/Duylamneuuu/Kinetra/pull/511))
 - **orb-run**: slice 34 stepping out of wall A can no longer end inside wall B (`axisMoveAllowed` judges every wall) ([#509](https://github.com/Duylamneuuu/Kinetra/pull/509))
 - **orb-run**: slice 33 a player pressed into a wall can walk out but not deeper (`resolveWallMotion`) ([#508](https://github.com/Duylamneuuu/Kinetra/pull/508))
@@ -71,6 +72,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 36 a wall under the player, proven through the whole game (`test/wall-under-player.test.ts`, 6 tests) ([#521](https://github.com/Duylamneuuu/Kinetra/pull/521))
+- **orb-run**: `advanceUntil` boundary pinned: the predicate is true at the last step and `maxSteps=0` (Refs #500) ([#517](https://github.com/Duylamneuuu/Kinetra/pull/517))
 - **verification**: tiny, zero-area and mismatched-size frame edges of `visual.ts` covered ([#513](https://github.com/Duylamneuuu/Kinetra/pull/513))
 - **orb-run**: slice 35 wall clearance invariants and one distance formula (`signedDistanceToWall`) ([#515](https://github.com/Duylamneuuu/Kinetra/pull/515))
 - **asset-pipeline**: the visit-budget boundary of `glb-bounds` is pinned (Refs #383) ([#512](https://github.com/Duylamneuuu/Kinetra/pull/512))
