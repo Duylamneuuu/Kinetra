@@ -286,8 +286,8 @@ export class HeadlessSceneSimulation {
   /**
    * Set the step counter to a saved run's step: when resuming into a fresh simulation, or when quick-loading a save
    * into a simulation that has already advanced (the clock follows the state, so `step`, `elapsedSeconds` and the
-   * audio clock agree with what was restored). Entries already in `logs()`/`events()`/audio cues keep the step they
-   * were recorded at.
+   * audio clock agree with what was restored). This alone leaves `logs()`/`events()`/audio cues as they were; once the
+   * restore has succeeded, `discardHistoryAfter` drops what belongs to the abandoned timeline.
    */
   restoreStep(step: number): void {
     if (!Number.isInteger(step) || step < 0) {
@@ -295,6 +295,31 @@ export class HeadlessSceneSimulation {
     }
     this.#step = step;
     this.#revision += 1;
+  }
+
+  /**
+   * Drop the log and event entries recorded after `step`, and tell the audio service to do the same when it can
+   * (`rewindTo(step)`). Quick-loading a save into a run that has moved on abandons that timeline: without this the
+   * history would carry steps from the future of the restored state and stop being monotonic. Entries at `step` itself
+   * stay (the saved state already includes them). When something was dropped, one `simulation.timelineRewound` log
+   * entry at `step` records how much, so the cut is visible rather than silent. Returns the counts.
+   */
+  discardHistoryAfter(step: number): { logs: number; events: number; cues: number } {
+    if (!Number.isInteger(step) || step < 0) {
+      throw new RangeError(`History cut-off step must be an integer >= 0, got ${String(step)}`);
+    }
+    const logsBefore = this.#logs.length;
+    const eventsBefore = this.#events.length;
+    this.#logs = this.#logs.filter((entry) => entry.step <= step);
+    this.#events = this.#events.filter((entry) => entry.step <= step);
+    const rewindable = this.audio as { rewindTo?: (step: number) => number } | undefined;
+    const cues = rewindable?.rewindTo?.(step) ?? 0;
+    const dropped = { logs: logsBefore - this.#logs.length, events: eventsBefore - this.#events.length, cues };
+    if (dropped.logs + dropped.events + dropped.cues > 0) {
+      this.#revision += 1;
+      this.#log("info", "simulation.timelineRewound", { toStep: step, droppedLogs: dropped.logs, droppedEvents: dropped.events, droppedCues: cues });
+    }
+    return dropped;
   }
 
   async dispose(): Promise<void> {

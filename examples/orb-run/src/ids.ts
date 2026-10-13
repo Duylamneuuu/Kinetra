@@ -45,6 +45,12 @@ export const ORB_RUN_WALL_COMPONENT = "OrbRunWall";
 /** Custom component marking an entity as a circular slow zone, "mud" (see `src/zones.ts`). */
 export const ORB_RUN_SLOW_ZONE_COMPONENT = "OrbRunSlowZone";
 
+/**
+ * Height an `OrbRunOrb` drops to once collected: straight down, out of sight. The single source for the script that
+ * moves the orb and for everything that checks where a collected orb must be (save validation, the fuzz invariants).
+ */
+export const ORB_RUN_STOWED_Y = -10;
+
 /** Semantic input actions (same ids as the engine's default player input map). */
 export const ORB_RUN_ACTION = {
   moveRight: "player.moveRight",

@@ -2,6 +2,7 @@ import {
   ORB_RUN_ENTITY,
   ORB_RUN_ORB_IDS,
   ORB_RUN_RULES_COMPONENT,
+  ORB_RUN_STOWED_Y,
   ORB_RUN_WALL_COMPONENT,
 } from "./ids.js";
 import { parseOrbRunRules } from "./scripts.js";
@@ -32,8 +33,14 @@ export class OrbRunSaveError extends Error {
   }
 }
 
-/** Where `OrbRunOrb` stows a collected orb (its `HIDDEN_Y`). */
-const STOWED_Y = -10;
+/**
+ * Longest run a save may claim, in simulated seconds (one day of play). `step` is an integer, so without a ceiling a
+ * hand-edited `1e300` is "valid" and drags the clock (and everything derived from it) to a number nobody can play to.
+ * It is a time, not a step count, so it holds for any `fixedDeltaSeconds`.
+ */
+export const ORB_RUN_MAX_SAVE_SECONDS = 24 * 60 * 60;
+
+const STOWED_Y = ORB_RUN_STOWED_Y;
 /** Slack (seconds) for float noise when a derived number is compared with the one recomputed from the level's rules. */
 const REMAINING_TOLERANCE = 1e-9;
 const MANAGER_PATH = `scripts.${ORB_RUN_ENTITY.manager}`;
@@ -87,7 +94,11 @@ export function validateOrbRunSave(simulation: HeadlessSceneSimulation, save: un
   for (const key of Object.keys(save)) {
     if (!ALLOWED_TOP_LEVEL.has(key)) add(key, "unknown field");
   }
-  if (!Number.isInteger(save.step) || (save.step as number) < 0) add("step", "must be an integer >= 0");
+  if (!Number.isInteger(save.step) || (save.step as number) < 0) {
+    add("step", "must be an integer >= 0");
+  } else if ((save.step as number) * simulation.fixedDeltaSeconds > ORB_RUN_MAX_SAVE_SECONDS) {
+    add("step", `a save cannot be older than ${ORB_RUN_MAX_SAVE_SECONDS} s of play (step ${String(save.step)})`);
+  }
   if (!isRecord(save.positions)) add("positions", "must be an object keyed by entity id");
   if (!isRecord(save.scripts)) add("scripts", "must be an object keyed by entity id");
   if (!isRecord(save.positions) || !isRecord(save.scripts)) return issues;
