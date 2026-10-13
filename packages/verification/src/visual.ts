@@ -474,9 +474,21 @@ export function detectBlankFrame(
   evidence: VisualFrameEvidence,
   options?: BlankFrameOptions,
 ): { isBlank: boolean; reason?: string | undefined } {
-  const minOpaqueRatio = options?.minOpaqueRatio ?? 0.5;
-  const minLuminanceVariance = options?.minLuminanceVariance ?? 0.0005;
-  const minEntropy = options?.minEntropy ?? 0.2;
+  // A NaN threshold makes every `<` comparison false, so the frame would never read as blank.
+  // Out-of-range but finite values stay legal ("unreachable" thresholds such as minEntropy 1e9 force a failure).
+  const minOpaqueRatio = resolveThreshold(
+    "minOpaqueRatio",
+    options?.minOpaqueRatio,
+    0.5,
+    Number.MAX_VALUE,
+  );
+  const minLuminanceVariance = resolveThreshold(
+    "minLuminanceVariance",
+    options?.minLuminanceVariance,
+    0.0005,
+    Number.MAX_VALUE,
+  );
+  const minEntropy = resolveThreshold("minEntropy", options?.minEntropy, 0.2, Number.MAX_VALUE);
 
   if (evidence.opaquePixelRatio < minOpaqueRatio) {
     return {
