@@ -10,6 +10,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 29 quick-load drops the abandoned timeline's history (`HeadlessSceneSimulation.discardHistoryAfter`, `HeadlessAudioService.rewindTo`); rollback failures are reported ([#486](https://github.com/Duylamneuuu/Kinetra/pull/486))
+- **orb-run**: slice 28 review follow-ups on save validation ([#478](https://github.com/Duylamneuuu/Kinetra/pull/478))
+- **orb-run**: slice 27 a save from another level or a hand-edited counter is refused ([#476](https://github.com/Duylamneuuu/Kinetra/pull/476))
+- **orb-run**: slice 26 quick-load moves the simulation clock with the restored state ([#471](https://github.com/Duylamneuuu/Kinetra/pull/471))
 - **orb-run**: slice 25 saves are untrusted input: validated, all-or-nothing restore ([#468](https://github.com/Duylamneuuu/Kinetra/pull/468))
 - **command-bus**: new commands `component.remove` and `component.unsetFields` with structured `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` errors (Refs #321) ([#455](https://github.com/Duylamneuuu/Kinetra/pull/455))
 - **orb-run**: slice 23 the fuzzer holds the player to its speed limit, mud included (`player_speed_bound` invariant) ([#449](https://github.com/Duylamneuuu/Kinetra/pull/449))
@@ -20,6 +24,15 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **orb-run**: `HeadlessAudioService.rewindTo` undoes the `stop()` of an abandoned timeline's audio (bug introduced by #486) ([#490](https://github.com/Duylamneuuu/Kinetra/pull/490))
+- **animation**: `computeRetargetCacheKey` tells `NaN`/`Infinity` apart from `null` and keeps a `__proto__` key (shared `canonicalizeForCacheKey`) ([#484](https://github.com/Duylamneuuu/Kinetra/pull/484))
+- **animation**: `bakeRetargetedClip` keeps the step/smooth interpolation of the source track and drops a track whose value count does not match its key count ([#483](https://github.com/Duylamneuuu/Kinetra/pull/483))
+- **player**: an error with a code from the renderer reaches the bridge as `<code>: <message>` plus `code` (Refs #354) ([#433](https://github.com/Duylamneuuu/Kinetra/pull/433))
+- **asset-pipeline**: `createSyntheticGlb` rotation channels write quaternion (VEC4) output and validate `from`/`to` ([#477](https://github.com/Duylamneuuu/Kinetra/pull/477))
+- **player**: `bakeNavigation` geometry wins over `positions`/`indices` keys in the config ([#475](https://github.com/Duylamneuuu/Kinetra/pull/475))
+- **verification**: `metricMax`/`metricMin` and `detectBlankFrame` no longer pass with a `NaN` threshold or metric ([#473](https://github.com/Duylamneuuu/Kinetra/pull/473))
+- **player**: `start()` checks `sceneId` before it stops the running game and overwrites assets (`resolveStartScene`) ([#472](https://github.com/Duylamneuuu/Kinetra/pull/472))
+- **verification**: `compareVisualFrames` compares against the threshold with the unrounded value ([#469](https://github.com/Duylamneuuu/Kinetra/pull/469))
 - **verification**: `KinetraRuntimeProbe` throws when the host lacks an action method instead of passing falsely (Refs #460) ([#467](https://github.com/Duylamneuuu/Kinetra/pull/467))
 - **player**: a fatal load failure keeps exit code 1 (first exit code wins) and `loadFile` has a `.catch` (follow-up of #453) ([#456](https://github.com/Duylamneuuu/Kinetra/pull/456))
 - **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
@@ -47,6 +60,12 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 30 duplicate `orbCollected` events count and cue once; stale README gap removed (#187) ([#489](https://github.com/Duylamneuuu/Kinetra/pull/489))
+- **animation**: clip event validation, duplicate bone targets, machine reset and retarget diagnostics ([#487](https://github.com/Duylamneuuu/Kinetra/pull/487))
+- **physics-rapier**: validation, `halfExtents` and diagnostics edge tests (branch coverage 93.4% → 97.7%) ([#488](https://github.com/Duylamneuuu/Kinetra/pull/488))
+- **animation**: branches of `validateClipMetadata` and `validateSkeletonProfile` (events outside the duration, unsorted, non-finite; duplicate bone target) ([#485](https://github.com/Duylamneuuu/Kinetra/pull/485))
+- **verification**: `close()` during startup fails the waiting request at once; dead `#rejectReady` removed ([#426](https://github.com/Duylamneuuu/Kinetra/pull/426))
+- **editor**: model-based fuzz of `EditorSession` (failed edits leave the bus untouched, undo/redo restore exact projects, selection never lists missing entities) ([#434](https://github.com/Duylamneuuu/Kinetra/pull/434))
 - **orb-run**: slice 24 transitive portability test follows the imports of the entry through the engine package barrels ([#452](https://github.com/Duylamneuuu/Kinetra/pull/452))
 - **asset-pipeline / physics-rapier**: glb-bounds sparse accessors, raw integer and truncated-BIN cases, plus pending kinematic body edge cases (Fixes #367) ([#454](https://github.com/Duylamneuuu/Kinetra/pull/454))
 - **reference-game**: enemy and player branches with a missing transform, scene, graph or player ([#451](https://github.com/Duylamneuuu/Kinetra/pull/451))
@@ -59,6 +78,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
+- CHANGELOG and STATUS snapshot through PR #458 ([#463](https://github.com/Duylamneuuu/Kinetra/pull/463))
 - CHANGELOG and STATUS snapshot through PR #446 ([#448](https://github.com/Duylamneuuu/Kinetra/pull/448))
 
 ### Maintenance
