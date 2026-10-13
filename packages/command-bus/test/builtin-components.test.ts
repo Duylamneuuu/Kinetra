@@ -96,7 +96,7 @@ test("custom and unschematised components stay free-form", () => {
   const bus = new CommandBus(project());
   const result = bus.execute(
     create("e1", {
-      Collider: { shape: "anything", size: "huge" },
+      Health: { shape: "anything", size: "huge" },
       MyGameThing: { whatever: [1, "two", { three: 3 }] },
     }),
   );

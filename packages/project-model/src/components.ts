@@ -2,7 +2,8 @@ import type { JsonValue } from "./types.js";
 
 /**
  * Schemas for the built-in components the engine itself interprets
- * (`Transform`, `Primitive`, `Camera`, `Light`, `Model`, `Script`).
+ * (`Transform`, `Primitive`, `Camera`, `Light`, `Model`, `Script`, `Collider`,
+ * `RigidBody`, `CharacterBody`, `NavMesh`).
  *
  * The runtime is deliberately forgiving (a malformed `Transform` falls back to
  * defaults, a bad `Primitive.kind` throws at instantiate time). That is the wrong
@@ -13,7 +14,7 @@ import type { JsonValue } from "./types.js";
  * - Only the *known* fields of a built-in component are checked; unknown fields
  *   stay free-form so scripts and tools can attach their own data.
  * - Components whose name is not listed here (custom or not-yet-schematised, e.g.
- *   `Collider`, `RigidBody`) are never inspected.
+ *   `Health`, `Inventory`) are never inspected.
  * - Every field is optional, matching the runtime defaults.
  */
 export interface ComponentIssue {
@@ -91,6 +92,73 @@ function nonEmptyString(): FieldCheck {
     typeof value === "string" && value.length > 0 ? undefined : "must be a non-empty string";
 }
 
+/** Like `oneOf`, but case-insensitive: the physics factory lower-cases `RigidBody.type`. */
+function oneOfIgnoringCase(allowed: readonly string[]): FieldCheck {
+  const lowered = allowed.map((entry) => entry.toLowerCase());
+  return (value) =>
+    typeof value === "string" && lowered.includes(value.toLowerCase())
+      ? undefined
+      : `must be one of ${allowed.map((entry) => `"${entry}"`).join(", ")} (case-insensitive)`;
+}
+
+/** Integer in `[min, max]`. */
+function integerInRange(min: number, max: number): FieldCheck {
+  return (value) =>
+    typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
+      ? undefined
+      : `must be an integer between ${min} and ${max}`;
+}
+
+/** Array of finite numbers whose length is a multiple of `stride` (empty arrays are accepted). */
+function numberArray(stride: number): FieldCheck {
+  return (value) => {
+    if (!Array.isArray(value)) return "must be an array of finite numbers";
+    if (value.length % stride !== 0) {
+      return `must have a length that is a multiple of ${stride} (got ${value.length})`;
+    }
+    for (let i = 0; i < value.length; i++) {
+      const entry = value[i];
+      if (typeof entry !== "number" || !Number.isFinite(entry)) {
+        return `must contain only finite numbers (entry ${i} is not)`;
+      }
+    }
+    return undefined;
+  };
+}
+
+/** Array of non-negative integers whose length is a multiple of `stride`. */
+function indexArray(stride: number): FieldCheck {
+  return (value) => {
+    if (!Array.isArray(value)) return "must be an array of non-negative integers";
+    if (value.length % stride !== 0) {
+      return `must have a length that is a multiple of ${stride} (got ${value.length})`;
+    }
+    for (let i = 0; i < value.length; i++) {
+      const entry = value[i];
+      if (typeof entry !== "number" || !Number.isInteger(entry) || entry < 0) {
+        return `must contain only non-negative integers (entry ${i} is not)`;
+      }
+    }
+    return undefined;
+  };
+}
+
+function plainObject(): FieldCheck {
+  return (value) => (isObject(value) ? undefined : "must be a JSON object");
+}
+
+export const RIGID_BODY_TYPES = [
+  "fixed",
+  "static",
+  "dynamic",
+  "kinematic",
+  "kinematicPositionBased",
+  "kinematicVelocityBased",
+] as const;
+
+/** Highest query-filter layer a `Collider.layer` may use (mirrors `MAX_PHYSICS_LAYER`). */
+export const MAX_COLLIDER_LAYER = 31;
+
 /** CSS-style colour string accepted by `THREE.Color` (name, #rgb/#rrggbb, rgb()/hsl()). */
 function colorString(): FieldCheck {
   return (value) =>
@@ -159,6 +227,62 @@ const schemas: Record<string, ComponentSchema> = {
     fields: {
       scriptId: nonEmptyString(),
       order: finiteNumber(),
+    },
+  },
+  Collider: {
+    fields: {
+      shape: nonEmptyString(),
+      size: vec3({ min: 0 }),
+      halfExtents: vec3({ min: 0 }),
+      radius: finiteNumber({ exclusiveMin: 0 }),
+      halfHeight: finiteNumber({ min: 0 }),
+      friction: finiteNumber({ min: 0 }),
+      restitution: finiteNumber({ min: 0 }),
+      layer: integerInRange(0, MAX_COLLIDER_LAYER),
+    },
+  },
+  RigidBody: {
+    fields: {
+      type: oneOfIgnoringCase(RIGID_BODY_TYPES),
+      mass: finiteNumber({ exclusiveMin: 0 }),
+      gravityScale: finiteNumber(),
+      linearDamping: finiteNumber({ min: 0 }),
+      angularDamping: finiteNumber({ min: 0 }),
+    },
+  },
+  CharacterBody: {
+    fields: {
+      speed: finiteNumber({ min: 0 }),
+      offset: finiteNumber({ min: 0 }),
+      autostepMaxHeight: finiteNumber({ min: 0 }),
+      autostepMinWidth: finiteNumber({ min: 0 }),
+    },
+  },
+  NavMesh: {
+    fields: {
+      dataBase64: nonEmptyString(),
+      positions: numberArray(3),
+      indices: indexArray(3),
+      config: plainObject(),
+    },
+    relations: (value) => {
+      const { positions, indices } = value;
+      if (!Array.isArray(positions) || !Array.isArray(indices)) return [];
+      const vertexCount = positions.length / 3;
+      for (let i = 0; i < indices.length; i++) {
+        if ((indices[i] as number) >= vertexCount) {
+          return [
+            {
+              field: "indices",
+              code: "component.NavMesh.indices.outOfRange",
+              message: `NavMesh.indices[${i}] (${String(indices[i])}) refers to a vertex that does not exist; positions holds ${vertexCount} vertices`,
+              remediation:
+                "Make every index smaller than positions.length / 3, or add the missing vertices to NavMesh.positions.",
+            },
+          ];
+        }
+      }
+      return [];
     },
   },
 };

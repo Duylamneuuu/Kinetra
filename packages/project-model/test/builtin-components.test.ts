@@ -30,7 +30,7 @@ function problems(name: string, value: unknown): string[] {
 }
 
 test("components without a schema are never inspected", () => {
-  assert.deepEqual(validateBuiltInComponent("Collider", { shape: 12 }), []);
+  assert.deepEqual(validateBuiltInComponent("Health", { shape: 12 }), []);
   assert.deepEqual(validateBuiltInComponent("MyCustom", "anything"), []);
   assert.deepEqual(validateBuiltInComponent("__proto__", { a: 1 }), []);
   assert.deepEqual(validateBuiltInComponent("constructor", 3), []);
