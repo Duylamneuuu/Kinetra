@@ -208,6 +208,26 @@ export class HeadlessAudioService implements GameScriptAudioService {
     return structuredClone(cues);
   }
 
+  /**
+   * Forget the cues (and playbacks) that started after simulation step `step`: a quick-load abandoned that timeline.
+   * Playback ids are never reused. Returns how many cues were dropped.
+   */
+  rewindTo(step: number): number {
+    const before = this.#cues.length;
+    const keptIds = new Set<string>();
+    const kept = this.#cues.filter((cue) => {
+      if (cue.step > step) return false;
+      keptIds.add(cue.playbackId);
+      return true;
+    });
+    this.#cues.length = 0;
+    this.#cues.push(...kept);
+    const records = this.#records.filter((record) => keptIds.has(record.playbackId));
+    this.#records.length = 0;
+    this.#records.push(...records);
+    return before - kept.length;
+  }
+
   /** Plays that were refused (unknown bus/asset). A healthy run has none. */
   failures(): Array<{ assetId: string; bus: string; error: string }> {
     return structuredClone(this.#failures);

@@ -6,6 +6,7 @@ import {
   ORB_RUN_EVENT,
   ORB_RUN_ORB_IDS,
   ORB_RUN_SLOW_ZONE_COMPONENT,
+  ORB_RUN_STOWED_Y,
   ORB_RUN_WALL_COMPONENT,
 } from "./ids.js";
 import {
@@ -165,8 +166,7 @@ export const ORB_RUN_INVARIANTS = [
 export type OrbRunInvariant = (typeof ORB_RUN_INVARIANTS)[number];
 
 const EPSILON = 1e-6;
-/** Where `OrbRunOrb` puts a collected orb (its `HIDDEN_Y`): straight down, out of sight. */
-const ORB_STOWED_Y = -10;
+const ORB_STOWED_Y = ORB_RUN_STOWED_Y;
 
 function approx(a: number, b: number): boolean {
   return Math.abs(a - b) <= EPSILON;
