@@ -17,7 +17,7 @@ This package intentionally does **not** require Blender to run its unit tests. B
 | `inspectGlbCompression` / `evaluateCompressionPolicy` / `checkGlbCompression` | functions | Read-only compression policy, see below. Never throws on malformed input. |
 | `AssetReimportService` | class | `reimport(id)` and `reimportWithDependents(id)`: re-hash the source, compute the fingerprint, run the registered `AssetImporter`, replace the artifact atomically (temp file + rename), update the database and emit `ReimportEvent`s. Returns `status: "noop" \| "reimported" \| "failed"`; on failure the last known-good artifact stays in place. Overlapping reimports of the same asset are serialized (an older import can never overwrite a newer one); different assets reimport concurrently. |
 | `SourceAssetWatcher` | class | Debounced file watcher (`addAsset`, `removeAsset`, `onEvent`, `start()`, `stop()`) that emits `asset.changeDetected` when the content hash really changes. |
-| `AssetHotReloadCoordinator` | class | Glues watcher → reimport service → `RuntimeReloadTarget` and records an `AssetHotReloadTransaction` per change (rebuild order, failed/blocked assets, reloaded entities). |
+| `AssetHotReloadCoordinator` | class | Glues watcher → reimport service → `RuntimeReloadTarget` and records an `AssetHotReloadTransaction` per change (rebuild order, failed/blocked assets, reloaded entities). An asset whose publish to the runtime failed stays listed in `getRuntimeStaleAssetIds()` and is republished by `retryRuntimePublish()`, by the next change check for it, or by any later successful transaction. |
 | `createSyntheticGlb` and friends | functions | Deterministic generated GLBs for tests and demos: `createSyntheticAnimatedGlb`, `createSyntheticPropGlb`, `createSyntheticCharacterGlb`, `createSyntheticRootMotionGlb`, `createSyntheticMorphGlb`. |
 
 ## Compression policy
@@ -204,7 +204,7 @@ assert.equal(files.get("imported/crate.glb"), good);
 | --- | --- |
 | Hashing, canonical JSON, fingerprints, database integrity, rebuild order | `hash-canonical.test.ts`, `database-integrity.test.ts`, `rebuild-order.test.ts` (Node, no Blender) |
 | Reimport, atomic replace, failure rollback, per-asset serialization | `reimport.test.ts`, `reimport-concurrency.test.ts` |
-| Watcher and hot-reload coordinator (lifecycle, start failure) | `watcher-reassign.test.ts`, `watcher-lifecycle.test.ts`, `coordinator.test.ts`, `coordinator-start-failure.test.ts` |
+| Watcher and hot-reload coordinator (lifecycle, start failure) | `watcher-reassign.test.ts`, `watcher-lifecycle.test.ts`, `coordinator.test.ts`, `coordinator-start-failure.test.ts`, `coordinator-runtime-stale.test.ts` |
 | Record validation edge cases | `validation-edge.test.ts` |
 | Compression policy | `compression.test.ts` (inspection + policy). Draco and KTX2 decoding are **not** implemented in the runtime. |
 | Real Blender export → import | Not here: see `@kinetra/blender-bridge` and the verification suite. |
