@@ -439,13 +439,17 @@ export function compareVisualFrames(
   changedPixels += nonOverlap;
   sumAbsDiff += nonOverlap; // Assume maximum difference for missing pixels
 
-  const changedPixelRatio = Number((changedPixels / totalComparedPixels).toFixed(4));
-  const meanAbsoluteDifference = Number((sumAbsDiff / totalComparedPixels).toFixed(4));
+  const rawChangedPixelRatio = changedPixels / totalComparedPixels;
+  const rawMeanAbsoluteDifference = sumAbsDiff / totalComparedPixels;
+  const changedPixelRatio = Number(rawChangedPixelRatio.toFixed(4));
+  const meanAbsoluteDifference = Number(rawMeanAbsoluteDifference.toFixed(4));
 
+  // The verdict uses the unrounded values: rounding to 4 decimals for the report
+  // used to let e.g. 5.004% changed pixels pass a 5% limit.
   const similar =
-    changedPixelRatio <= maxChangedPixelRatio &&
+    rawChangedPixelRatio <= maxChangedPixelRatio &&
     hashDist <= maxPerceptualHashDistance &&
-    meanAbsoluteDifference <= maxMeanAbsoluteDifference;
+    rawMeanAbsoluteDifference <= maxMeanAbsoluteDifference;
 
   return {
     width: actualDecoded.width,
