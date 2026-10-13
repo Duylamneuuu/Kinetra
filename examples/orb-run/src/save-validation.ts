@@ -34,6 +34,8 @@ export class OrbRunSaveError extends Error {
 
 /** Where `OrbRunOrb` stows a collected orb (its `HIDDEN_Y`). */
 const STOWED_Y = -10;
+/** Slack (seconds) for float noise when a derived number is compared with the one recomputed from the level's rules. */
+const REMAINING_TOLERANCE = 1e-9;
 const MANAGER_PATH = `scripts.${ORB_RUN_ENTITY.manager}`;
 const ALLOWED_TOP_LEVEL = new Set(["schemaVersion", "step", "scripts", "positions"]);
 
@@ -187,16 +189,24 @@ export function validateOrbRunSave(simulation: HeadlessSceneSimulation, save: un
     if (Array.isArray(manager.collectedOrbIds) && manager.collectedCount !== manager.collectedOrbIds.length) {
       add(`${MANAGER_PATH}.collectedCount`, `must equal the number of collected orbs (${manager.collectedOrbIds.length})`);
     }
-    if (isFiniteNumber(elapsed) && manager.remainingSeconds !== Math.max(0, rules.timeLimitSeconds - elapsed)) {
-      add(
-        `${MANAGER_PATH}.remainingSeconds`,
-        `this level allows ${rules.timeLimitSeconds} s, so ${String(Math.max(0, rules.timeLimitSeconds - elapsed))} s remain, the save says ${String(manager.remainingSeconds)}`,
-      );
+    if (isFiniteNumber(elapsed)) {
+      const remaining = Math.max(0, rules.timeLimitSeconds - elapsed);
+      // A tolerance, not `!==`: a save written by another build may add `elapsedSeconds` in a different order and land a
+      // few ulps away; only a number that is really another level's (or hand-edited) is refused.
+      if (!isFiniteNumber(manager.remainingSeconds) || Math.abs(manager.remainingSeconds - remaining) > REMAINING_TOLERANCE) {
+        add(
+          `${MANAGER_PATH}.remainingSeconds`,
+          `this level allows ${rules.timeLimitSeconds} s, so ${String(remaining)} s remain, the save says ${String(manager.remainingSeconds)}`,
+        );
+      }
     }
     if (status === "won") {
       const exit = authoredPosition(simulation, ORB_RUN_ENTITY.exit);
       const playerAt = readVec3(positions[ORB_RUN_ENTITY.player]);
       // The run is won on the tick the player is inside the exit radius; the player may still take that tick's step.
+      // This assumes `playerSpeed` is the fastest the player ever moves (mud only slows): a boost or dash would widen it.
+      // A missing exit or an unreadable player position cannot slip through here: `positions.<id>` above already
+      // refuses a position that is absent or not a finite [x, y, z].
       const reach = rules.exitRadius + rules.playerSpeed * simulation.fixedDeltaSeconds;
       if (exit && playerAt) {
         const away = Math.hypot(playerAt[0] - exit[0], playerAt[2] - exit[2]);
