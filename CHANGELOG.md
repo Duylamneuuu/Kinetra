@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 31 `advance`/`advanceUntil` refuse non-integer step counts ([#495](https://github.com/Duylamneuuu/Kinetra/pull/495))
 - **orb-run**: slice 29 quick-load drops the abandoned timeline's history (`HeadlessSceneSimulation.discardHistoryAfter`, `HeadlessAudioService.rewindTo`); rollback failures are reported ([#486](https://github.com/Duylamneuuu/Kinetra/pull/486))
 - **orb-run**: slice 28 review follow-ups on save validation ([#478](https://github.com/Duylamneuuu/Kinetra/pull/478))
 - **orb-run**: slice 27 a save from another level or a hand-edited counter is refused ([#476](https://github.com/Duylamneuuu/Kinetra/pull/476))
@@ -24,6 +25,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
+- **asset-pipeline**: the coordinator republishes assets the runtime rejected (Refs #252 item 3) ([#496](https://github.com/Duylamneuuu/Kinetra/pull/496))
+- **asset-pipeline**: `createSyntheticGlb` normalizes rotation quaternions and rejects a zero-length quaternion (#481) ([#491](https://github.com/Duylamneuuu/Kinetra/pull/491))
 - **orb-run**: `HeadlessAudioService.rewindTo` undoes the `stop()` of an abandoned timeline's audio (bug introduced by #486) ([#490](https://github.com/Duylamneuuu/Kinetra/pull/490))
 - **animation**: `computeRetargetCacheKey` tells `NaN`/`Infinity` apart from `null` and keeps a `__proto__` key (shared `canonicalizeForCacheKey`) ([#484](https://github.com/Duylamneuuu/Kinetra/pull/484))
 - **animation**: `bakeRetargetedClip` keeps the step/smooth interpolation of the source track and drops a track whose value count does not match its key count ([#483](https://github.com/Duylamneuuu/Kinetra/pull/483))
@@ -60,6 +64,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
+- **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
 - **orb-run**: slice 30 duplicate `orbCollected` events count and cue once; stale README gap removed (#187) ([#489](https://github.com/Duylamneuuu/Kinetra/pull/489))
 - **animation**: clip event validation, duplicate bone targets, machine reset and retarget diagnostics ([#487](https://github.com/Duylamneuuu/Kinetra/pull/487))
 - **physics-rapier**: validation, `halfExtents` and diagnostics edge tests (branch coverage 93.4% → 97.7%) ([#488](https://github.com/Duylamneuuu/Kinetra/pull/488))
