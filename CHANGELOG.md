@@ -10,6 +10,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **command-bus**: new commands `component.remove` and `component.unsetFields` with structured `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` errors (Refs #321) ([#455](https://github.com/Duylamneuuu/Kinetra/pull/455))
+- **orb-run**: slice 23 the fuzzer holds the player to its speed limit, mud included (`player_speed_bound` invariant) ([#449](https://github.com/Duylamneuuu/Kinetra/pull/449))
 - **orb-run**: slice 22 the route planner prices mud (`OrbRunSlowZone` areas cost more on the navmesh route); #446 follows up the review notes ([#444](https://github.com/Duylamneuuu/Kinetra/pull/444), [#443](https://github.com/Duylamneuuu/Kinetra/pull/443))
 - **animation**: new warning `anim.graph.transition.sharedClipCut` and blend-space input diagnostics for animation graphs (Refs #159) ([#445](https://github.com/Duylamneuuu/Kinetra/pull/445))
 - **orb-run**: slice 21 mud (`OrbRunSlowZone`) authored as data ([#436](https://github.com/Duylamneuuu/Kinetra/pull/436))
@@ -17,6 +19,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: `assert.near` / `metricMax` / `metricMin` no longer pass with `NaN`; `assert.equal` ignores key order and no longer treats `NaN` as `null` ([#458](https://github.com/Duylamneuuu/Kinetra/pull/458))
+- **player**: `did-fail-load` is fatal only for the main frame and not for `ERR_ABORTED`; the fatal message is flushed before `app.exit` ([#453](https://github.com/Duylamneuuu/Kinetra/pull/453))
+- **player**: `loadSave` returns a structured failure for malformed entity entries and for a throwing `prepareRestoreState` instead of a raw `TypeError` ([#450](https://github.com/Duylamneuuu/Kinetra/pull/450))
+- **animation**: `extractRootMotionFromClip` rejects a corrupt rotation track (Refs #437) ([#447](https://github.com/Duylamneuuu/Kinetra/pull/447))
 - **orb-run**: slice 22b review follow-ups of the mud pricing ([#446](https://github.com/Duylamneuuu/Kinetra/pull/446))
 - **asset-pipeline**: `hashJson` rejects `Map`/`Set`/`RegExp`/`Promise`/`Error` instead of hashing them as `{}` ([#424](https://github.com/Duylamneuuu/Kinetra/pull/424))
 - **asset-pipeline**: `normalizeGlb` reports optional glTF extensions it drops (`droppedExtensions`) and no longer logs to the console ([#418](https://github.com/Duylamneuuu/Kinetra/pull/418))
@@ -35,12 +41,19 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 24 transitive portability test follows the imports of the entry through the engine package barrels ([#452](https://github.com/Duylamneuuu/Kinetra/pull/452))
+- **asset-pipeline / physics-rapier**: glb-bounds sparse accessors, raw integer and truncated-BIN cases, plus pending kinematic body edge cases (Fixes #367) ([#454](https://github.com/Duylamneuuu/Kinetra/pull/454))
+- **reference-game**: enemy and player branches with a missing transform, scene, graph or player ([#451](https://github.com/Duylamneuuu/Kinetra/pull/451))
 - **animation**: retarget cache storage and record-validation edge cases ([#428](https://github.com/Duylamneuuu/Kinetra/pull/428))
 - **animation**: root-motion clip helper edge cases (coverage gap) ([#439](https://github.com/Duylamneuuu/Kinetra/pull/439))
 - **mcp-server**: `runtime.*` and `test.runAcceptance` MCP tool forwarding ([#425](https://github.com/Duylamneuuu/Kinetra/pull/425))
 - **asset-pipeline**: `SourceAssetWatcher` edge cases (initial hash baseline, `removeAsset`, listener isolation, `stop()` cancels the re-arm) and `hashFile` ([#409](https://github.com/Duylamneuuu/Kinetra/pull/409))
 - **core**: `ScriptHost` / `ScriptRegistry` / prefab API edge tests closing a coverage gap ([#410](https://github.com/Duylamneuuu/Kinetra/pull/410))
 - **animation**: regression suite for malformed animation graphs (supersedes #261) ([#403](https://github.com/Duylamneuuu/Kinetra/pull/403))
+
+### Documentation
+
+- CHANGELOG and STATUS snapshot through PR #446 ([#448](https://github.com/Duylamneuuu/Kinetra/pull/448))
 
 ### Maintenance
 
