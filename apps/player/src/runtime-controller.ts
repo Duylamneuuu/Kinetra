@@ -42,6 +42,7 @@ import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { resolveStartScene } from "./start-scene.js";
+import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -912,15 +913,10 @@ export class PlayerRuntimeController {
     indices?: number[];
     config?: Record<string, unknown>;
   }): Promise<void> {
-    const positions = input.positions;
-    const indices = input.indices;
-
-    // Validate before touching the installed mesh: a rejected request must not destroy it.
-    if (!positions || !indices) {
-      throw new Error(
-        "Navigation bake requires positions and indices geometry buffers",
-      );
-    }
+    // Validate before touching the installed mesh: a rejected request must not destroy it. The
+    // validated geometry always wins over same-named keys in the untrusted `config`.
+    const bakeOptions = buildNavBakeOptions(input);
+    const { positions, indices } = bakeOptions;
 
     // Every request claims a new generation: the request started last wins, not the one that
     // happens to finish last (a slow older bake must not overwrite a newer mesh).
@@ -930,11 +926,7 @@ export class PlayerRuntimeController {
       cancelledMessage: NAV_SUPERSEDED_MESSAGE,
       current: () => this.#navMesh,
       create: () =>
-        RecastNavMesh.bake({
-          positions,
-          indices,
-          ...(input.config as any),
-        }),
+        RecastNavMesh.bake(bakeOptions as any),
       install: (next) => {
         // Mesh and navigationState change together, synchronously: a swap that completes right
         // after this one can never leave the serialized bytes describing a disposed mesh.
