@@ -211,6 +211,9 @@ export async function restoreOrbRunSave(
 }
 
 async function applyOrbRunSave(simulation: HeadlessSceneSimulation, save: OrbRunSaveData): Promise<void> {
+  // The clock first: the save's state belongs to its own step, so a quick-load into a run that has moved on must not
+  // leave `simulation.step` (and the elapsed time / audio clock derived from it) at the abandoned timeline.
+  simulation.restoreStep(save.step);
   for (const [entityId, position] of Object.entries(save.positions)) {
     simulation.restorePosition(entityId, position);
   }
