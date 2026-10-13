@@ -585,6 +585,31 @@ export function extractRootMotionFromClip(
     (t) => t.name === rotTrackName && t instanceof THREE.QuaternionKeyframeTrack,
   ) as THREE.QuaternionKeyframeTrack | undefined;
 
+  if (rotTrack) {
+    // The rotation track is held to the same contract as the position track: finite, non-decreasing
+    // key times (yawOfTrackAt walks them assuming that order) and one [x, y, z, w] value per key
+    // (a short track would read the missing keys as the identity quaternion, i.e. a silent yaw of 0).
+    for (let i = 0; i < rotTrack.times.length; i++) {
+      const t = rotTrack.times[i]!;
+      if (typeof t !== "number" || !Number.isFinite(t) || (i > 0 && t < rotTrack.times[i - 1]!)) {
+        const diag: RootMotionDiagnostics = {
+          code: "animation.rootMotion.malformedSamples",
+          message: `Sample times in track "${rotTrackName}" are malformed or non-monotonic at index ${i}`,
+          hint: "Ensure sample times are monotonically increasing finite numbers without NaN",
+        };
+        return { success: false, error: diag.message, diagnostics: diag };
+      }
+    }
+    if (rotTrack.values.length < rotTrack.times.length * 4) {
+      const diag: RootMotionDiagnostics = {
+        code: "animation.rootMotion.malformedSamples",
+        message: `Track "${rotTrackName}" has ${rotTrack.values.length} values for ${rotTrack.times.length} keys (expected ${rotTrack.times.length * 4})`,
+        hint: "Re-export the clip so the root rotation track carries one [x, y, z, w] value per key",
+      };
+      return { success: false, error: diag.message, diagnostics: diag };
+    }
+  }
+
   for (const track of rotTrack ? [posTrack, rotTrack] : [posTrack]) {
     for (let i = 0; i < track.values.length; i++) {
       if (!Number.isFinite(track.values[i])) {
