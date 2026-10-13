@@ -71,13 +71,48 @@ test("probe degrades truthfully when host lacks optional capabilities", async ()
   assert.equal((await probe.captureSave()).success, false);
   assert.equal((await probe.getSave()).success, false);
   assert.equal((await probe.loadSave({})).success, false);
-  assert.equal(await probe.detachModel("e1"), undefined);
-  assert.equal(await probe.attachModel("e1", "a"), undefined);
   assert.deepEqual(await probe.metrics(), {});
-  await probe.playAnimation("e1", "c");
-  await probe.pause();
-  await probe.resume();
   await assert.rejects(() => probe.samplePerformance(), /does not support performance/);
+});
+
+test("probe action methods fail loudly (no false pass) when the host lacks the capability", async () => {
+  const { host } = fakeHost();
+  const probe = new KinetraRuntimeProbe({ host, project });
+  const actions: Array<[string, () => Promise<unknown>]> = [
+    ["registerAsset", () => probe.registerAsset("a", "AAA")],
+    ["updateAsset", () => probe.updateAsset("a", "AAA")],
+    ["bakeNavigation", () => probe.bakeNavigation({})],
+    ["loadNavigation", () => probe.loadNavigation({ dataBase64: "AA==" })],
+    ["closestPointNavigation", () => probe.closestPointNavigation({ position: [0, 0, 0] })],
+    ["computePathNavigation", () => probe.computePathNavigation({ start: [0, 0, 0], end: [1, 0, 0] })],
+    ["playAnimation", () => probe.playAnimation("e1", "c")],
+    ["registerAnimationClip", () => probe.registerAnimationClip("e1", {})],
+    ["stopAnimation", () => probe.stopAnimation("e1")],
+    ["playAudio", () => probe.playAudio({ assetId: "a" })],
+    ["stopAudio", () => probe.stopAudio()],
+    ["setAudioBusGain", () => probe.setAudioBusGain("music", 1)],
+    ["setAudioBusMuted", () => probe.setAudioBusMuted("music", true)],
+    ["pause", () => probe.pause()],
+    ["resume", () => probe.resume()],
+    ["detachModel", () => probe.detachModel("e1")],
+    ["attachModel", () => probe.attachModel("e1", "a")],
+  ];
+  for (const [name, run] of actions) {
+    await assert.rejects(run, new RegExp(`Host does not support ${name}`), name);
+  }
+});
+
+test("probe action methods keep the host as `this` and still forward when supported", async () => {
+  const seen: unknown[] = [];
+  const hostObj = {
+    ...fakeHost().host,
+    tag: "H",
+    async pause(this: { tag: string }) {
+      seen.push(this.tag);
+    },
+  };
+  await new KinetraRuntimeProbe({ host: hostObj as unknown as RuntimeProbeHost, project }).pause();
+  assert.deepEqual(seen, ["H"]);
 });
 
 test("probe snapshot indexes entities and falls back to started scene id", async () => {
