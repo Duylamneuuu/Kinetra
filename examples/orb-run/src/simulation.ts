@@ -283,13 +283,15 @@ export class HeadlessSceneSimulation {
     this.#revision += 1;
   }
 
-  /** Set the step counter when resuming a saved run (only before the first advance). */
+  /**
+   * Set the step counter to a saved run's step: when resuming into a fresh simulation, or when quick-loading a save
+   * into a simulation that has already advanced (the clock follows the state, so `step`, `elapsedSeconds` and the
+   * audio clock agree with what was restored). Entries already in `logs()`/`events()`/audio cues keep the step they
+   * were recorded at.
+   */
   restoreStep(step: number): void {
     if (!Number.isInteger(step) || step < 0) {
       throw new RangeError(`Saved step must be an integer >= 0, got ${String(step)}`);
-    }
-    if (this.#step !== 0) {
-      throw new Error("restoreStep is only allowed on a fresh simulation");
     }
     this.#step = step;
     this.#revision += 1;
