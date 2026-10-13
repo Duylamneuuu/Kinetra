@@ -972,9 +972,6 @@ export class ElectronRuntimeHost implements RuntimeHost {
       }
     }
 
-    // A caller still waiting for the "ready" signal (close() during startup) must fail now, not
-    // sit out the full request timeout on a promise nobody will settle. A no-op once ready.
-    this.#rejectReady?.(new Error("Electron runtime bridge closed"));
     this.#readyPromise = undefined;
     this.#resolveReady = undefined;
     this.#rejectReady = undefined;
