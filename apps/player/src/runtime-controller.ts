@@ -42,6 +42,7 @@ import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
 import { loadSaveFailure } from "./save-failure.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
+import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
 import { resolveStartScene } from "./start-scene.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
@@ -663,7 +664,12 @@ export class PlayerRuntimeController {
       const { createPhysicsWorldFromScene } = await import(
         "@kinetra/physics-rapier"
       );
-      this.#physics = await createPhysicsWorldFromScene(scene);
+      this.#physics = await createPhysicsWorldFromScene(scene, {
+        // A collider that fell back to box/capsule is reported through the runtime log (and so the
+        // player bridge) instead of being silently substituted.
+        onDiagnostic: (diagnostic) =>
+          logPhysicsSceneDiagnostic((level, message, data) => this.#log(level, message, data), diagnostic),
+      });
       this.#syncTransformsFromPhysics();
     } catch (error) {
       console.error("Physics initialization error:", error);
