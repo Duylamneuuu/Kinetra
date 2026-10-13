@@ -19,6 +19,7 @@ import {
   type OrbRunSaveData,
   type OrbRunSaveIssue,
 } from "../src/index.js";
+import { parseOrbRunRules } from "../src/scripts.js";
 
 /**
  * Saves written for another level, or edited by hand. The engine ignores the derived numbers the manager writes next
@@ -165,17 +166,56 @@ test("a won save puts the player at the exit: far away is refused, the edge of t
   const simulation = await startOrbRunSimulation();
   try {
     assert.deepEqual(validateOrbRunSave(simulation, save), [], "the real winning save is accepted");
-    const far = mutated(save, (d) => (d.positions[ORB_RUN_ENTITY.player] = [-4, 0.5, -4]));
+    // Numbers come from the level's own rules (as the validator reads them), so retuning the level cannot silently
+    // turn these into tests of another level.
+    const rules = parseOrbRunRules(simulation.getAuthoredComponent(ORB_RUN_ENTITY.manager, ORB_RUN_RULES_COMPONENT));
+    const playerY = simulation.getPosition(ORB_RUN_ENTITY.player)![1];
+    const start = simulation.getPosition(ORB_RUN_ENTITY.player)!;
+    assert.ok(
+      Math.hypot(start[0] - exit[0], start[2] - exit[2]) > rules.exitRadius + 1,
+      "the level's start is well away from the exit, so it is a valid 'far' spot",
+    );
+    const far = mutated(save, (d) => (d.positions[ORB_RUN_ENTITY.player] = [start[0], playerY, start[2]]));
     const [issue] = await refused(simulation, far, [PLAYER]);
     assert.match(issue!.message, /at the exit/);
 
-    // Radius 1 plus one step (4 m/s x 1/30 s) is the farthest a won run can leave the player from the exit.
-    const reach = 1 + 4 * simulation.fixedDeltaSeconds;
+    // The exit radius plus one step is the farthest a won run can leave the player from the exit.
+    const reach = rules.exitRadius + rules.playerSpeed * simulation.fixedDeltaSeconds;
     const at = (distance: number) =>
-      mutated(save, (d) => (d.positions[ORB_RUN_ENTITY.player] = [exit[0] - distance, 0.5, exit[2]]));
-    assert.deepEqual(validateOrbRunSave(simulation, at(1)), []);
+      mutated(save, (d) => (d.positions[ORB_RUN_ENTITY.player] = [exit[0] - distance, playerY, exit[2]]));
+    assert.deepEqual(validateOrbRunSave(simulation, at(rules.exitRadius)), []);
     assert.deepEqual(validateOrbRunSave(simulation, at(reach - 0.001)), []);
     assert.deepEqual(paths(validateOrbRunSave(simulation, at(reach + 0.01))), [PLAYER]);
+  } finally {
+    await simulation.dispose();
+  }
+});
+
+test("a won save whose player position is unreadable is still refused (the exit rule never skips it silently)", async () => {
+  const { save } = await wonSave();
+  const simulation = await startOrbRunSimulation();
+  try {
+    for (const broken of [null, "here", [1, 2], [0, 0.5, Number.NaN], [0, 0.5, null], {}, 7]) {
+      await refused(simulation, mutated(save, (d) => (d.positions[ORB_RUN_ENTITY.player] = broken)), [PLAYER]);
+    }
+    await refused(simulation, mutated(save, (d) => delete d.positions[ORB_RUN_ENTITY.player]), [PLAYER]);
+  } finally {
+    await simulation.dispose();
+  }
+});
+
+test("remainingSeconds tolerates float noise but not a different number", async () => {
+  const good = await saveAfter(undefined, 2);
+  const simulation = await startOrbRunSimulation();
+  try {
+    const real = (good.scripts[ORB_RUN_ENTITY.manager] as Json).remainingSeconds as number;
+    const withRemaining = (value: unknown) =>
+      mutated(good, (d) => (d.scripts[ORB_RUN_ENTITY.manager].remainingSeconds = value));
+    assert.deepEqual(validateOrbRunSave(simulation, withRemaining(real + 1e-12)), [], "a few ulps off is not tampering");
+    assert.deepEqual(validateOrbRunSave(simulation, withRemaining(real - 1e-12)), []);
+    for (const wrong of [real + 1e-6, real - 0.001, real + 1, "29", null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await refused(simulation, withRemaining(wrong), [`${MANAGER}.remainingSeconds`]);
+    }
   } finally {
     await simulation.dispose();
   }
