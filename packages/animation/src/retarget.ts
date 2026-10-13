@@ -6,6 +6,7 @@ import {
   type SkeletonProfile,
   type RetargetPlan,
   buildRetargetPlan,
+  canonicalizeForCacheKey,
   skeletonSignature,
 } from "./skeleton.js";
 
@@ -93,17 +94,7 @@ function canonicalRestPoses(map: RestPoseMap | undefined): Array<[string, RestPo
 }
 
 export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string {
-  const stable = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(stable);
-    if (value && typeof value === "object") {
-      const result: Record<string, unknown> = {};
-      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-        result[key] = stable((value as Record<string, unknown>)[key]);
-      }
-      return result;
-    }
-    return value;
-  };
+  const stable = canonicalizeForCacheKey;
 
   const mapping = input.semanticMapping ?? buildRetargetPlan(input.source, input.target).pairs;
   const canonicalMapping = mapping

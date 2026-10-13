@@ -145,29 +145,35 @@ export function buildRetargetPlan(
   };
 }
 
+/**
+ * Canonical, key-order-independent form of a value for hashing into a cache key.
+ * JSON.stringify turns NaN/Infinity into null, which would make {v:NaN} and {v:null} share a key,
+ * and a plain assignment to "__proto__" would set the prototype and drop the entry, so both are
+ * encoded explicitly. Shared by every retarget cache key so they cannot drift apart.
+ */
+export function canonicalizeForCacheKey(value:unknown):unknown{
+  if(typeof value==="number" && !Number.isFinite(value)) return {"$kinetra:number":String(value)};
+  if(Array.isArray(value)) return value.map(canonicalizeForCacheKey);
+  if(value && typeof value==="object"){
+    const result:Record<string,unknown>={};
+    for(const key of Object.keys(value as Record<string,unknown>).sort()){
+      Object.defineProperty(result,key,{
+        value:canonicalizeForCacheKey((value as Record<string,unknown>)[key]),
+        enumerable:true,writable:true,configurable:true,
+      });
+    }
+    return result;
+  }
+  return value;
+}
+
 export function retargetCacheKey(input:{
   sourceClipId:string;
   source:SkeletonProfile;
   target:SkeletonProfile;
   settings?:Record<string,unknown>;
 }):string{
-  const stable=(value:unknown):unknown=>{
-    // JSON.stringify turns NaN/Infinity into null, which would make {v:NaN} and {v:null} share a key.
-    if(typeof value==="number" && !Number.isFinite(value)) return {"$kinetra:number":String(value)};
-    if(Array.isArray(value)) return value.map(stable);
-    if(value && typeof value==="object"){
-      const result:Record<string,unknown>={};
-      for(const key of Object.keys(value as Record<string,unknown>).sort()){
-        // defineProperty: a plain assignment to "__proto__" would set the prototype and drop the entry.
-        Object.defineProperty(result,key,{
-          value:stable((value as Record<string,unknown>)[key]),
-          enumerable:true,writable:true,configurable:true,
-        });
-      }
-      return result;
-    }
-    return value;
-  };
+  const stable=canonicalizeForCacheKey;
   return createHash("sha256").update(JSON.stringify(stable({
     sourceClipId:input.sourceClipId,
     source:skeletonSignature(input.source),
