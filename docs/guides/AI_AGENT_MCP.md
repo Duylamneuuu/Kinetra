@@ -104,7 +104,8 @@ A failing tool returns `isError: true` and a JSON body:
 
 Command-bus codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`,
 `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`,
-`PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`,
+`PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `COMPONENT_NOT_FOUND`,
+`FIELD_NOT_FOUND`, `INVALID_COMMAND`,
 `UNDO_CONFLICT`, `UNDO_EXPIRED` (the undo token fell out of the bounded undo history,
 `maxUndoDepth` default 100). Project validation
 failures add an `issues` array of `{ path, code, message, remediation? }`.

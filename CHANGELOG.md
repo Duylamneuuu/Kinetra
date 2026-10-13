@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **mcp-server**: new tools `entity.removeComponent` and `entity.unsetFields` over the command-bus `component.remove` / `component.unsetFields` commands (#461) ([#502](https://github.com/Duylamneuuu/Kinetra/pull/502))
 - **orb-run**: slice 31 `advance`/`advanceUntil` refuse non-integer step counts ([#495](https://github.com/Duylamneuuu/Kinetra/pull/495))
 - **orb-run**: slice 29 quick-load drops the abandoned timeline's history (`HeadlessSceneSimulation.discardHistoryAfter`, `HeadlessAudioService.rewindTo`); rollback failures are reported ([#486](https://github.com/Duylamneuuu/Kinetra/pull/486))
 - **orb-run**: slice 28 review follow-ups on save validation ([#478](https://github.com/Duylamneuuu/Kinetra/pull/478))
@@ -25,6 +26,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **animation**: `stripVisualRootDisplacement` keeps the interpolation (STEP) of the root track ([#504](https://github.com/Duylamneuuu/Kinetra/pull/504))
+- **player**: `loadSave` returns `phase` and `slotId` on every failure branch ([#501](https://github.com/Duylamneuuu/Kinetra/pull/501))
 - **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
 - **asset-pipeline**: the coordinator republishes assets the runtime rejected (Refs #252 item 3) ([#496](https://github.com/Duylamneuuu/Kinetra/pull/496))
 - **asset-pipeline**: `createSyntheticGlb` normalizes rotation quaternions and rejects a zero-length quaternion (#481) ([#491](https://github.com/Duylamneuuu/Kinetra/pull/491))
@@ -64,6 +67,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 32 mud asserted from an `AcceptanceManifest` (follow-up #437 item 2) ([#503](https://github.com/Duylamneuuu/Kinetra/pull/503))
 - **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
 - **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
 - **orb-run**: slice 30 duplicate `orbCollected` events count and cue once; stale README gap removed (#187) ([#489](https://github.com/Duylamneuuu/Kinetra/pull/489))
@@ -84,6 +88,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG and STATUS snapshot through PR #497 ([#499](https://github.com/Duylamneuuu/Kinetra/pull/499))
 - CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
 - CHANGELOG and STATUS snapshot through PR #458 ([#463](https://github.com/Duylamneuuu/Kinetra/pull/463))
 - CHANGELOG and STATUS snapshot through PR #446 ([#448](https://github.com/Duylamneuuu/Kinetra/pull/448))
