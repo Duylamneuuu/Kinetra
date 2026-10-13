@@ -174,7 +174,7 @@ test("hostile positions: not numbers, outside the arena, off the ground, or enti
   const simulation = await startOrbRunSimulation();
   const player = `positions.${ORB_RUN_ENTITY.player}`;
   try {
-    for (const bad of [[1, 2], "0,0,0", [1, "2", 3], [1, null, 3], [1, 0.5, 1e999], { x: 1 }, null]) {
+    for (const bad of [[1, 2], "0,0,0", [1, "2", 3], [1, null, 3], [1, 0.5, Number.POSITIVE_INFINITY], { x: 1 }, null]) {
       await assertRefused(simulation, mutated(good, (d) => (d.positions[ORB_RUN_ENTITY.player] = bad)), [player]);
     }
     // Arena half extent is 5.5 in the shipped rules.
