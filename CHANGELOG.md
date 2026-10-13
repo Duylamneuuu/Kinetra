@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 25 saves are untrusted input: validated, all-or-nothing restore ([#468](https://github.com/Duylamneuuu/Kinetra/pull/468))
 - **command-bus**: new commands `component.remove` and `component.unsetFields` with structured `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` errors (Refs #321) ([#455](https://github.com/Duylamneuuu/Kinetra/pull/455))
 - **orb-run**: slice 23 the fuzzer holds the player to its speed limit, mud included (`player_speed_bound` invariant) ([#449](https://github.com/Duylamneuuu/Kinetra/pull/449))
 - **orb-run**: slice 22 the route planner prices mud (`OrbRunSlowZone` areas cost more on the navmesh route); #446 follows up the review notes ([#444](https://github.com/Duylamneuuu/Kinetra/pull/444), [#443](https://github.com/Duylamneuuu/Kinetra/pull/443))
@@ -19,6 +20,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: `KinetraRuntimeProbe` throws when the host lacks an action method instead of passing falsely (Refs #460) ([#467](https://github.com/Duylamneuuu/Kinetra/pull/467))
+- **player**: a fatal load failure keeps exit code 1 (first exit code wins) and `loadFile` has a `.catch` (follow-up of #453) ([#456](https://github.com/Duylamneuuu/Kinetra/pull/456))
+- **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
+- **command-bus**: `component.unsetFields` keeps a `__proto__` field as plain data instead of re-prototyping the object or losing the field ([#464](https://github.com/Duylamneuuu/Kinetra/pull/464))
+- **player, verification**: non-finite frame-time samples give a `NaN` percentile and an explicit budget-violation reason instead of passing silently (Refs #187) ([#459](https://github.com/Duylamneuuu/Kinetra/pull/459))
 - **verification**: `assert.near` / `metricMax` / `metricMin` no longer pass with `NaN`; `assert.equal` ignores key order and no longer treats `NaN` as `null` ([#458](https://github.com/Duylamneuuu/Kinetra/pull/458))
 - **player**: `did-fail-load` is fatal only for the main frame and not for `ERR_ABORTED`; the fatal message is flushed before `app.exit` ([#453](https://github.com/Duylamneuuu/Kinetra/pull/453))
 - **player**: `loadSave` returns a structured failure for malformed entity entries and for a throwing `prepareRestoreState` instead of a raw `TypeError` ([#450](https://github.com/Duylamneuuu/Kinetra/pull/450))

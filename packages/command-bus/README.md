@@ -18,9 +18,9 @@ Every change to a project (from the editor, a script or an AI agent over MCP) is
 | `parseEngineCommand(input)` | function | Validates unknown input into an `EngineCommand` or throws a structured `CommandError`. |
 | `CommandError` | class | Structured error with a stable `code` and a `remediation` string an agent can act on. |
 
-Commands: `scene.create`, `entity.create`, `component.patch`, `entity.reparent`, `entity.delete`. Every command carries a `requestId` and may carry `expectedProjectRevision` (optimistic concurrency) and `dryRun`.
+Commands: `scene.create`, `entity.create`, `component.patch`, `component.remove`, `component.unsetFields`, `entity.reparent`, `entity.delete`. `component.remove` (`{ entityId, component }`) deletes a whole component; `component.unsetFields` (`{ entityId, component, fields }`) deletes named fields from an object component and keeps a `__proto__` field as plain data. Every command carries a `requestId` and may carry `expectedProjectRevision` (optimistic concurrency) and `dryRun`.
 
-Error codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`, `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`, `PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`, `UNDO_CONFLICT`, `UNDO_EXPIRED`.
+Error codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`, `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`, `PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `COMPONENT_NOT_FOUND`, `FIELD_NOT_FOUND`, `INVALID_COMMAND`, `UNDO_CONFLICT`, `UNDO_EXPIRED`.
 
 History is bounded: every `execute` keeps one full-project snapshot for undo, so only the newest `maxUndoDepth` tokens stay undoable (older ones fail with `UNDO_EXPIRED`), and the event log keeps the newest `maxEventLogLength` events (`bus.droppedEventCount` says how many fell off, so a replay consumer can detect the gap).
 
@@ -89,10 +89,32 @@ assert.equal(bus.eventLog().length, 2);
 const undone = bus.undo(patched.undoToken!);
 assert.equal(undone.revision, 3);
 assert.equal(bus.eventLog().at(-1)?.operation, "undo");
+
+// 5. Remove a field, then the whole component. Missing targets are structured errors.
+bus.execute({
+  requestId: "r6",
+  command: "component.unsetFields",
+  payload: { entityId: "entity_player", component: "Transform", fields: ["y"] },
+});
+assert.throws(
+  () =>
+    bus.execute({
+      requestId: "r7",
+      command: "component.unsetFields",
+      payload: { entityId: "entity_player", component: "Transform", fields: ["y"] },
+    }),
+  (error: unknown) => error instanceof CommandError && error.code === "FIELD_NOT_FOUND",
+);
+bus.execute({
+  requestId: "r8",
+  command: "component.remove",
+  payload: { entityId: "entity_player", component: "Transform" },
+});
+assert.equal(bus.queryEntities({ component: "Transform" }).total, 0);
 ```
 
 ## Proof level
 
-Covered by `test/command-bus.test.ts`, `test/regressions.test.ts` and the model-based `test/property.test.ts` (all in the package `test` script): transactions, dry runs, stale revisions, LIFO undo, structured parent-cycle errors and reserved component names. See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
+Covered by `test/command-bus.test.ts`, `test/regressions.test.ts` and the model-based `test/property.test.ts` (all in the package `test` script): transactions, dry runs, stale revisions, LIFO undo, structured parent-cycle errors and reserved component names. `component.remove` / `component.unsetFields` are covered by `test/component-remove.test.ts` and `test/unset-fields-proto-field.test.ts` (also in the `test` script). See [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
 
 Not in scope here: persistence (see `@kinetra/mcp-server`, which serializes saves) and scene-runtime behaviour (see `@kinetra/core`).
