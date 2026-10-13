@@ -50,6 +50,7 @@ export type OrbRunReplayErrorCode =
   | "invalid_replay"
   | "step_mismatch"
   | "recorder_not_fresh"
+  | "timeline_jump"
   | "unknown_action"
   | "replay_too_long"
   | "aborted";
@@ -136,6 +137,10 @@ export class OrbRunReplayRecorder {
   readonly #inputs: OrbRunReplayInput[] = [];
   readonly #checkpoints: OrbRunReplayCheckpoint[] = [];
   #held: Record<string, number> = {};
+  /** The last step the listener saw; the step counter moving any other way than +1 means the clock was restored. */
+  #lastStep = 0;
+  /** A restore jumped the clock *forward*: no input log can reproduce the states that were skipped. */
+  #jumpedTo: number | undefined;
   #stop: (() => void) | undefined;
 
   constructor(simulation: HeadlessSceneSimulation, options: { checkpointEvery?: number } = {}) {
@@ -149,6 +154,9 @@ export class OrbRunReplayRecorder {
     this.#simulation = simulation;
     // onStep fires after the step ran, when the held set is still the one that step ran with.
     this.#stop = simulation.onStep((current) => {
+      if (current.step <= this.#lastStep) this.#rewindTo(current.step - 1);
+      else if (current.step !== this.#lastStep + 1 && this.#jumpedTo === undefined) this.#jumpedTo = current.step;
+      this.#lastStep = current.step;
       const held = current.heldActions();
       if (!sameActions(held, this.#held)) {
         this.#inputs.push({ step: current.step, actions: held });
@@ -160,10 +168,36 @@ export class OrbRunReplayRecorder {
     });
   }
 
+  /**
+   * A quick-load put the clock back to `step` (the state of that step, restored from a save of this same run): the
+   * steps after it are an abandoned timeline. Drop the inputs and checkpoints recorded for it, so what is left is the
+   * input log of the timeline that actually continues, and re-derive the held set that applies at `step`.
+   */
+  #rewindTo(step: number): void {
+    while (this.#inputs.length > 0 && this.#inputs[this.#inputs.length - 1]!.step > step) this.#inputs.pop();
+    while (this.#checkpoints.length > 0 && this.#checkpoints[this.#checkpoints.length - 1]!.step > step) {
+      this.#checkpoints.pop();
+    }
+    this.#held = this.#inputs[this.#inputs.length - 1]?.actions ?? {};
+    this.#lastStep = step;
+    // A forward jump past `step` belonged to the timeline that was just abandoned.
+    if (this.#jumpedTo !== undefined && this.#jumpedTo > step) this.#jumpedTo = undefined;
+  }
+
   finish(): OrbRunReplay {
+    // A second finish() no longer observes the simulation: it reports the simulation as it is and checks nothing.
+    const observing = this.#stop !== undefined;
     this.#stop?.();
     this.#stop = undefined;
     const simulation = this.#simulation;
+    if (observing && simulation.step < this.#lastStep) this.#rewindTo(simulation.step);
+    if (observing && (this.#jumpedTo !== undefined || simulation.step > this.#lastStep)) {
+      throw new OrbRunReplayError(
+        "timeline_jump",
+        "recorder",
+        `the step counter jumped forward to ${this.#jumpedTo ?? simulation.step} without running the steps in between (a restore of a state this recording never reached); an input log cannot reproduce that`,
+      );
+    }
     if (simulation.step === 0) {
       throw new OrbRunReplayError("invalid_replay", "$.totalSteps", "nothing was recorded (no step ran)");
     }
