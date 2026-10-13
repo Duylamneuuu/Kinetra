@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- **orb-run**: slice 26 quick-load moves the simulation clock with the restored state (`restoreOrbRunSave` applies `save.step` first, so a rollback also restores the old step) ([#471](https://github.com/Duylamneuuu/Kinetra/pull/471))
 - **orb-run**: slice 25 saves are untrusted input: validated, all-or-nothing restore ([#468](https://github.com/Duylamneuuu/Kinetra/pull/468))
 - **command-bus**: new commands `component.remove` and `component.unsetFields` with structured `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` errors (Refs #321) ([#455](https://github.com/Duylamneuuu/Kinetra/pull/455))
 - **orb-run**: slice 23 the fuzzer holds the player to its speed limit, mud included (`player_speed_bound` invariant) ([#449](https://github.com/Duylamneuuu/Kinetra/pull/449))
@@ -20,6 +21,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: `start()` resolves the scene id (pure helper `resolveStartScene` in `start-scene.ts`) before stopping the running game or re-registering assets, so an unknown scene id no longer leaves a stopped game behind ([#472](https://github.com/Duylamneuuu/Kinetra/pull/472))
+- **verification**: `compareVisualFrames` compares thresholds against the unrounded difference value (a 5.004% difference no longer passes a 5% threshold) ([#469](https://github.com/Duylamneuuu/Kinetra/pull/469))
 - **verification**: `KinetraRuntimeProbe` throws when the host lacks an action method instead of passing falsely (Refs #460) ([#467](https://github.com/Duylamneuuu/Kinetra/pull/467))
 - **player**: a fatal load failure keeps exit code 1 (first exit code wins) and `loadFile` has a `.catch` (follow-up of #453) ([#456](https://github.com/Duylamneuuu/Kinetra/pull/456))
 - **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
