@@ -28,6 +28,27 @@ test("advance accepts zero (a no-op) and whole counts, and the default is one st
   await simulation.dispose();
 });
 
+// #500: the predicate is checked after the last allowed step too, so a state that becomes true
+// exactly on step `maxSteps` is reported as reached.
+test("advanceUntil reports a predicate that becomes true exactly on the last allowed step", async () => {
+  const simulation = await startOrbRunSimulation();
+  assert.equal(simulation.advanceUntil(() => simulation.step >= 3, 3), true);
+  assert.equal(simulation.step, 3, "ran exactly the budget, no more");
+  assert.equal(simulation.advanceUntil(() => simulation.step >= 5, 1), false, "one step short is still false");
+  assert.equal(simulation.step, 4);
+  assert.equal(simulation.advanceUntil(() => simulation.step >= 5, 1), true);
+  assert.equal(simulation.step, 5);
+  await simulation.dispose();
+});
+
+test("advanceUntil with a zero budget answers from the current state without stepping", async () => {
+  const simulation = await startOrbRunSimulation();
+  assert.equal(simulation.advanceUntil(() => true, 0), true, "already true -> true");
+  assert.equal(simulation.advanceUntil(() => simulation.step >= 1, 0), false, "not yet true -> false");
+  assert.equal(simulation.step, 0, "a zero budget runs nothing");
+  await simulation.dispose();
+});
+
 test("advanceUntil refuses an unbounded or fractional budget instead of looping forever", async () => {
   const simulation = await startOrbRunSimulation();
   for (const bad of [Number.POSITIVE_INFINITY, Number.NaN, -3, 1.5]) {
