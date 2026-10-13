@@ -243,7 +243,15 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
       const remaining: JsonObject = {};
       for (const [key, value] of Object.entries(existing)) {
         if (!command.payload.fields.includes(key)) {
-          remaining[key] = value;
+          // defineProperty, not assignment: a JSON.parse'd "__proto__" field is an own data
+          // property, and `remaining["__proto__"] = value` would re-prototype the new component
+          // (object value) or silently drop the field (primitive value).
+          Object.defineProperty(remaining, key, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
         }
       }
       located.entity.components[command.payload.component] = remaining;
