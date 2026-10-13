@@ -41,6 +41,7 @@ import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
+import { resolveStartScene } from "./start-scene.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -621,6 +622,8 @@ export class PlayerRuntimeController {
       this.enableTestScriptFixtures("save-load-atomicity");
     }
     assertValidProject(project);
+    // Reject an unknown scene before touching the running game or the asset registry.
+    const scene = resolveStartScene(project, sceneId);
     await this.#doStop();
     this.#stepped = options?.stepped ?? false;
 
@@ -629,11 +632,6 @@ export class PlayerRuntimeController {
         const meta = options.assetMetadata?.[assetId];
         this.registerAsset(assetId, base64, meta);
       }
-    }
-
-    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
-    if (!scene) {
-      throw new Error(`Scene "${sceneId}" does not exist`);
     }
 
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
