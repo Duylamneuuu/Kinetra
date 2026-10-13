@@ -122,17 +122,11 @@ function signedDistanceToWall(wall: OrbRunWall, x: number, z: number): number {
   return Math.max(dx, dz);
 }
 
-/** The smallest signed clearance to any wall (what the player is closest to). */
-function wallClearance(walls: readonly OrbRunWall[], x: number, z: number): number {
-  let clearance = Number.POSITIVE_INFINITY;
-  for (const wall of walls) clearance = Math.min(clearance, signedDistanceToWall(wall, x, z));
-  return clearance;
-}
-
 /**
  * A single-axis step is allowed when the circle ends free of every wall. A
  * player who already overlaps a wall (a wall authored or hot-reloaded on top of
- * them) may also take a step that does not push them deeper, otherwise every
+ * them) may also take a step that does not push them deeper into THAT wall
+ * (and into no wall they were not already overlapping), otherwise every
  * axis would be refused forever and they could never leave. From a free
  * position this is exactly the plain "end free" rule, so behaviour (and every
  * golden digest) outside an overlap is unchanged.
@@ -145,9 +139,15 @@ function axisMoveAllowed(
   toZ: number,
   radius: number,
 ): boolean {
-  if (!circleHitsWall(walls, toX, toZ, radius)) return true;
-  if (!circleHitsWall(walls, fromX, fromZ, radius)) return false;
-  return wallClearance(walls, toX, toZ) >= wallClearance(walls, fromX, fromZ) - 1e-12;
+  // Judged wall by wall: every wall the end position still overlaps must be one
+  // the start position already overlapped, and the step must not take the player
+  // deeper into it. Easing off wall A never licenses stepping into wall B.
+  for (const wall of walls) {
+    if (distanceToWall(wall, toX, toZ) >= radius - 1e-9) continue;
+    if (distanceToWall(wall, fromX, fromZ) >= radius - 1e-9) return false;
+    if (signedDistanceToWall(wall, toX, toZ) < signedDistanceToWall(wall, fromX, fromZ) - 1e-12) return false;
+  }
+  return true;
 }
 
 /** The MCP-shaped `entity.create` components for a wall of `width` x `depth` metres and `height` tall. */
