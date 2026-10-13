@@ -342,7 +342,9 @@ export function stripVisualRootDisplacement(
           values[offset + 2] = firstZ;
         }
       }
-      inPlaceTracks.push(new THREE.VectorKeyframeTrack(posTrackName, times, values));
+      // Keep the source track's interpolation (glTF STEP is InterpolateDiscrete): the constructor default is linear,
+      // which would turn a stepped Y bob into a smooth ramp.
+      inPlaceTracks.push(new THREE.VectorKeyframeTrack(posTrackName, times, values, track.getInterpolation()));
     } else if (
       mode === "extract-xz-yaw" &&
       track.name === rotTrackName &&
@@ -389,7 +391,7 @@ export function stripVisualRootDisplacement(
         values[offset + 2] = inPlaceRot.z;
         values[offset + 3] = inPlaceRot.w;
       }
-      inPlaceTracks.push(new THREE.QuaternionKeyframeTrack(rotTrackName, times, values));
+      inPlaceTracks.push(new THREE.QuaternionKeyframeTrack(rotTrackName, times, values, track.getInterpolation()));
     } else {
       inPlaceTracks.push(track.clone());
     }
