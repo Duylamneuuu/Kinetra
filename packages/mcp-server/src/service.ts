@@ -66,6 +66,21 @@ export interface EntityPatchInput {
   dryRun?: boolean;
 }
 
+export interface ComponentRemoveInput {
+  entityId: string;
+  component: string;
+  expectedProjectRevision?: number;
+  dryRun?: boolean;
+}
+
+export interface ComponentUnsetFieldsInput {
+  entityId: string;
+  component: string;
+  fields: string[];
+  expectedProjectRevision?: number;
+  dryRun?: boolean;
+}
+
 export interface EntityReparentInput {
   entityId: string;
   parentId?: string;
@@ -258,6 +273,34 @@ export class KinetraAgentService {
         entityId: input.entityId,
         component: input.component,
         patch: structuredClone(input.patch),
+      },
+    });
+  }
+
+  async removeComponent(input: ComponentRemoveInput): Promise<CommandResult> {
+    return this.#execute({
+      requestId: newId("test"),
+      command: "component.remove",
+      ...(input.expectedProjectRevision !== undefined
+        ? { expectedProjectRevision: input.expectedProjectRevision }
+        : {}),
+      ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+      payload: { entityId: input.entityId, component: input.component },
+    });
+  }
+
+  async unsetComponentFields(input: ComponentUnsetFieldsInput): Promise<CommandResult> {
+    return this.#execute({
+      requestId: newId("test"),
+      command: "component.unsetFields",
+      ...(input.expectedProjectRevision !== undefined
+        ? { expectedProjectRevision: input.expectedProjectRevision }
+        : {}),
+      ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+      payload: {
+        entityId: input.entityId,
+        component: input.component,
+        fields: [...input.fields],
       },
     });
   }
