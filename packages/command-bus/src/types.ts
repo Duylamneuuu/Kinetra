@@ -35,6 +35,18 @@ export interface ComponentPatchCommand extends CommandBase {
   payload: { entityId: string; component: string; patch: JsonObject };
 }
 
+/** Removes a whole component from an entity. */
+export interface ComponentRemoveCommand extends CommandBase {
+  command: "component.remove";
+  payload: { entityId: string; component: string };
+}
+
+/** Deletes top-level fields from an object component (`component.patch` can only add or overwrite). */
+export interface ComponentUnsetFieldsCommand extends CommandBase {
+  command: "component.unsetFields";
+  payload: { entityId: string; component: string; fields: string[] };
+}
+
 export interface EntityReparentCommand extends CommandBase {
   command: "entity.reparent";
   payload: { entityId: string; parentId?: string };
@@ -49,6 +61,8 @@ export type EngineCommand =
   | SceneCreateCommand
   | EntityCreateCommand
   | ComponentPatchCommand
+  | ComponentRemoveCommand
+  | ComponentUnsetFieldsCommand
   | EntityReparentCommand
   | EntityDeleteCommand;
 
