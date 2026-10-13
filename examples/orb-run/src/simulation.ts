@@ -74,6 +74,12 @@ function readVec3(value: JsonValue | undefined, fallback: Vec3): Vec3 {
   return [...fallback];
 }
 
+function assertStepCount(label: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be an integer >= 0, got ${String(value)}`);
+  }
+}
+
 export class HeadlessSceneSimulation {
   readonly sceneId: string;
   readonly fixedDeltaSeconds: number;
@@ -178,10 +184,16 @@ export class HeadlessSceneSimulation {
     return Object.fromEntries([...this.#actions.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   }
 
+  /**
+   * Run `steps` fixed steps. `steps` must be an integer >= 0: a fraction used to round up silently (2.5 ran three
+   * steps), `NaN` ran none, and `Infinity` never returned, so all three are refused with a `RangeError` before any
+   * step runs.
+   */
   advance(steps = 1): void {
     if (!this.#started) {
       throw new Error("Simulation must be started before advancing");
     }
+    assertStepCount("advance steps", steps);
     for (let index = 0; index < steps; index += 1) {
       this.#step += 1;
       this.#revision += 1;
@@ -217,6 +229,7 @@ export class HeadlessSceneSimulation {
 
   /** Advance until `predicate` is true or `maxSteps` elapse; returns whether it became true. */
   advanceUntil(predicate: () => boolean, maxSteps: number): boolean {
+    assertStepCount("advanceUntil maxSteps", maxSteps);
     for (let index = 0; index < maxSteps; index += 1) {
       if (predicate()) return true;
       this.advance(1);
