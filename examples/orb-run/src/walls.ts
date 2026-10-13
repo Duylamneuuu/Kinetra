@@ -106,9 +106,48 @@ export function resolveWallMotion(
   if (walls.length === 0) return { x: to.x, z: to.z };
   let x = from.x;
   let z = from.z;
-  if (!circleHitsWall(walls, to.x, z, radius)) x = to.x;
-  if (!circleHitsWall(walls, x, to.z, radius)) z = to.z;
+  if (axisMoveAllowed(walls, x, z, to.x, z, radius)) x = to.x;
+  if (axisMoveAllowed(walls, x, z, x, to.z, radius)) z = to.z;
   return { x, z };
+}
+
+/**
+ * Signed distance from a ground point to a wall's rectangle: positive outside,
+ * negative inside (how far the point is from the nearest edge, going out).
+ */
+function signedDistanceToWall(wall: OrbRunWall, x: number, z: number): number {
+  const dx = Math.abs(x - wall.x) - wall.halfWidth;
+  const dz = Math.abs(z - wall.z) - wall.halfDepth;
+  if (dx > 0 || dz > 0) return Math.hypot(Math.max(dx, 0), Math.max(dz, 0));
+  return Math.max(dx, dz);
+}
+
+/** The smallest signed clearance to any wall (what the player is closest to). */
+function wallClearance(walls: readonly OrbRunWall[], x: number, z: number): number {
+  let clearance = Number.POSITIVE_INFINITY;
+  for (const wall of walls) clearance = Math.min(clearance, signedDistanceToWall(wall, x, z));
+  return clearance;
+}
+
+/**
+ * A single-axis step is allowed when the circle ends free of every wall. A
+ * player who already overlaps a wall (a wall authored or hot-reloaded on top of
+ * them) may also take a step that does not push them deeper, otherwise every
+ * axis would be refused forever and they could never leave. From a free
+ * position this is exactly the plain "end free" rule, so behaviour (and every
+ * golden digest) outside an overlap is unchanged.
+ */
+function axisMoveAllowed(
+  walls: readonly OrbRunWall[],
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius: number,
+): boolean {
+  if (!circleHitsWall(walls, toX, toZ, radius)) return true;
+  if (!circleHitsWall(walls, fromX, fromZ, radius)) return false;
+  return wallClearance(walls, toX, toZ) >= wallClearance(walls, fromX, fromZ) - 1e-12;
 }
 
 /** The MCP-shaped `entity.create` components for a wall of `width` x `depth` metres and `height` tall. */
