@@ -71,6 +71,39 @@ test("a deep diamond chain returns promptly", async () => {
   assert.ok(performance.now() - started < 1000, "bounds walk did not stop early");
 });
 
+// Follow-up to #383 item 5: pin the visit-budget boundary. The budget is nodes x max(4, scenes), so a node
+// graph with modest fan-in (a DAG, not a tree) is still measured, while a diamond chain whose path count
+// outgrows the budget is reported unmeasurable. This is deliberate: a valid glTF node graph is a forest.
+
+test("modest fan-in (diamond chain up to depth 3, or many parents of one mesh node) is still measured", async () => {
+  for (const depth of [1, 2, 3]) {
+    const size = measureGlbBoundsFromJson(await diamondChain(depth));
+    assert.ok(size, `diamond chain depth ${depth} (2^${depth} paths) should stay under the visit budget`);
+    assert.deepEqual(size.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4], `depth ${depth}`);
+  }
+
+  const plain = await createSyntheticGlb({ size: [2, 3, 4] });
+  const parents = 12;
+  const flat = editGlbJson(plain, (json) => {
+    json.extensionsRequired = ["KHR_mesh_quantization"];
+    const meshIndex = json.nodes[0].mesh;
+    // node 0 = root, nodes 1..parents = parents, last node = shared mesh holder listed by every parent.
+    const nodes: Array<Record<string, unknown>> = [{ children: Array.from({ length: parents }, (_, i) => i + 1) }];
+    for (let i = 0; i < parents; i++) nodes.push({ children: [parents + 1] });
+    nodes.push({ mesh: meshIndex });
+    json.nodes = nodes;
+    json.scenes = [{ nodes: [0] }];
+    json.scene = 0;
+  });
+  const flatSize = measureGlbBoundsFromJson(flat);
+  assert.ok(flatSize, "linear fan-in (2 visits per parent) must stay under the budget");
+  assert.deepEqual(flatSize.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4]);
+});
+
+test("a diamond chain whose path count exceeds the visit budget is unmeasurable (depth 4 = 31 visits > 5 nodes x 4)", async () => {
+  assert.equal(measureGlbBoundsFromJson(await diamondChain(4)), undefined);
+});
+
 test("a node reachable from two scenes is still measured (each scene is its own tree)", async () => {
   const plain = await createSyntheticGlb({ size: [2, 3, 4] });
   const twoScenes = editGlbJson(plain, (json) => {
