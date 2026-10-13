@@ -40,6 +40,7 @@ import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
+import { applyPhysicsStateToObject } from "./physics-sync.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -2587,6 +2588,9 @@ export class PlayerRuntimeController {
       return;
     }
 
+    // Kinematic characters are never rotated by physics; their facing (root-motion yaw) lives on
+    // the render object and must survive the sync.
+    const characters = new Set(this.#physics.characterIds());
     for (const id of this.#physics.bodyIds()) {
       const object = this.#runtime.getObject(id);
       if (!object) {
@@ -2595,17 +2599,9 @@ export class PlayerRuntimeController {
 
       try {
         const state = this.#physics.state(id);
-        object.position.set(
-          state.position.x,
-          state.position.y,
-          state.position.z,
-        );
-        object.quaternion.set(
-          state.rotation.x,
-          state.rotation.y,
-          state.rotation.z,
-          state.rotation.w,
-        );
+        applyPhysicsStateToObject(object, state, {
+          preserveRotation: characters.has(id),
+        });
       } catch (error) {
         console.error(`Physics state sync error for "${id}":`, error);
       }
