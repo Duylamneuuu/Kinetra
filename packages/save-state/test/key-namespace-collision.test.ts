@@ -26,3 +26,15 @@ test("a save slot cannot alias the file backing a settings key", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// Windows (NTFS) and macOS resolve file names case-insensitively, so "Settings_user.json" is "settings_user.json":
+// the namespace guard has to ignore case too, or a slot named "Settings_user" overwrites the player's settings.
+test("a save slot cannot alias a settings file by changing the case of its prefix", () => {
+  const storage = new FileKeyValueStorage(join(tmpdir(), "kinetra-save-collision-case"));
+  for (const slot of ["Settings_user", "SETTINGS_user", "sEtTiNgS_x"]) {
+    assert.throws(() => storage.resolveFilePath(`saves:${slot}`), /settings_/i, slot);
+  }
+  // Names that merely resemble the prefix stay usable.
+  assert.ok(storage.resolveFilePath("saves:Settings-user").endsWith("Settings-user.json"));
+  assert.ok(storage.resolveFilePath("saves:Settingsfoo").endsWith("Settingsfoo.json"));
+});
