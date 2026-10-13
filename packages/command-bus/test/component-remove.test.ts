@@ -121,24 +121,29 @@ test("component.remove reports ENTITY_NOT_FOUND and COMPONENT_NOT_FOUND without 
 test("component.remove rejects reserved names and malformed payloads as INVALID_COMMAND", () => {
   const bus = seeded();
   assert.equal(errorCode(() => bus.execute(remove("__proto__"))), "INVALID_COMMAND");
-  assert.equal(errorCode(() => bus.execute(remove(""))), "INVALID_COMMAND");
+  // Shape validation lives on the untrusted-input entry point (executeUnknown).
+  assert.equal(errorCode(() => bus.executeUnknown(remove(""))), "INVALID_COMMAND");
   assert.equal(
     errorCode(() =>
-      bus.execute({
+      bus.executeUnknown({
         requestId: "bad",
         command: "component.remove",
-        payload: { entityId: 1 as never, component: "Tag" },
+        payload: { entityId: 1, component: "Tag" },
       }),
+    ),
+    "INVALID_COMMAND",
+  );
+  assert.equal(
+    errorCode(() =>
+      bus.executeUnknown({ requestId: "bad2", command: "component.remove", payload: {} }),
     ),
     "INVALID_COMMAND",
   );
 });
 
-test("removing a component the schema requires is rejected and rolled back", () => {
+test("component.remove can delete a built-in component such as Transform (absent is legal)", () => {
   const bus = seeded();
   const before = bus.revision;
-  // Transform is a built-in component: a project with a malformed Transform is invalid, but an
-  // absent one is legal, so removal must succeed; re-adding invalid data must still fail.
   bus.execute(remove("Transform"));
   assert.equal("Transform" in components(bus), false);
   assert.equal(bus.revision, before + 1);
@@ -188,7 +193,7 @@ test("component.unsetFields rejects malformed payloads as INVALID_COMMAND", () =
   const bus = seeded();
   const bad = (payload: Record<string, unknown>) =>
     errorCode(() =>
-      bus.execute({ requestId: "bad", command: "component.unsetFields", payload } as never),
+      bus.executeUnknown({ requestId: "bad", command: "component.unsetFields", payload }),
     );
   assert.equal(bad({ entityId, component: "Tag", fields: [] }), "INVALID_COMMAND");
   assert.equal(bad({ entityId, component: "Tag" }), "INVALID_COMMAND");
@@ -209,13 +214,13 @@ test("component.remove and unsetFields work inside an atomic transaction and rol
   const before = bus.revision;
   const snapshot = structuredClone(components(bus));
   assert.equal(
-    errorCode(() => bus.execute([unset("Tag", ["note"]), remove("Missing")])),
+    errorCode(() => bus.executeTransaction([unset("Tag", ["note"]), remove("Missing")])),
     "COMPONENT_NOT_FOUND",
   );
   assert.equal(bus.revision, before);
   assert.deepEqual(components(bus), snapshot);
 
-  const result = bus.execute([unset("Tag", ["note"]), remove("Scalar")]);
+  const result = bus.executeTransaction([unset("Tag", ["note"]), remove("Scalar")]);
   assert.equal(result.changes.length, 2);
   assert.deepEqual(components(bus).Tag, { label: "crate", extra: 3 });
   assert.equal("Scalar" in components(bus), false);
