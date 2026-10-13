@@ -4,6 +4,7 @@ import { OrbRunAnimator, type OrbRunAnimatorOptions } from "./animator.js";
 import { HeadlessAudioService } from "./audio.js";
 import { ORB_RUN_DEFAULT_RULES, createOrbRunProject } from "./authoring.js";
 import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_SCENE_ID } from "./ids.js";
+import { OrbRunSaveError, validateOrbRunSave } from "./save-validation.js";
 import { createOrbRunScriptRegistry, type OrbRunStatus } from "./scripts.js";
 import { HeadlessSceneSimulation, type Vec3 } from "./simulation.js";
 
@@ -183,17 +184,37 @@ export function captureOrbRunSave(simulation: HeadlessSceneSimulation): OrbRunSa
   return { schemaVersion: 1, step: simulation.step, scripts, positions };
 }
 
+/**
+ * Restore a save into a started simulation, all or nothing. The save is validated first
+ * (`validateOrbRunSave`; throws `OrbRunSaveError` listing every problem, nothing touched). If applying a
+ * validated save still fails, the state captured just before is put back, so the game is never left half restored.
+ */
 export async function restoreOrbRunSave(
   simulation: HeadlessSceneSimulation,
   save: OrbRunSaveData,
 ): Promise<void> {
-  if (save.schemaVersion !== 1) throw new Error(`Unsupported Orb Run save schema ${String(save.schemaVersion)}`);
+  const issues = validateOrbRunSave(simulation, save);
+  if (issues.length > 0) throw new OrbRunSaveError(issues);
+  const previous = captureOrbRunSave(simulation);
+  try {
+    await applyOrbRunSave(simulation, save);
+  } catch (error) {
+    try {
+      await applyOrbRunSave(simulation, previous);
+    } catch {
+      // Keep the original failure: it is the one that explains what went wrong.
+    }
+    throw error;
+  }
+  // The animation is derived from movement and isn't saved: restart it from rest.
+  animators.get(simulation)?.resync();
+}
+
+async function applyOrbRunSave(simulation: HeadlessSceneSimulation, save: OrbRunSaveData): Promise<void> {
   for (const [entityId, position] of Object.entries(save.positions)) {
     simulation.restorePosition(entityId, position);
   }
   for (const [entityId, state] of Object.entries(save.scripts)) {
     await simulation.restoreScript(entityId, state);
   }
-  // The animation is derived from movement and isn't saved: restart it from rest.
-  animators.get(simulation)?.resync();
 }

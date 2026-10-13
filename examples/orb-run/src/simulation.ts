@@ -260,6 +260,11 @@ export class HeadlessSceneSimulation {
     return structuredClone(entries);
   }
 
+  /** Ask the script of `entityId` whether it would accept `state`, without restoring anything. */
+  validateScriptState(entityId: string, state: Record<string, unknown>): { valid: boolean; error?: string } {
+    return this.#host.validateScriptRestoreState(entityId, state);
+  }
+
   async restoreScript(entityId: string, state: Record<string, unknown>): Promise<void> {
     const validation = this.#host.validateScriptRestoreState(entityId, state);
     if (!validation.valid) {
