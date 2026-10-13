@@ -41,6 +41,11 @@ export interface RuntimePerformanceEvidence {
   renderer: RuntimeRendererMetrics;
   scene: RuntimeSceneMetrics;
   physics?: RuntimePhysicsMetrics;
+  /**
+   * Present only when some timing samples were not finite numbers: how many per series. Those
+   * series carry NaN percentiles (JSON `null`), so this is what tells a reader why.
+   */
+  invalidSamples?: { frame?: number; simulation?: number; render?: number };
 }
 
 export type PerformanceBudgetThreshold =
@@ -63,6 +68,8 @@ export interface PerformanceBudgetViolation {
   limit: number;
   actual: number;
   comparison: "max" | "min";
+  /** Set when `actual` is NaN because timing samples were non-finite (names the series and the count). */
+  reason?: string;
 }
 
 export interface PerformanceBudgetEvaluation {
@@ -244,6 +251,19 @@ export function resolveBudgetForPlatform(
   return { ...(profile !== undefined ? { profile } : {}), thresholds, invalid };
 }
 
+/** Why a metric has no usable value: say so, and name the invalid timing samples when they are the cause. */
+function describeMissingMetric(
+  evidence: RuntimePerformanceEvidence,
+  metric: string,
+): string | undefined {
+  const series = metric.split(".")[0] ?? "";
+  const invalid = (evidence.invalidSamples as Record<string, unknown> | undefined)?.[series];
+  if (typeof invalid === "number" && Number.isFinite(invalid) && invalid > 0) {
+    return `${series} had ${invalid} non-finite timing sample${invalid === 1 ? "" : "s"}, so ${metric} is NaN`;
+  }
+  return undefined;
+}
+
 export function evaluatePerformanceBudget(
   evidence: RuntimePerformanceEvidence,
   budgetSpec: unknown,
@@ -266,11 +286,13 @@ export function evaluatePerformanceBudget(
   for (const [metric, threshold] of Object.entries(thresholds)) {
     const actual = getPerformanceMetricValue(evidence, metric);
     if (actual === undefined) {
+      const reason = describeMissingMetric(evidence, metric);
       violations.push({
         metric,
         limit: threshold.max ?? threshold.min ?? 0,
         actual: Number.NaN,
         comparison: threshold.max !== undefined ? "max" : "min",
+        ...(reason !== undefined ? { reason } : {}),
       });
       continue;
     }
