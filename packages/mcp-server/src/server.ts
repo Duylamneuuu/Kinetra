@@ -266,6 +266,58 @@ export function createKinetraMcpServer(service: KinetraAgentService): McpServer 
   );
 
   server.registerTool(
+    "entity.removeComponent",
+    {
+      description:
+        "Remove one whole component from an entity through the command bus (entity.patch can only add or overwrite). Fails with COMPONENT_NOT_FOUND when the entity lacks it.",
+      inputSchema: z.object({
+        entityId: z.string().min(1),
+        component: z.string().min(1),
+        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        dryRun: z.boolean().optional(),
+      }),
+    },
+    async (input) =>
+      safe(() =>
+        service.removeComponent({
+          entityId: input.entityId,
+          component: input.component,
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+        }),
+      ),
+  );
+
+  server.registerTool(
+    "entity.unsetFields",
+    {
+      description:
+        "Delete top-level fields from an object component through the command bus. Fails with FIELD_NOT_FOUND when any listed field is absent and with COMPONENT_NOT_OBJECT when the component is not object data.",
+      inputSchema: z.object({
+        entityId: z.string().min(1),
+        component: z.string().min(1),
+        fields: z.array(z.string().min(1)).min(1),
+        expectedProjectRevision: z.number().int().nonnegative().optional(),
+        dryRun: z.boolean().optional(),
+      }),
+    },
+    async (input) =>
+      safe(() =>
+        service.unsetComponentFields({
+          entityId: input.entityId,
+          component: input.component,
+          fields: input.fields,
+          ...(input.expectedProjectRevision !== undefined
+            ? { expectedProjectRevision: input.expectedProjectRevision }
+            : {}),
+          ...(input.dryRun !== undefined ? { dryRun: input.dryRun } : {}),
+        }),
+      ),
+  );
+
+  server.registerTool(
     "entity.reparent",
     {
       description: "Reparent an entity inside its scene through a validated command.",

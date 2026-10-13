@@ -15,6 +15,7 @@ project.inspect      project.diff        project.undo
 scene.query          scene.create
 entity.query         entity.create       entity.patch
 entity.reparent      entity.delete
+entity.removeComponent                   entity.unsetFields
 runtime.start        runtime.stop        runtime.query
 runtime.injectInput  runtime.readLogs    runtime.captureFrame
 test.runAcceptance
