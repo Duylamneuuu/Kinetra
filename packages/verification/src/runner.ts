@@ -370,8 +370,12 @@ async function executeStep(
       if (value === undefined)
         throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.max, undefined);
       // `NaN > max` is false, so a NaN metric (0/0 frame time, ...) used to satisfy any maximum.
-      if (Number.isNaN(value))
-        throw new StepAssertionError(`Metric "${step.metric}" is NaN, not a measurement`, step.max, value);
+      // Over a JSON bridge NaN arrives as `null`, which also compares false, so require a real number.
+      if (typeof value !== "number" || Number.isNaN(value))
+        throw new StepAssertionError(`Metric "${step.metric}" is ${String(value)}, not a measurement`, step.max, value);
+      // A NaN/missing threshold would make `value > max` false for every value.
+      if (typeof step.max !== "number" || Number.isNaN(step.max))
+        throw new StepAssertionError(`assert.metricMax needs a numeric max, got ${String(step.max)}`, step.max, value);
       if (value > step.max)
         throw new StepAssertionError(
           `Metric "${step.metric}" = ${value} exceeds max ${step.max}`,
@@ -384,8 +388,10 @@ async function executeStep(
       const value = (await probe.metrics())[step.metric];
       if (value === undefined)
         throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.min, undefined);
-      if (Number.isNaN(value))
-        throw new StepAssertionError(`Metric "${step.metric}" is NaN, not a measurement`, step.min, value);
+      if (typeof value !== "number" || Number.isNaN(value))
+        throw new StepAssertionError(`Metric "${step.metric}" is ${String(value)}, not a measurement`, step.min, value);
+      if (typeof step.min !== "number" || Number.isNaN(step.min))
+        throw new StepAssertionError(`assert.metricMin needs a numeric min, got ${String(step.min)}`, step.min, value);
       if (value < step.min)
         throw new StepAssertionError(
           `Metric "${step.metric}" = ${value} is below min ${step.min}`,
