@@ -12,6 +12,7 @@ import {
   serializeBridgeMessage,
   type BridgeRequest,
 } from "./bridge-protocol.js";
+import { describeLoadFailure, isFatalLoadFailure } from "./load-failure.js";
 import { RendererRequestTracker } from "./renderer-requests.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -150,17 +151,31 @@ function createWindow(): BrowserWindow {
     rendererRequests.close(new Error("Kinetra player window is unavailable"));
   });
 
-  window.webContents.once("did-fail-load", (_event, code, description) => {
-    const message = `Kinetra packaged player failed to load: ${code} ${description}`;
-    console.error(message);
+  // Only a failure of the main frame that is not a cancelled navigation is
+  // fatal. A permanent listener (not `once`): a benign sub-frame/ERR_ABORTED
+  // event must not consume it and hide a later genuine main-frame failure.
+  let loadFailureHandled = false;
+  window.webContents.on(
+    "did-fail-load",
+    (_event, code, description, validatedUrl, isMainFrame) => {
+      if (loadFailureHandled || !isFatalLoadFailure(code, isMainFrame)) {
+        return;
+      }
+      loadFailureHandled = true;
 
-    if (runtimeBridgeMode) {
-      bridgeWrite({ type: "event", event: "fatal", message });
-      app.exit(1);
-    }
+      const message = describeLoadFailure(code, description, validatedUrl);
+      console.error(message);
 
-    finishSmoke(1);
-  });
+      if (runtimeBridgeMode) {
+        bridgeWrite({ type: "event", event: "fatal", message });
+        // Give the socket/stdout a moment to flush the fatal line; an
+        // immediate app.exit() could cut it off and leave the host waiting.
+        setTimeout(() => app.exit(1), 250);
+      }
+
+      finishSmoke(1);
+    },
+  );
 
   window.webContents.once("did-finish-load", () => {
     documentLoaded = true;
