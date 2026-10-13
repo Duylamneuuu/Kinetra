@@ -91,8 +91,30 @@ function formatAvailableKeys(keys: string[]): string {
   return extra > 0 ? `${shown.join(", ")} (+${extra} more)` : shown.join(", ");
 }
 
+/**
+ * Structural equality for `assert.equal`. It compares like JSON (an object key whose value is
+ * `undefined` is the same as an absent key) but, unlike comparing `JSON.stringify` output, it
+ * ignores object key order and keeps NaN / Infinity distinct from `null`.
+ */
 function stableEqual(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (typeof a === "number" && typeof b === "number") {
+    return a === b || (Number.isNaN(a) && Number.isNaN(b));
+  }
+  if (typeof a !== "object" || a === null || typeof b !== "object" || b === null) {
+    return a === b;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, index) => stableEqual(item, b[index]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const leftKeys = Object.keys(left).filter((key) => left[key] !== undefined);
+  const rightKeys = Object.keys(right).filter((key) => right[key] !== undefined);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(
+    (key) => Object.hasOwn(right, key) && stableEqual(left[key], right[key]),
+  );
 }
 
 function severity(level: RuntimeLog["level"]): number {
@@ -310,7 +332,15 @@ async function executeStep(
           actual,
         );
       }
-      if (Math.abs(actual - step.expected) > step.tolerance) {
+      if (!Number.isFinite(actual)) {
+        throw new StepAssertionError(
+          `Expected a finite number at ${step.path}, got ${actual}`,
+          step.expected,
+          actual,
+        );
+      }
+      // Written as a negated <= so that a NaN expected/tolerance fails instead of comparing false.
+      if (!(Math.abs(actual - step.expected) <= step.tolerance)) {
         throw new StepAssertionError(
           `Expected ${step.path} near ${step.expected} ± ${step.tolerance}, got ${actual}`,
           step.expected,
@@ -339,6 +369,9 @@ async function executeStep(
       const value = (await probe.metrics())[step.metric];
       if (value === undefined)
         throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.max, undefined);
+      // `NaN > max` is false, so a NaN metric (0/0 frame time, ...) used to satisfy any maximum.
+      if (Number.isNaN(value))
+        throw new StepAssertionError(`Metric "${step.metric}" is NaN, not a measurement`, step.max, value);
       if (value > step.max)
         throw new StepAssertionError(
           `Metric "${step.metric}" = ${value} exceeds max ${step.max}`,
@@ -351,6 +384,8 @@ async function executeStep(
       const value = (await probe.metrics())[step.metric];
       if (value === undefined)
         throw new StepAssertionError(`Metric "${step.metric}" is unavailable`, step.min, undefined);
+      if (Number.isNaN(value))
+        throw new StepAssertionError(`Metric "${step.metric}" is NaN, not a measurement`, step.min, value);
       if (value < step.min)
         throw new StepAssertionError(
           `Metric "${step.metric}" = ${value} is below min ${step.min}`,
