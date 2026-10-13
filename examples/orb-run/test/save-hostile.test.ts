@@ -237,7 +237,8 @@ test("hostile script states: each script's own rules still apply, and the story 
         d.positions[ORB_RUN_ENTITY.orbA][1] = 0.5;
         d.positions[ORB_RUN_ENTITY.orbB][1] = 0.5;
       }),
-      [`${MANAGER}.status`, `${MANAGER}.status`],
+      // (slice 27: a "won" save with the player mid-arena also fails the exit rule)
+      [`positions.${ORB_RUN_ENTITY.player}`, `${MANAGER}.status`, `${MANAGER}.status`],
     );
     // Won before the exit was unlocked.
     await assertRefused(
@@ -246,12 +247,18 @@ test("hostile script states: each script's own rules still apply, and the story 
         d.scripts[ORB_RUN_ENTITY.manager].status = "won";
         d.scripts[ORB_RUN_ENTITY.player].finished = true;
       }),
-      [`${MANAGER}.status`, `${MANAGER}.status`],
+      [`positions.${ORB_RUN_ENTITY.player}`, `${MANAGER}.status`, `${MANAGER}.status`],
     );
     // The clock: still playing past the limit, or lost with time to spare.
-    await assertRefused(simulation, mutated(good, (d) => (d.scripts[ORB_RUN_ENTITY.manager].elapsedSeconds = 20)), [
-      `${MANAGER}.elapsedSeconds`,
-    ]);
+    await assertRefused(
+      simulation,
+      mutated(good, (d) => {
+        // remainingSeconds follows the edited clock, so only the story ("still playing past the limit") is wrong.
+        d.scripts[ORB_RUN_ENTITY.manager].elapsedSeconds = 20;
+        d.scripts[ORB_RUN_ENTITY.manager].remainingSeconds = 0;
+      }),
+      [`${MANAGER}.elapsedSeconds`],
+    );
     await assertRefused(
       simulation,
       mutated(good, (d) => {

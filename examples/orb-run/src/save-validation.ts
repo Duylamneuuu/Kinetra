@@ -34,6 +34,7 @@ export class OrbRunSaveError extends Error {
 
 /** Where `OrbRunOrb` stows a collected orb (its `HIDDEN_Y`). */
 const STOWED_Y = -10;
+const MANAGER_PATH = `scripts.${ORB_RUN_ENTITY.manager}`;
 const ALLOWED_TOP_LEVEL = new Set(["schemaVersion", "step", "scripts", "positions"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -178,7 +179,31 @@ export function validateOrbRunSave(simulation: HeadlessSceneSimulation, save: un
         add(`scripts.${ORB_RUN_ENTITY.manager}.elapsedSeconds`, "a lost run must have used its time limit");
       }
     }
+    // The derived fields `getState` writes next to the real state are ignored by a restore, so nothing else would
+    // notice a save from another level (other orb count, other time limit) or a hand-edited counter.
+    if (manager.totalOrbs !== ORB_RUN_ORB_IDS.length) {
+      add(`${MANAGER_PATH}.totalOrbs`, `this level has ${ORB_RUN_ORB_IDS.length} orbs, the save says ${String(manager.totalOrbs)}`);
+    }
+    if (Array.isArray(manager.collectedOrbIds) && manager.collectedCount !== manager.collectedOrbIds.length) {
+      add(`${MANAGER_PATH}.collectedCount`, `must equal the number of collected orbs (${manager.collectedOrbIds.length})`);
+    }
+    if (isFiniteNumber(elapsed) && manager.remainingSeconds !== Math.max(0, rules.timeLimitSeconds - elapsed)) {
+      add(
+        `${MANAGER_PATH}.remainingSeconds`,
+        `this level allows ${rules.timeLimitSeconds} s, so ${String(Math.max(0, rules.timeLimitSeconds - elapsed))} s remain, the save says ${String(manager.remainingSeconds)}`,
+      );
+    }
     if (status === "won") {
+      const exit = authoredPosition(simulation, ORB_RUN_ENTITY.exit);
+      const playerAt = readVec3(positions[ORB_RUN_ENTITY.player]);
+      // The run is won on the tick the player is inside the exit radius; the player may still take that tick's step.
+      const reach = rules.exitRadius + rules.playerSpeed * simulation.fixedDeltaSeconds;
+      if (exit && playerAt) {
+        const away = Math.hypot(playerAt[0] - exit[0], playerAt[2] - exit[2]);
+        if (away > reach + 1e-9) {
+          add(`positions.${ORB_RUN_ENTITY.player}`, `a won run ends with the player at the exit (within ${rules.exitRadius} m), not ${away.toFixed(2)} m away`);
+        }
+      }
       if (manager.exitUnlocked !== true) add(`scripts.${ORB_RUN_ENTITY.manager}.status`, "a won run has unlocked the exit");
       if (managerCollected.size !== ORB_RUN_ORB_IDS.length) {
         add(`scripts.${ORB_RUN_ENTITY.manager}.status`, "a won run has collected every orb");
