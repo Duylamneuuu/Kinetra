@@ -26,6 +26,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **save-state**: the file storage refuses a `settings_` key alias whatever its letter case (`saves:Settings_user` is the same file on NTFS and macOS) ([#511](https://github.com/Duylamneuuu/Kinetra/pull/511))
+- **orb-run**: slice 34 stepping out of wall A can no longer end inside wall B (`axisMoveAllowed` judges every wall) ([#509](https://github.com/Duylamneuuu/Kinetra/pull/509))
+- **orb-run**: slice 33 a player pressed into a wall can walk out but not deeper (`resolveWallMotion`) ([#508](https://github.com/Duylamneuuu/Kinetra/pull/508))
+- **player**: the Electron player logs the physics collider fallback diagnostics (`physics.unsupportedColliderShape`) to its runtime log (Refs #383, #354) ([#506](https://github.com/Duylamneuuu/Kinetra/pull/506))
 - **animation**: `stripVisualRootDisplacement` keeps the interpolation (STEP) of the root track ([#504](https://github.com/Duylamneuuu/Kinetra/pull/504))
 - **player**: `loadSave` returns `phase` and `slotId` on every failure branch ([#501](https://github.com/Duylamneuuu/Kinetra/pull/501))
 - **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
@@ -67,6 +71,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **verification**: tiny, zero-area and mismatched-size frame edges of `visual.ts` covered ([#513](https://github.com/Duylamneuuu/Kinetra/pull/513))
+- **orb-run**: slice 35 wall clearance invariants and one distance formula (`signedDistanceToWall`) ([#515](https://github.com/Duylamneuuu/Kinetra/pull/515))
+- **asset-pipeline**: the visit-budget boundary of `glb-bounds` is pinned (Refs #383) ([#512](https://github.com/Duylamneuuu/Kinetra/pull/512))
+- **verification**: visual-baseline CLI argument, ENOTDIR and extension edges covered ([#510](https://github.com/Duylamneuuu/Kinetra/pull/510))
+- **mcp-server**: the `#flushUnsaved` failure path on a refused undo retry is covered ([#505](https://github.com/Duylamneuuu/Kinetra/pull/505))
 - **orb-run**: slice 32 mud asserted from an `AcceptanceManifest` (follow-up #437 item 2) ([#503](https://github.com/Duylamneuuu/Kinetra/pull/503))
 - **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
 - **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
@@ -88,6 +97,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG and STATUS snapshot through PR #504; the MCP guide lists `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` ([#507](https://github.com/Duylamneuuu/Kinetra/pull/507))
 - CHANGELOG and STATUS snapshot through PR #497 ([#499](https://github.com/Duylamneuuu/Kinetra/pull/499))
 - CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
 - CHANGELOG and STATUS snapshot through PR #458 ([#463](https://github.com/Duylamneuuu/Kinetra/pull/463))
