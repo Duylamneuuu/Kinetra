@@ -12,7 +12,12 @@ import {
   serializeBridgeMessage,
   type BridgeRequest,
 } from "./bridge-protocol.js";
-import { describeLoadFailure, isFatalLoadFailure } from "./load-failure.js";
+import {
+  describeLoadFailure,
+  FirstExitCode,
+  isAbortedLoadError,
+  isFatalLoadFailure,
+} from "./load-failure.js";
 import { RendererRequestTracker } from "./renderer-requests.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +71,10 @@ let bridgeSocket: Socket | undefined;
 let documentLoaded = false;
 let rendererReady = false;
 let bridgeReadyEmitted = false;
+// First code wins: once a fatal load failure claims exit code 1, the bridge
+// pipe closing (the host's natural reaction to the fatal line) must not turn
+// the exit into code 0.
+const exitCodes = new FirstExitCode();
 const rendererRequests = new RendererRequestTracker({
   send(message) {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -155,25 +164,33 @@ function createWindow(): BrowserWindow {
   // fatal. A permanent listener (not `once`): a benign sub-frame/ERR_ABORTED
   // event must not consume it and hide a later genuine main-frame failure.
   let loadFailureHandled = false;
+  const reportFatalLoad = (message: string): void => {
+    if (loadFailureHandled) {
+      return;
+    }
+    loadFailureHandled = true;
+    console.error(message);
+
+    if (runtimeBridgeMode) {
+      // Claim code 1 before the host can react to the fatal line by closing
+      // the pipe, whose "close" handler would otherwise exit with 0.
+      exitCodes.claim(1);
+      bridgeWrite({ type: "event", event: "fatal", message });
+      // Give the socket/stdout a moment to flush the fatal line; an
+      // immediate app.exit() could cut it off and leave the host waiting.
+      setTimeout(() => app.exit(exitCodes.claim(1)), 250);
+    }
+
+    finishSmoke(1);
+  };
+
   window.webContents.on(
     "did-fail-load",
     (_event, code, description, validatedUrl, isMainFrame) => {
-      if (loadFailureHandled || !isFatalLoadFailure(code, isMainFrame)) {
+      if (!isFatalLoadFailure(code, isMainFrame)) {
         return;
       }
-      loadFailureHandled = true;
-
-      const message = describeLoadFailure(code, description, validatedUrl);
-      console.error(message);
-
-      if (runtimeBridgeMode) {
-        bridgeWrite({ type: "event", event: "fatal", message });
-        // Give the socket/stdout a moment to flush the fatal line; an
-        // immediate app.exit() could cut it off and leave the host waiting.
-        setTimeout(() => app.exit(1), 250);
-      }
-
-      finishSmoke(1);
+      reportFatalLoad(describeLoadFailure(code, description, validatedUrl));
     },
   );
 
@@ -190,11 +207,25 @@ function createWindow(): BrowserWindow {
   });
 
   const indexPath = join(__dirname, "..", "web", "index.html");
-  void window.loadFile(indexPath, {
-    query: {
-      captureMode,
-    },
-  });
+  // loadFile rejects on a failed load. Its rejection must not be an unhandled
+  // rejection, and when it rejects without a main-frame did-fail-load (bad
+  // argument, destroyed window) the host would otherwise never hear about it.
+  window
+    .loadFile(indexPath, {
+      query: {
+        captureMode,
+      },
+    })
+    .catch((error: unknown) => {
+      if (isAbortedLoadError(error)) {
+        return;
+      }
+      reportFatalLoad(
+        `Kinetra packaged player failed to load: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
 
   return window;
 }
@@ -417,7 +448,7 @@ function attachBridgeInput(
   });
 
   if (closeQuitsApp) {
-    lines.once("close", () => app.exit(0));
+    lines.once("close", () => app.exit(exitCodes.claim(0)));
   }
 }
 

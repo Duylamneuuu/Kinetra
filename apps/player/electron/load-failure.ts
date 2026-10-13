@@ -20,7 +20,35 @@ export function isFatalLoadFailure(
   errorCode: number,
   isMainFrame: boolean,
 ): boolean {
-  return isMainFrame === true && errorCode !== ERR_ABORTED;
+  // Only an explicit `false` marks a sub-frame: if the argument were ever
+  // missing, a real failure must not be swallowed.
+  return isMainFrame !== false && errorCode !== ERR_ABORTED;
+}
+
+/** True for the rejection `loadFile` produces for a cancelled navigation. */
+export function isAbortedLoadError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const { errno, code } = error as { errno?: unknown; code?: unknown };
+  return errno === ERR_ABORTED || code === "ERR_ABORTED";
+}
+
+/**
+ * "First exit code wins". The bridge `close` handler exits with 0 while a fatal
+ * load failure exits with 1 after a short flush delay; without arbitration the
+ * host closing the pipe inside that window would turn a failure into exit 0.
+ */
+export class FirstExitCode {
+  #code: number | undefined;
+
+  /** Records `code` unless one was already claimed; returns the winning code. */
+  claim(code: number): number {
+    if (this.#code === undefined) {
+      this.#code = code;
+    }
+    return this.#code;
+  }
 }
 
 /** The message reported on stderr and in the bridge `fatal` event. */
