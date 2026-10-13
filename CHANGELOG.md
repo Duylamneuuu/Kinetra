@@ -20,6 +20,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **verification**: `KinetraRuntimeProbe` throws when the host lacks an action method instead of passing falsely (Refs #460) ([#467](https://github.com/Duylamneuuu/Kinetra/pull/467))
 - **player**: a fatal load failure keeps exit code 1 (first exit code wins) and `loadFile` has a `.catch` (follow-up of #453) ([#456](https://github.com/Duylamneuuu/Kinetra/pull/456))
 - **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
 - **command-bus**: `component.unsetFields` keeps a `__proto__` field as plain data instead of re-prototyping the object or losing the field ([#464](https://github.com/Duylamneuuu/Kinetra/pull/464))
