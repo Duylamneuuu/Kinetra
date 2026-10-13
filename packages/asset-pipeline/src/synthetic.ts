@@ -4,8 +4,9 @@ export interface SyntheticGlbAnimationOptions {
   clipName?: string;
   duration?: number;
   property?: "translation" | "rotation" | "scale";
-  from?: [number, number, number];
-  to?: [number, number, number];
+  /** 3 numbers for translation/scale; a quaternion [x, y, z, w] (4 numbers) for rotation. */
+  from?: [number, number, number] | [number, number, number, number];
+  to?: [number, number, number] | [number, number, number, number];
 }
 
 export interface SyntheticGlbOptions {
@@ -101,8 +102,21 @@ export async function createSyntheticGlb(
     const clipName = options.animation.clipName ?? "MoveX";
     const duration = options.animation.duration ?? 1.0;
     const property = options.animation.property ?? "translation";
-    const from = options.animation.from ?? [0, 0, 0];
-    const to = options.animation.to ?? [1, 0, 0];
+    // glTF: rotation channels output unit quaternions (VEC4); translation/scale output VEC3.
+    const isRotation = property === "rotation";
+    const arity = isRotation ? 4 : 3;
+    const from: readonly number[] =
+      options.animation.from ?? (isRotation ? [0, 0, 0, 1] : [0, 0, 0]);
+    const to: readonly number[] =
+      options.animation.to ?? (isRotation ? [0, Math.SQRT1_2, 0, Math.SQRT1_2] : [1, 0, 0]);
+    for (const [label, value] of [["from", from], ["to", to]] as const) {
+      if (value.length !== arity || !value.every((component) => Number.isFinite(component))) {
+        throw new Error(
+          `createSyntheticGlb: animation.${label} for a "${property}" channel must be ${arity} finite numbers` +
+            `${isRotation ? " (a quaternion [x, y, z, w])" : ""}, got ${JSON.stringify(value)}`,
+        );
+      }
+    }
 
     const inputAccessor = doc
       .createAccessor(`${clipName}_times`)
@@ -112,11 +126,8 @@ export async function createSyntheticGlb(
 
     const outputAccessor = doc
       .createAccessor(`${clipName}_values`)
-      .setType("VEC3")
-      .setArray(new Float32Array([
-        from[0], from[1], from[2],
-        to[0], to[1], to[2],
-      ]))
+      .setType(isRotation ? "VEC4" : "VEC3")
+      .setArray(new Float32Array([...from, ...to]))
       .setBuffer(buffer);
 
     const sampler = doc
