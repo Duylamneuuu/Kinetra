@@ -76,6 +76,7 @@ import { resolvePerformanceSampleOptions, type PerformanceSampleOptionsInput } f
 import {
   base64ToUint8Array,
   calculatePercentiles,
+  countInvalidSamples,
   isEqualJson,
   uint8ArrayToBase64,
 } from "./runtime-helpers.js";
@@ -294,6 +295,11 @@ export interface PlayerRuntimePerformanceEvidence {
   renderer: PlayerRuntimePerformanceRendererMetrics;
   scene: PlayerRuntimePerformanceSceneMetrics;
   physics?: PlayerRuntimePerformancePhysicsMetrics;
+  /**
+   * Present only when some timing samples were not finite numbers: how many per series.
+   * Those series report NaN percentiles (JSON `null` on the wire), so this says why.
+   */
+  invalidSamples?: { frame: number; simulation: number; render: number };
 }
 
 export interface PlayerRuntimeRendererState {
@@ -2516,10 +2522,18 @@ export class PlayerRuntimeController {
         }
       : undefined;
 
+    const invalidSamples = {
+      frame: countInvalidSamples(frameSamples),
+      simulation: countInvalidSamples(simSamples),
+      render: countInvalidSamples(renderSamples),
+    };
+    const hasInvalidSamples = invalidSamples.frame + invalidSamples.simulation + invalidSamples.render > 0;
+
     return {
       sampleCount: sampleFrames,
       warmupSamples: warmupFrames,
       executionMode: mode,
+      ...(hasInvalidSamples ? { invalidSamples } : {}),
       frame: calculatePercentiles(frameSamples),
       simulation: calculatePercentiles(simSamples),
       render: calculatePercentiles(renderSamples),
