@@ -4,9 +4,28 @@ export interface SyntheticGlbAnimationOptions {
   clipName?: string;
   duration?: number;
   property?: "translation" | "rotation" | "scale";
-  /** 3 numbers for translation/scale; a quaternion [x, y, z, w] (4 numbers) for rotation. */
+  /**
+   * 3 numbers for translation/scale; a quaternion [x, y, z, w] (4 numbers) for rotation.
+   * Wrong arity or non-finite components throw. Rotation quaternions that are not unit length
+   * are normalised before being written (glTF requires unit quaternions); a zero-length
+   * quaternion throws.
+   */
   from?: [number, number, number] | [number, number, number, number];
   to?: [number, number, number] | [number, number, number, number];
+}
+
+/** Smallest quaternion length accepted before a rotation is treated as degenerate (zero-length). */
+const MIN_QUATERNION_LENGTH = 1e-6;
+
+function normalizeQuaternion(label: "from" | "to", q: readonly number[]): number[] {
+  const length = Math.hypot(q[0] ?? 0, q[1] ?? 0, q[2] ?? 0, q[3] ?? 0);
+  if (!(length > MIN_QUATERNION_LENGTH)) {
+    throw new Error(
+      `createSyntheticGlb: animation.${label} is a zero-length quaternion ${JSON.stringify(q)}; ` +
+        `a rotation channel needs a non-zero quaternion [x, y, z, w]`,
+    );
+  }
+  return q.map((component) => component / length);
 }
 
 export interface SyntheticGlbOptions {
@@ -117,6 +136,10 @@ export async function createSyntheticGlb(
         );
       }
     }
+    // glTF requires rotation outputs to be unit quaternions. A zero-length quaternion has no
+    // direction and is rejected; any other length is normalised (documented on the options).
+    const normalizedFrom = isRotation ? normalizeQuaternion("from", from) : from;
+    const normalizedTo = isRotation ? normalizeQuaternion("to", to) : to;
 
     const inputAccessor = doc
       .createAccessor(`${clipName}_times`)
@@ -127,7 +150,7 @@ export async function createSyntheticGlb(
     const outputAccessor = doc
       .createAccessor(`${clipName}_values`)
       .setType(isRotation ? "VEC4" : "VEC3")
-      .setArray(new Float32Array([...from, ...to]))
+      .setArray(new Float32Array([...normalizedFrom, ...normalizedTo]))
       .setBuffer(buffer);
 
     const sampler = doc
