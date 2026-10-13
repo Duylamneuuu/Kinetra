@@ -118,6 +118,9 @@ function applyToModel(model: Model, command: EngineCommand): boolean {
       return true;
     }
     case "scene.create":
+    case "component.remove":
+    case "component.unsetFields":
+      // Not produced by randomCommand; covered by component-remove.test.ts.
       return false;
   }
 }

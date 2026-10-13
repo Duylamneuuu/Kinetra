@@ -79,6 +79,8 @@ test("every command error code includes a next-step remediation", () => {
     PARENT_CYCLE: true,
     CHILDREN_EXIST: true,
     COMPONENT_NOT_OBJECT: true,
+    COMPONENT_NOT_FOUND: true,
+    FIELD_NOT_FOUND: true,
     INVALID_COMMAND: true,
     UNDO_CONFLICT: true,
     UNDO_EXPIRED: true,

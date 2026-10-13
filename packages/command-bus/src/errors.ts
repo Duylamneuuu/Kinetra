@@ -8,6 +8,8 @@ export type CommandErrorCode =
   | "PARENT_CYCLE"
   | "CHILDREN_EXIST"
   | "COMPONENT_NOT_OBJECT"
+  | "COMPONENT_NOT_FOUND"
+  | "FIELD_NOT_FOUND"
   | "INVALID_COMMAND"
   | "UNDO_CONFLICT"
   | "UNDO_EXPIRED";
@@ -31,6 +33,10 @@ const remediationByCode: Record<CommandErrorCode, string> = {
     "Reparent or delete child entities before deleting this entity.",
   COMPONENT_NOT_OBJECT:
     "Send the component value as a JSON object of fields to merge.",
+  COMPONENT_NOT_FOUND:
+    "Call entity.query to list the entity's components, then retry with a component it has.",
+  FIELD_NOT_FOUND:
+    "Call entity.query to read the component's current fields, then retry listing only fields that exist.",
   INVALID_COMMAND:
     "Compare the command with the typed tool schema and resend a supported command name and payload.",
   UNDO_CONFLICT:

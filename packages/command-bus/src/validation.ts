@@ -156,6 +156,37 @@ function parseCommandRecord(input: unknown): EngineCommand {
       break;
     }
 
+    case "component.remove": {
+      if (
+        typeof payload.entityId !== "string" ||
+        typeof payload.component !== "string" ||
+        payload.component.length === 0
+      ) {
+        throw new CommandError(
+          "INVALID_COMMAND",
+          "component.remove requires entityId and non-empty component strings",
+        );
+      }
+      break;
+    }
+
+    case "component.unsetFields": {
+      if (
+        typeof payload.entityId !== "string" ||
+        typeof payload.component !== "string" ||
+        payload.component.length === 0 ||
+        !Array.isArray(payload.fields) ||
+        payload.fields.length === 0 ||
+        !payload.fields.every((field) => typeof field === "string" && field.length > 0)
+      ) {
+        throw new CommandError(
+          "INVALID_COMMAND",
+          "component.unsetFields requires entityId, a non-empty component string and a non-empty array of non-empty field name strings",
+        );
+      }
+      break;
+    }
+
     case "entity.reparent": {
       if (
         typeof payload.entityId !== "string" ||
