@@ -19,6 +19,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
+- **command-bus**: `component.unsetFields` keeps a `__proto__` field as plain data instead of re-prototyping the object or losing the field ([#464](https://github.com/Duylamneuuu/Kinetra/pull/464))
+- **player, verification**: non-finite frame-time samples give a `NaN` percentile and an explicit budget-violation reason instead of passing silently (Refs #187) ([#459](https://github.com/Duylamneuuu/Kinetra/pull/459))
 - **verification**: `assert.near` / `metricMax` / `metricMin` no longer pass with `NaN`; `assert.equal` ignores key order and no longer treats `NaN` as `null` ([#458](https://github.com/Duylamneuuu/Kinetra/pull/458))
 - **player**: `did-fail-load` is fatal only for the main frame and not for `ERR_ABORTED`; the fatal message is flushed before `app.exit` ([#453](https://github.com/Duylamneuuu/Kinetra/pull/453))
 - **player**: `loadSave` returns a structured failure for malformed entity entries and for a throwing `prepareRestoreState` instead of a raw `TypeError` ([#450](https://github.com/Duylamneuuu/Kinetra/pull/450))
