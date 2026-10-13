@@ -8,6 +8,7 @@ import {
 import { SettingsStore } from "@kinetra/save-state";
 import type { BlendSpaceDefinition } from "@kinetra/animation/blend-space.js";
 import { PlayerRuntimeController } from "./runtime-controller.js";
+import { createFrameLoop } from "./frame-loop.js";
 import { GameShellController } from "./shell.js";
 import { parseRuntimeStepParams } from "./step-params.js";
 import "./style.css";
@@ -624,16 +625,20 @@ const demoProject: ProjectDocument = {
   ],
 };
 
-let lastTime = performance.now();
-function frame(now: number): void {
-  const deltaSeconds = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
-  lastTime = now;
-  runtime.frame(deltaSeconds);
-  shell.updateFromRuntime();
-  requestAnimationFrame(frame);
-}
-
-requestAnimationFrame(frame);
+// One failing frame (renderer error, shell update error) must not end the loop for good.
+createFrameLoop({
+  initialTime: performance.now(),
+  schedule: (callback) => {
+    requestAnimationFrame(callback);
+  },
+  tick: (deltaSeconds) => {
+    runtime.frame(deltaSeconds);
+    shell.updateFromRuntime();
+  },
+  onError: (error) => {
+    console.error("Player frame failed:", error);
+  },
+}).start();
 
 async function updatePlatformStatus(): Promise<void> {
   if (!window.kinetraPlatform) {
