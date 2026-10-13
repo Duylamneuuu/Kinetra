@@ -26,6 +26,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **save-state**: file-storage rejects `settings_` key aliases that differ only by letter case (NTFS/macOS case-insensitive filesystems) ([#511](https://github.com/Duylamneuuu/Kinetra/pull/511))
+- **orb-run**: slice 34 leaving wall A no longer lets the player tunnel into wall B (`axisMoveAllowed` checks each wall) ([#509](https://github.com/Duylamneuuu/Kinetra/pull/509))
+- **orb-run**: slice 33 a player pinned inside a wall can walk back out ([#508](https://github.com/Duylamneuuu/Kinetra/pull/508))
+- **player**: physics collider fallback diagnostics are logged (Refs #383, #354) ([#506](https://github.com/Duylamneuuu/Kinetra/pull/506))
 - **animation**: `stripVisualRootDisplacement` keeps the interpolation (STEP) of the root track ([#504](https://github.com/Duylamneuuu/Kinetra/pull/504))
 - **player**: `loadSave` returns `phase` and `slotId` on every failure branch ([#501](https://github.com/Duylamneuuu/Kinetra/pull/501))
 - **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
@@ -67,6 +71,9 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **asset-pipeline**: pins the probe-budget boundary of `glb-bounds` (Refs #383) ([#512](https://github.com/Duylamneuuu/Kinetra/pull/512))
+- **verification**: visual-baseline CLI argument, ENOTDIR and extension edge cases ([#510](https://github.com/Duylamneuuu/Kinetra/pull/510))
+- **mcp-server**: covers the `#flushUnsaved` failure path on a refused undo retry ([#505](https://github.com/Duylamneuuu/Kinetra/pull/505))
 - **orb-run**: slice 32 mud asserted from an `AcceptanceManifest` (follow-up #437 item 2) ([#503](https://github.com/Duylamneuuu/Kinetra/pull/503))
 - **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
 - **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
