@@ -231,7 +231,9 @@ const schemas: Record<string, ComponentSchema> = {
   },
   Collider: {
     fields: {
-      shape: nonEmptyString(),
+      // An empty string is accepted: the physics factory treats it as "not declared" and falls
+      // back to the Primitive kind (or a box), so only a non-string value is an authoring mistake.
+      shape: (value) => (typeof value === "string" ? undefined : "must be a string"),
       size: vec3({ min: 0 }),
       halfExtents: vec3({ min: 0 }),
       radius: finiteNumber({ exclusiveMin: 0 }),
@@ -244,10 +246,26 @@ const schemas: Record<string, ComponentSchema> = {
   RigidBody: {
     fields: {
       type: oneOfIgnoringCase(RIGID_BODY_TYPES),
-      mass: finiteNumber({ exclusiveMin: 0 }),
+      // `mass` must be positive only for dynamic bodies (see `relations`); fixed and kinematic
+      // bodies ignore it at runtime, so only its type is checked here.
+      mass: finiteNumber(),
       gravityScale: finiteNumber(),
       linearDamping: finiteNumber({ min: 0 }),
       angularDamping: finiteNumber({ min: 0 }),
+    },
+    relations: (value) => {
+      const type = typeof value.type === "string" ? value.type.toLowerCase() : "dynamic";
+      const mass = value.mass;
+      if (type !== "dynamic" || typeof mass !== "number" || mass > 0) return [];
+      return [
+        {
+          field: "mass",
+          code: "component.RigidBody.mass.invalid",
+          message: `RigidBody.mass (${mass}) must be > 0 for a dynamic body`,
+          remediation:
+            "Set RigidBody.mass above zero, omit it to use the default, or use a fixed/kinematic type, which ignores mass.",
+        },
+      ];
     },
   },
   CharacterBody: {

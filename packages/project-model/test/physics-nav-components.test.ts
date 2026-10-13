@@ -27,12 +27,13 @@ test("valid Collider payloads pass and unknown fields stay free-form", () => {
   assert.deepEqual(codes("Collider", { shape: "sphere", radius: 2, isTrigger: true, tags: ["a"] }), []);
   // The physics factory warns about (rather than rejects) shapes it cannot build.
   assert.deepEqual(codes("Collider", { shape: "mesh" }), []);
+  // An empty shape means "not declared" to the factory (falls back to the Primitive kind or a box).
+  assert.deepEqual(codes("Collider", { shape: "" }), []);
 });
 
 test("Collider rejects malformed fields with a remediation each", () => {
   const bad: Array<[Record<string, unknown>, string]> = [
     [{ shape: 12 }, "component.Collider.shape.invalid"],
-    [{ shape: "" }, "component.Collider.shape.invalid"],
     [{ size: [1, 2] }, "component.Collider.size.invalid"],
     [{ size: [1, -2, 3] }, "component.Collider.size.invalid"],
     [{ halfExtents: [1, Number.NaN, 1] }, "component.Collider.halfExtents.invalid"],
@@ -61,6 +62,16 @@ test("RigidBody type is checked case-insensitively like the runtime does", () =>
   assert.deepEqual(codes("RigidBody", { type: "dynamic", mass: 2, gravityScale: 0, linearDamping: 0.1, angularDamping: 0 }), []);
   assert.deepEqual(codes("RigidBody", { mass: 0 }), ["component.RigidBody.mass.invalid"]);
   assert.deepEqual(codes("RigidBody", { mass: -3 }), ["component.RigidBody.mass.invalid"]);
+  assert.deepEqual(codes("RigidBody", { type: "Dynamic", mass: 0 }), ["component.RigidBody.mass.invalid"]);
+  assert.deepEqual(codes("RigidBody", { mass: Number.NaN }), ["component.RigidBody.mass.invalid"]);
+  assert.deepEqual(codes("RigidBody", { mass: "heavy" }), ["component.RigidBody.mass.invalid"]);
+  // Fixed and kinematic bodies ignore mass at runtime, so a zero or negative mass is not an authoring error.
+  for (const type of ["fixed", "static", "kinematic", "KinematicPositionBased", "kinematicVelocityBased"]) {
+    assert.deepEqual(codes("RigidBody", { type, mass: 0 }), [], type);
+    assert.deepEqual(codes("RigidBody", { type, mass: -1 }), [], type);
+  }
+  // A wrong type reports only the type; the mass relation is skipped until the fields are valid.
+  assert.deepEqual(codes("RigidBody", { type: "ghost", mass: 0 }), ["component.RigidBody.type.invalid"]);
   assert.deepEqual(codes("RigidBody", { gravityScale: Number.NaN }), ["component.RigidBody.gravityScale.invalid"]);
   assert.deepEqual(codes("RigidBody", { linearDamping: -1 }), ["component.RigidBody.linearDamping.invalid"]);
   assert.deepEqual(codes("RigidBody", { angularDamping: "x" }), ["component.RigidBody.angularDamping.invalid"]);
