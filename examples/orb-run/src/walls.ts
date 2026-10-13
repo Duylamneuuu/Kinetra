@@ -82,9 +82,7 @@ export function readOrbRunWalls(entities: ReadonlyArray<{ id: string; components
 
 /** Distance from a ground point to the wall's rectangle (0 inside). */
 export function distanceToWall(wall: OrbRunWall, x: number, z: number): number {
-  const dx = Math.max(Math.abs(x - wall.x) - wall.halfWidth, 0);
-  const dz = Math.max(Math.abs(z - wall.z) - wall.halfDepth, 0);
-  return Math.hypot(dx, dz);
+  return Math.max(signedDistanceToWall(wall, x, z), 0);
 }
 
 /** Whether a circle of `radius` centred at (x, z) overlaps any wall (touching does not count). */
@@ -115,7 +113,7 @@ export function resolveWallMotion(
  * Signed distance from a ground point to a wall's rectangle: positive outside,
  * negative inside (how far the point is from the nearest edge, going out).
  */
-function signedDistanceToWall(wall: OrbRunWall, x: number, z: number): number {
+export function signedDistanceToWall(wall: OrbRunWall, x: number, z: number): number {
   const dx = Math.abs(x - wall.x) - wall.halfWidth;
   const dz = Math.abs(z - wall.z) - wall.halfDepth;
   if (dx > 0 || dz > 0) return Math.hypot(Math.max(dx, 0), Math.max(dz, 0));
