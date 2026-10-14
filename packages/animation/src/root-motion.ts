@@ -326,9 +326,14 @@ function keyValueOffset(index: number, valueSize: number, cubic: boolean): numbe
 }
 
 function unsupportedInterpolationDiagnostics(track: THREE.KeyframeTrack, valueSize: number): RootMotionDiagnostics {
+  // The loader's factory flag is proof; the 3x layout alone is only a heuristic (a malformed LINEAR
+  // track with exactly three times the values looks the same), so say which one fired.
+  const evidence = hasCubicSplineFactory(track)
+    ? "uses glTF CUBICSPLINE interpolation"
+    : "has the 3x value layout of glTF CUBICSPLINE interpolation (no loader interpolant flag; a malformed LINEAR track with three times the values looks the same)";
   return {
     code: "animation.rootMotion.unsupportedInterpolation",
-    message: `Track "${track.name}" uses glTF CUBICSPLINE interpolation (${track.values.length} values for ${track.times.length} keys: in-tangent, value and out-tangent of ${valueSize} numbers each per key), which root motion extraction cannot sample`,
+    message: `Track "${track.name}" ${evidence} (${track.values.length} values for ${track.times.length} keys: in-tangent, value and out-tangent of ${valueSize} numbers each per key), which root motion extraction cannot sample`,
     hint: "Bake the clip to LINEAR keyframes (resample it in Blender or glTF-Transform) before importing",
   };
 }
@@ -655,14 +660,19 @@ export function extractRootMotionFromClip(
     return { success: false, error: diag.message, diagnostics: diag };
   }
 
-  const rotTrack = clip.tracks.find(
+  const foundRotTrack = clip.tracks.find(
     (t) => t.name === rotTrackName && t instanceof THREE.QuaternionKeyframeTrack,
   ) as THREE.QuaternionKeyframeTrack | undefined;
 
-  if (rotTrack && isCubicSplineTrack(rotTrack, 4)) {
-    const diag = unsupportedInterpolationDiagnostics(rotTrack, 4);
+  // Only "extract-xz-yaw" reads the root rotation (every other mode reports yaw 0 in its step delta),
+  // so a CUBICSPLINE rotation track is refused there alone. In the other modes it is left out of the
+  // sample table (yaw 0) instead of rejecting a clip whose translation is perfectly extractable.
+  const rotIsCubic = foundRotTrack !== undefined && isCubicSplineTrack(foundRotTrack, 4);
+  if (foundRotTrack && rotIsCubic && mode === "extract-xz-yaw") {
+    const diag = unsupportedInterpolationDiagnostics(foundRotTrack, 4);
     return { success: false, error: diag.message, diagnostics: diag };
   }
+  const rotTrack = rotIsCubic ? undefined : foundRotTrack;
 
   if (rotTrack) {
     // The rotation track is held to the same contract as the position track: finite, non-decreasing

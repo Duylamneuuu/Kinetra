@@ -78,6 +78,63 @@ test("extractRootMotionFromClip rejects a CUBICSPLINE root rotation track even w
   assert.match(result.diagnostics?.message ?? "", /Hips\.quaternion/);
 });
 
+test("extractRootMotionFromClip extracts translation from a LINEAR position + CUBICSPLINE rotation clip when the mode ignores yaw", () => {
+  for (const mode of ["extract-xz", "extract-xyz"] as const) {
+    const clip = new THREE.AnimationClip("turn", 1, [
+      linearPositionTrack("Hips.position", FORWARD),
+      cubicQuaternionTrack("Hips.quaternion", 3),
+    ]);
+    const result = extractRootMotionFromClip(clip, { mode, rootBoneName: "Hips" });
+    assert.equal(result.success, true, `${mode}: ${result.error ?? ""}`);
+    assert.ok(Math.abs((result.extracted?.totalDisplacement[2] ?? 0) - 2) < 1e-6);
+    assert.equal(result.extracted?.totalYaw, 0, "the ignored rotation track contributes no yaw");
+    assert.ok(
+      (result.extracted?.samples ?? []).every((s) => s.yaw === 0 && Number.isFinite(s.position[2])),
+      "tangent values never leak into the samples",
+    );
+  }
+});
+
+test("extractRootMotionFromClip still rejects the CUBICSPLINE rotation in extract-xz-yaw and names the rotation track", () => {
+  const clip = new THREE.AnimationClip("turn", 1, [
+    linearPositionTrack("Hips.position", FORWARD),
+    cubicQuaternionTrack("Hips.quaternion", 3),
+  ]);
+  const result = extractRootMotionFromClip(clip, { mode: "extract-xz-yaw", rootBoneName: "Hips" });
+  assert.equal(result.success, false);
+  assert.equal(result.diagnostics?.code, "animation.rootMotion.unsupportedInterpolation");
+  assert.match(result.diagnostics?.message ?? "", /uses glTF CUBICSPLINE interpolation/);
+});
+
+test("the unsupportedInterpolation message tells a layout-only guess from a loader-flagged cubic track", () => {
+  const track = cubicPositionTrack("Hips.position", FORWARD);
+  const unflagged = new THREE.VectorKeyframeTrack("Hips.position", Array.from(track.times), Array.from(track.values));
+  const guessed = extractRootMotionFromClip(new THREE.AnimationClip("walk", 1, [unflagged]), {
+    mode: "extract-xz",
+    rootBoneName: "Hips",
+  });
+  assert.match(guessed.diagnostics?.message ?? "", /3x value layout/);
+  assert.match(guessed.diagnostics?.message ?? "", /malformed LINEAR/);
+  const flagged = extractRootMotionFromClip(new THREE.AnimationClip("walk", 1, [track]), {
+    mode: "extract-xz",
+    rootBoneName: "Hips",
+  });
+  assert.match(flagged.diagnostics?.message ?? "", /uses glTF CUBICSPLINE interpolation/);
+  assert.doesNotMatch(flagged.diagnostics?.message ?? "", /3x value layout/);
+});
+
+test("stripVisualRootDisplacement keeps a CUBICSPLINE root rotation verbatim in extract-xz-yaw (no yaw rewrite over tangents)", () => {
+  const cubicRot = cubicQuaternionTrack("Hips.quaternion", 3);
+  const clip = new THREE.AnimationClip("turn", 1, [linearPositionTrack("Hips.position", FORWARD), cubicRot]);
+  const stripped = stripVisualRootDisplacement(clip, "Hips", "extract-xz-yaw");
+  const out = stripped.tracks.find((t) => t.name === "Hips.quaternion")!;
+  assert.deepEqual(Array.from(out.values), Array.from(cubicRot.values));
+  assert.equal(
+    (out as unknown as { createInterpolant: CubicFlag }).createInterpolant.isInterpolantFactoryMethodGLTFCubicSpline,
+    true,
+  );
+});
+
 test("extractRootMotionFromClip also recognises a cubic track by its 3x value layout when the loader flag is gone", () => {
   // A clip that was copied or serialised loses the GLTFLoader createInterpolant flag but keeps the layout.
   const track = cubicPositionTrack("Hips.position", FORWARD);
