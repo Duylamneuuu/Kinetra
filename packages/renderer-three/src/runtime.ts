@@ -649,6 +649,10 @@ export class ThreeSceneRuntime {
         ? { mode: oldSession.rootMotion.mode, rootBoneName: oldSession.rootMotion.rootBoneName }
         : undefined;
 
+      // 0. The reload owns the entity from here on: a loadModels/attachModel still waiting on its
+      // asset must not install a second instance over (and orphan) the one built below.
+      this.#beginModelLoad(entityId);
+
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
 

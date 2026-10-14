@@ -203,6 +203,34 @@ async function runtimeWithLoadedModel(assetId: string): Promise<ThreeSceneRuntim
   return runtime;
 }
 
+test("reloadAsset: a loadModels still resolving when the reload installs its instance does not stack a second scene", async () => {
+  const loadResolver = new GatedResolver();
+  const reloadResolver = new GatedResolver();
+  const runtime = ThreeSceneRuntime.instantiate(projectWithModel("model_a"), sceneId);
+  const object = runtime.getObject(entityId)!;
+
+  const loading = runtime.loadModels(loadResolver);
+  await loadResolver.until(1);
+  const reloading = runtime.reloadAsset("model_a", reloadResolver);
+  await reloadResolver.until(1);
+
+  // The reimported bytes arrive first and the reload installs its instance; the slow initial load
+  // finishes afterwards and must notice the reload took the entity over.
+  reloadResolver.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  const reloaded = await reloading;
+  loadResolver.pending[0]!.release(await createSyntheticGlb({ size: [1, 1, 1] }));
+  await loading;
+
+  assert.equal(reloaded.success, true);
+  assert.equal(runtime.instanceCount, 1);
+  assert.equal(object.children.length, 1, "the late initial load must not attach a second model scene");
+  assert.equal(
+    runtime.getInstance(entityId)?.template.refCount,
+    1,
+    "the reload's instance must still be the one the template counts",
+  );
+});
+
 test("reloadAsset: detachModel while the new bytes resolve is not resurrected by the reload", async () => {
   const runtime = await runtimeWithLoadedModel("model_a");
   const object = runtime.getObject(entityId)!;
