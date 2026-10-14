@@ -678,8 +678,10 @@ export class PlayerControllerScript implements GameScript {
       typeof state.moveCount === "number" ? state.moveCount : this.moveCount;
     const nextJumpCount =
       typeof state.jumpCount === "number" ? state.jumpCount : this.jumpCount;
+    // getState() omits lastAction while it is unset, so an absent key in a saved state means
+    // "unset": keeping the live value would resurrect an action the saved moment never had.
     const nextLastAction =
-      typeof state.lastAction === "string" ? state.lastAction : this.lastAction;
+      typeof state.lastAction === "string" ? state.lastAction : undefined;
 
     return {
       commit: () => {
