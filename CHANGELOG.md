@@ -6,6 +6,17 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-14
+
+### Fixed
+
+- **player**: the `requestAnimationFrame` loop no longer stops for good when a tick throws ([#520](https://github.com/Duylamneuuu/Kinetra/pull/520))
+
+### Tests
+
+- **orb-run**: `advanceUntil` boundaries pinned: predicate true on the last step and `maxSteps=0` (Refs #500) ([#517](https://github.com/Duylamneuuu/Kinetra/pull/517))
+- **orb-run**: slice 36 a wall under the player, proven through the whole game ([#521](https://github.com/Duylamneuuu/Kinetra/pull/521))
+
 ## 2026-10-13
 
 ### Added
@@ -26,6 +37,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: logs physics collider fallback diagnostics (Refs #383, #354) ([#506](https://github.com/Duylamneuuu/Kinetra/pull/506))
+- **orb-run**: slice 33 a player pinned by a wall can walk out ([#508](https://github.com/Duylamneuuu/Kinetra/pull/508))
+- **orb-run**: slice 34 leaving wall A no longer tunnels into wall B ([#509](https://github.com/Duylamneuuu/Kinetra/pull/509))
+- **save-state**: rejects `settings_` aliases that differ only by letter case (NTFS/macOS) ([#511](https://github.com/Duylamneuuu/Kinetra/pull/511))
 - **animation**: `stripVisualRootDisplacement` keeps the interpolation (STEP) of the root track ([#504](https://github.com/Duylamneuuu/Kinetra/pull/504))
 - **player**: `loadSave` returns `phase` and `slotId` on every failure branch ([#501](https://github.com/Duylamneuuu/Kinetra/pull/501))
 - **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
@@ -67,6 +82,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **mcp-server**: covers the `#flushUnsaved` failure path on a refused undo retry ([#505](https://github.com/Duylamneuuu/Kinetra/pull/505))
+- **verification**: visual-baseline CLI argument, ENOTDIR and extension edges ([#510](https://github.com/Duylamneuuu/Kinetra/pull/510))
+- **asset-pipeline**: pins the visit-budget boundary of `glb-bounds` (Refs #383) ([#512](https://github.com/Duylamneuuu/Kinetra/pull/512))
+- **verification**: tiny, zero-area and mismatched-size frame edges for `visual.ts` ([#513](https://github.com/Duylamneuuu/Kinetra/pull/513))
+- **orb-run**: slice 35 wall clearance invariants and one distance formula ([#515](https://github.com/Duylamneuuu/Kinetra/pull/515))
 - **orb-run**: slice 32 mud asserted from an `AcceptanceManifest` (follow-up #437 item 2) ([#503](https://github.com/Duylamneuuu/Kinetra/pull/503))
 - **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
 - **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
