@@ -234,10 +234,13 @@ const schemas: Record<string, ComponentSchema> = {
       // An empty string is accepted: the physics factory treats it as "not declared" and falls
       // back to the Primitive kind (or a box), so only a non-string value is an authoring mistake.
       shape: (value) => (typeof value === "string" ? undefined : "must be a string"),
-      size: vec3({ min: 0 }),
-      halfExtents: vec3({ min: 0 }),
+      // The physics world builds a cuboid / capsule from these and rejects a zero extent with a
+      // RangeError (`assertPositive` in physics-rapier), which would abort the scene start. A zero
+      // is therefore an authoring mistake here, not a valid "flat" collider.
+      size: vec3({ exclusiveMin: 0 }),
+      halfExtents: vec3({ exclusiveMin: 0 }),
       radius: finiteNumber({ exclusiveMin: 0 }),
-      halfHeight: finiteNumber({ min: 0 }),
+      halfHeight: finiteNumber({ exclusiveMin: 0 }),
       friction: finiteNumber({ min: 0 }),
       restitution: finiteNumber({ min: 0 }),
       layer: integerInRange(0, MAX_COLLIDER_LAYER),

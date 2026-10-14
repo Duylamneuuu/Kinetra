@@ -140,10 +140,10 @@ export const BUILT_IN_INSPECTOR_SCHEMAS: readonly InspectorComponentSchema[] = [
     name: "Collider",
     fields: [
       { name: "shape", kind: "string" },
-      vector("size", { min: 0 }),
-      vector("halfExtents", { min: 0 }),
+      vector("size", { exclusiveMin: 0 }),
+      vector("halfExtents", { exclusiveMin: 0 }),
       { name: "radius", kind: "number", exclusiveMin: 0 },
-      { name: "halfHeight", kind: "number", min: 0 },
+      { name: "halfHeight", kind: "number", exclusiveMin: 0 },
       { name: "friction", kind: "number", min: 0 },
       { name: "restitution", kind: "number", min: 0 },
       // Integer query-filter layer (project-model MAX_COLLIDER_LAYER).
