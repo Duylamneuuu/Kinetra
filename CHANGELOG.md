@@ -6,6 +6,32 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-14
+
+### Added
+
+- **project-model**: schemas for the `Collider`, `RigidBody`, `CharacterBody` and `NavMesh` components (Refs #462) ([#519](https://github.com/Duylamneuuu/Kinetra/pull/519))
+
+### Fixed
+
+- **core**: `PlayerControllerScript` restore clears `lastAction` when the save has no such key (`getState` omits the key when it is unset) ([#534](https://github.com/Duylamneuuu/Kinetra/pull/534))
+- **project-model**: a `RigidBody` without `type` is `fixed`, as in the physics factory, and no longer demands `mass > 0` ([#527](https://github.com/Duylamneuuu/Kinetra/pull/527))
+
+### Tests
+
+- **orb-run**: slice 39 what a running game sees of authoring done after it started (`test/late-authoring.test.ts`, #437 item 3) ([#535](https://github.com/Duylamneuuu/Kinetra/pull/535))
+- **verification**: zero-width PNG frames through evidence and comparison ([#532](https://github.com/Duylamneuuu/Kinetra/pull/532))
+- **orb-run**: slice 38 the sign of the level check's slack matches the bot ([#531](https://github.com/Duylamneuuu/Kinetra/pull/531))
+- **orb-run**: slice 37 random walled and muddy levels: level check = route plan = real game ([#525](https://github.com/Duylamneuuu/Kinetra/pull/525))
+
+### Documentation
+
+- CHANGELOG and STATUS snapshot through PR #515 ([#518](https://github.com/Duylamneuuu/Kinetra/pull/518))
+
+### Maintenance
+
+- **physics-rapier**: one shared `resolveColliderPlan` for `populateWorld` and the diagnostics (Refs #383) ([#526](https://github.com/Duylamneuuu/Kinetra/pull/526))
+
 ## 2026-10-13
 
 ### Added
@@ -101,6 +127,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 ### Documentation
 
 - CHANGELOG and STATUS snapshot through PR #504; the MCP guide lists `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` ([#507](https://github.com/Duylamneuuu/Kinetra/pull/507))
+- CHANGELOG and STATUS snapshot through PR #490 ([#492](https://github.com/Duylamneuuu/Kinetra/pull/492))
+- CHANGELOG and STATUS snapshot through PR #490 ([#492](https://github.com/Duylamneuuu/Kinetra/pull/492))
 - CHANGELOG and STATUS snapshot through PR #497 ([#499](https://github.com/Duylamneuuu/Kinetra/pull/499))
 - CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
 - CHANGELOG and STATUS snapshot through PR #458 ([#463](https://github.com/Duylamneuuu/Kinetra/pull/463))
