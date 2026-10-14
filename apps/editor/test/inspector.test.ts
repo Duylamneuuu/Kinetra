@@ -155,8 +155,13 @@ test("the built-in descriptors cover exactly the schematised components", () => 
 });
 
 test("descriptor bounds and options agree with project-model validation", () => {
+  // `RigidBody.mass` only has to be positive for a dynamic body (a body with no `type` is fixed and
+  // ignores it), so the descriptor's `exclusiveMin` is checked against a dynamic body.
   const accepts = (component: string, field: string, value: JsonValue): boolean =>
-    validateBuiltInComponent(component, { [field]: value }).length === 0;
+    validateBuiltInComponent(component, {
+      ...(component === "RigidBody" && field === "mass" ? { type: "dynamic" } : {}),
+      [field]: value,
+    }).length === 0;
 
   for (const schema of BUILT_IN_INSPECTOR_SCHEMAS) {
     for (const field of schema.fields) {
