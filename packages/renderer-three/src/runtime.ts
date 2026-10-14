@@ -287,6 +287,10 @@ export class ThreeSceneRuntime {
   #modelLoadTokens = new Map<string, number>();
   /** Entity -> the load token its most recent reloadAsset installed (lets overlapping reloads coexist). */
   #reloadTokens = new Map<string, number>();
+  /** Counts reloadAsset calls in the order they were issued (not the order their bytes arrive). */
+  #reloadSequence = 0;
+  /** Entity -> issue sequence of the reload whose instance it carries now; an older reload must not replace it. */
+  #installedReloadSequence = new Map<string, number>();
   #disposed = false;
 
 
@@ -592,6 +596,7 @@ export class ThreeSceneRuntime {
     }
 
     const requestedEntities: string[] = [];
+    const reloadSequence = ++this.#reloadSequence;
     // Attach/detach bump an entity's load token. A token that moved while the new bytes
     // resolved means the entity was detached or re-attached meanwhile, so the reload must
     // not resurrect the old asset on it.
@@ -625,7 +630,11 @@ export class ThreeSceneRuntime {
       // Unmoved token: nothing touched the entity. A token that equals the one a *reload*
       // installed means an overlapping reload of the same asset finished first; this (newer or
       // slower) reload still applies. Any other move is an attach/detach and wins over us.
-      return current === tokensAtStart.get(entityId) || current === this.#reloadTokens.get(entityId);
+      if (current !== tokensAtStart.get(entityId) && current !== this.#reloadTokens.get(entityId)) return false;
+      // A reload issued later than this one already installed its (newer) bytes while ours were
+      // still resolving: installing the older bytes now would leave the entity on a stale model
+      // while the template cache serves the newer one.
+      return (this.#installedReloadSequence.get(entityId) ?? 0) < reloadSequence;
     });
 
     for (const entityId of affectedEntities) {
@@ -656,6 +665,7 @@ export class ThreeSceneRuntime {
       // 0. The reload owns the entity from here on: a loadModels/attachModel still waiting on its
       // asset must not install a second instance over (and orphan) the one built below.
       this.#reloadTokens.set(entityId, this.#beginModelLoad(entityId));
+      this.#installedReloadSequence.set(entityId, reloadSequence);
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);

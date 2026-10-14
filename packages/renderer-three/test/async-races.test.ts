@@ -302,11 +302,21 @@ for (const order of ["first-then-second", "second-then-first"] as const) {
 
     assert.equal(result1.success, true);
     assert.equal(result2.success, true);
-    assert.deepEqual(result1.affectedEntities, [entityId]);
-    assert.deepEqual(result2.affectedEntities, [entityId], "the overlapping reload must not be filtered out");
+    assert.deepEqual(result2.affectedEntities, [entityId], "the newest reload must never be filtered out");
+    if (order === "first-then-second") {
+      assert.deepEqual(result1.affectedEntities, [entityId]);
+    } else {
+      assert.deepEqual(
+        result1.affectedEntities,
+        [],
+        "an older reload finishing after a newer one installed must not replace it",
+      );
+    }
     assert.equal(runtime.instanceCount, 1);
     assert.equal(object.children.length, 1, "overlapping reloads must leave exactly one model scene");
     assert.equal(runtime.getInstance(entityId)?.template.refCount, 1);
+    // The reload issued last carries the newest bytes (3x3x3) whichever order they arrive in.
+    assert.deepEqual(runtime.getModelMetadata(entityId)?.bounds?.size, [3, 3, 3]);
   });
 }
 
