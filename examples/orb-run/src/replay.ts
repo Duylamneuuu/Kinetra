@@ -22,6 +22,17 @@ export const ORB_RUN_DEFAULT_CHECKPOINT_EVERY = 30;
 /** `playOrbRunReplay` hands control back to the event loop after this many steps, so a long replay never starves its host. */
 export const ORB_RUN_REPLAY_YIELD_EVERY_STEPS = 2048;
 
+/**
+ * Gives the host's event loop a turn. `setImmediate` is Node-only (a renderer has none, found by
+ * `test/browser-bundle.test.ts`), so fall back to a zero-delay timer, which every host has.
+ */
+function yieldToHost(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (typeof setImmediate === "function") setImmediate(resolve);
+    else setTimeout(resolve, 0);
+  });
+}
+
 export interface OrbRunReplayInput {
   /** 1-based step the held set applies from (the first step that runs with it). */
   step: number;
@@ -395,7 +406,7 @@ export async function playOrbRunReplay(input: unknown, options: PlayOrbRunReplay
       simulation.advance(1);
       options.onStep?.(simulation);
       if (step % ORB_RUN_REPLAY_YIELD_EVERY_STEPS === 0) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
+        await yieldToHost();
         abortIfRequested();
       }
       const expected = checkpoints.get(step);
