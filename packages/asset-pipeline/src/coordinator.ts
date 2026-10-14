@@ -391,6 +391,7 @@ export class AssetHotReloadCoordinator {
     dropped: ReloadDegradationAccumulator,
   ): Promise<void> {
     if (!this.#runtimeTarget) return;
+    const reloadedSoFar = new Set(runtimeReloadedEntityIds);
     for (const rebuiltId of assetIds) {
       const updatedRecord = this.#database.get(rebuiltId);
       if (!updatedRecord) {
@@ -438,7 +439,14 @@ export class AssetHotReloadCoordinator {
       try {
         const reloadRes = await this.#runtimeTarget.reloadAsset(rebuiltId);
         if (reloadRes.success) {
-          runtimeReloadedEntityIds.push(...reloadRes.affectedEntities);
+          // One entity can use several assets published in the same batch (and a runtime may repeat an
+          // id): list each reloaded entity once.
+          for (const entityId of reloadRes.affectedEntities) {
+            if (!reloadedSoFar.has(entityId)) {
+              reloadedSoFar.add(entityId);
+              runtimeReloadedEntityIds.push(entityId);
+            }
+          }
           this.#emit({
             type: "asset.runtimeReloadSucceeded",
             assetId: rebuiltId,
