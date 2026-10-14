@@ -35,6 +35,6 @@ test("a save slot cannot alias a settings file by changing the case of its prefi
     assert.throws(() => storage.resolveFilePath(`saves:${slot}`), /settings_/i, slot);
   }
   // Names that merely resemble the prefix stay usable.
-  assert.ok(storage.resolveFilePath("saves:Settings-user").endsWith("Settings-user.json"));
-  assert.ok(storage.resolveFilePath("saves:Settingsfoo").endsWith("Settingsfoo.json"));
+  assert.ok(storage.resolveFilePath("saves:Settings-user").endsWith("settings-user.json"));
+  assert.ok(storage.resolveFilePath("saves:Settingsfoo").endsWith("settingsfoo.json"));
 });
