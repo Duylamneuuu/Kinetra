@@ -40,7 +40,16 @@ export class FileKeyValueStorage implements KeyValueStorage {
     this.#retryDelayMs = options.retryDelayMs ?? 10;
   }
 
+  /**
+   * Maps a storage key to its file. The file name is always lower-cased: NTFS/macOS resolve names
+   * case-insensitively, so "saves:Slot1" and "saves:slot1" would be one file there and two on Linux.
+   * Lower-casing makes both keys the same document on every platform.
+   */
   resolveFilePath(key: string): string {
+    return this.#resolve(key, true);
+  }
+
+  #resolve(key: string, lowerCase: boolean): string {
     if (typeof key !== "string" || !key) {
       throw new TypeError("Storage key must be a non-empty string");
     }
@@ -75,7 +84,8 @@ export class FileKeyValueStorage implements KeyValueStorage {
       );
     }
 
-    const filePath = resolve(this.rootDir, `${cleanKey}.json`);
+    const fileName = lowerCase ? cleanKey.toLowerCase() : cleanKey;
+    const filePath = resolve(this.rootDir, `${fileName}.json`);
     const normalizedRoot = resolve(this.rootDir);
 
     // Strict path boundary assertion
@@ -90,14 +100,27 @@ export class FileKeyValueStorage implements KeyValueStorage {
 
   async get(key: string): Promise<string | undefined> {
     const filePath = this.resolveFilePath(key);
-    try {
-      return await readFile(filePath, "utf8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return undefined;
+    const legacyPath = this.#legacyFilePath(key, filePath);
+    for (const candidate of legacyPath ? [filePath, legacyPath] : [filePath]) {
+      try {
+        return await readFile(candidate, "utf8");
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw err;
+        }
       }
-      throw err;
     }
+    return undefined;
+  }
+
+  /**
+   * Before file names were lower-cased, a mixed-case key was stored under its exact name. On a
+   * case-sensitive file system that legacy file is still on disk, so reads and deletes also
+   * look at it (the lower-cased file always wins). Undefined when both names are the same.
+   */
+  #legacyFilePath(key: string, filePath: string): string | undefined {
+    const legacy = this.#resolve(key, false);
+    return legacy === filePath ? undefined : legacy;
   }
 
   async set(key: string, value: string): Promise<void> {
@@ -154,13 +177,15 @@ export class FileKeyValueStorage implements KeyValueStorage {
 
   async delete(key: string): Promise<void> {
     const filePath = this.resolveFilePath(key);
-    try {
-      await unlink(filePath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return;
+    const legacyPath = this.#legacyFilePath(key, filePath);
+    for (const candidate of legacyPath ? [filePath, legacyPath] : [filePath]) {
+      try {
+        await unlink(candidate);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw err;
+        }
       }
-      throw err;
     }
   }
 }
