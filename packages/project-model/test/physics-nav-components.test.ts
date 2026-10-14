@@ -37,6 +37,11 @@ test("Collider rejects malformed fields with a remediation each", () => {
     [{ size: [1, 2] }, "component.Collider.size.invalid"],
     [{ size: [1, -2, 3] }, "component.Collider.size.invalid"],
     [{ halfExtents: [1, Number.NaN, 1] }, "component.Collider.halfExtents.invalid"],
+    // physics-rapier throws a RangeError for a zero extent (assertPositive), so a zero is
+    // rejected at the authoring boundary just like radius: 0.
+    [{ size: [1, 0, 1] }, "component.Collider.size.invalid"],
+    [{ halfExtents: [0, 0.5, 0.5] }, "component.Collider.halfExtents.invalid"],
+    [{ halfHeight: 0 }, "component.Collider.halfHeight.invalid"],
     [{ radius: 0 }, "component.Collider.radius.invalid"],
     [{ radius: "1" }, "component.Collider.radius.invalid"],
     [{ halfHeight: -1 }, "component.Collider.halfHeight.invalid"],
