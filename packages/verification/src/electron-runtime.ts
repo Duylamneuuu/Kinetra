@@ -1196,6 +1196,11 @@ export class ElectronRuntimeHost implements RuntimeHost {
             `Timed out waiting for Electron runtime bridge ready signal after ${this.requestTimeoutMs}ms`,
           ),
         );
+        // A bridge that never announced "ready" is unusable, but its process is still running and
+        // `#child`/`#readyPromise` still point at it: every later request would await the same
+        // rejected promise and fail forever while the process leaked. Tear it down so the next
+        // request launches a fresh bridge.
+        void this.close();
       }, this.requestTimeoutMs);
 
       this.#resolveReady = () => {
