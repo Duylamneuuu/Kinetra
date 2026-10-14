@@ -82,7 +82,7 @@ export class SettingsStore {
         sfxGain: typeof data.audio?.sfxGain === "number" ? Math.max(0, Math.min(1, data.audio.sfxGain)) : 1.0,
       },
       display: {
-        fullscreen: Boolean(data.display?.fullscreen),
+        fullscreen: data.display?.fullscreen === true,
       },
     };
     const customBindings = sanitizeCustomBindings(data.input?.customBindings);
