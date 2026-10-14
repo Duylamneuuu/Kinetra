@@ -60,8 +60,10 @@ test("RigidBody type is checked case-insensitively like the runtime does", () =>
   assert.deepEqual(codes("RigidBody", { type: "ghost" }), ["component.RigidBody.type.invalid"]);
   assert.deepEqual(codes("RigidBody", { type: 3 }), ["component.RigidBody.type.invalid"]);
   assert.deepEqual(codes("RigidBody", { type: "dynamic", mass: 2, gravityScale: 0, linearDamping: 0.1, angularDamping: 0 }), []);
-  assert.deepEqual(codes("RigidBody", { mass: 0 }), ["component.RigidBody.mass.invalid"]);
-  assert.deepEqual(codes("RigidBody", { mass: -3 }), ["component.RigidBody.mass.invalid"]);
+  // No `type` means a fixed body (the physics scene factory's default), which ignores mass.
+  assert.deepEqual(codes("RigidBody", { mass: 0 }), []);
+  assert.deepEqual(codes("RigidBody", { mass: -3 }), []);
+  assert.deepEqual(codes("RigidBody", { type: "dynamic", mass: -3 }), ["component.RigidBody.mass.invalid"]);
   assert.deepEqual(codes("RigidBody", { type: "Dynamic", mass: 0 }), ["component.RigidBody.mass.invalid"]);
   assert.deepEqual(codes("RigidBody", { mass: Number.NaN }), ["component.RigidBody.mass.invalid"]);
   assert.deepEqual(codes("RigidBody", { mass: "heavy" }), ["component.RigidBody.mass.invalid"]);
@@ -170,7 +172,7 @@ test("validateProject reports an invalid physics component at its entity path", 
           {
             id: "e_bad",
             name: "Bad",
-            components: { Collider: { radius: -2 }, RigidBody: { mass: 0 } } as never,
+            components: { Collider: { radius: -2 }, RigidBody: { type: "dynamic", mass: 0 } } as never,
           },
         ],
       },

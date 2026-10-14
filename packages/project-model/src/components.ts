@@ -254,7 +254,10 @@ const schemas: Record<string, ComponentSchema> = {
       angularDamping: finiteNumber({ min: 0 }),
     },
     relations: (value) => {
-      const type = typeof value.type === "string" ? value.type.toLowerCase() : "dynamic";
+      // A RigidBody with no `type` is a *fixed* body: the physics scene factory defaults it to
+      // "fixed" (`stringValue(rigidBody?.type, "fixed")`), so it ignores `mass`. Defaulting to
+      // "dynamic" here rejected `{ mass: 0 }` for a body the runtime never simulates.
+      const type = typeof value.type === "string" ? value.type.toLowerCase() : "fixed";
       const mass = value.mass;
       if (type !== "dynamic" || typeof mass !== "number" || mass > 0) return [];
       return [
