@@ -6,6 +6,18 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-15
+
+### Fixed
+
+- **player**: shell không kẹt khi Continue/Main menu lỗi và không còn unhandled rejection ở listener ([#573](https://github.com/Duylamneuuu/Kinetra/pull/573))
+- **animation**: root motion từ chối track glTF CUBICSPLINE thay vì đọc tangent như vị trí (#522) ([#572](https://github.com/Duylamneuuu/Kinetra/pull/572))
+- **asset-pipeline**: `stop()` huỷ các thay đổi đang xếp hàng, không chạy transaction sau khi coordinator đã dừng ([#569](https://github.com/Duylamneuuu/Kinetra/pull/569))
+
+### Tests
+
+- **orb-run**: README held to the tree (slice 46) ([#575](https://github.com/Duylamneuuu/Kinetra/pull/575))
+
 ## 2026-10-14
 
 ### Added
@@ -15,6 +27,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: bộ đệm log runtime có giới hạn và `#log` không còn ném lỗi với dữ liệu không clone được ([#565](https://github.com/Duylamneuuu/Kinetra/pull/565))
+- **renderer-three**: `reloadAsset` chiếm token load của entity, `loadModels` chậm không đè instance của reload (#561 — hồi quy reload chồng nhau theo dõi ở #564) ([#561](https://github.com/Duylamneuuu/Kinetra/pull/561))
 - **save-state**: tên file slot luôn chữ thường, Slot1/slot1 là một save (#524) ([#557](https://github.com/Duylamneuuu/Kinetra/pull/557))
 - **verification**: ElectronRuntimeHost tắt bridge kẹt khi quá hạn ready, request sau khởi động bridge mới ([#555](https://github.com/Duylamneuuu/Kinetra/pull/555))
 - **physics-rapier**: Transform.rotation là hướng ban đầu của body dựng từ scene (Fixes #466) ([#550](https://github.com/Duylamneuuu/Kinetra/pull/550))
@@ -27,6 +41,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **physics-rapier**: schema vs `resolveColliderPlan` RigidBody parity (#529 item 2) ([#562](https://github.com/Duylamneuuu/Kinetra/pull/562))
 - **orb-run**: slice 45 — planner slack held to the real bot on walled and muddy levels ([#560](https://github.com/Duylamneuuu/Kinetra/pull/560))
 - **renderer-three**: root motion invalidRoot diagnostics, refused-request isolation and default Hips root ([#556](https://github.com/Duylamneuuu/Kinetra/pull/556))
 - **orb-run**: slice 44 — browser sandbox guards and audio refusals in the browser-shaped host ([#554](https://github.com/Duylamneuuu/Kinetra/pull/554))
