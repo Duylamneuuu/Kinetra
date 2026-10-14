@@ -6,6 +6,26 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-15
+
+### Added
+
+- **orb-run**: level pack — classic, pillars, swamp, causeway authored on the command bus (slice 47) ([#582](https://github.com/Duylamneuuu/Kinetra/pull/582))
+
+### Fixed
+
+- **renderer-three**: a stale reload finishing late no longer overwrites a newer reload (#577) ([#578](https://github.com/Duylamneuuu/Kinetra/pull/578))
+- **renderer-three**: overlapping `reloadAsset` calls on the same asset are all applied (#564) ([#576](https://github.com/Duylamneuuu/Kinetra/pull/576))
+- **player**: the shell no longer sticks when Continue/Main menu fails, and listeners no longer cause unhandled rejections ([#573](https://github.com/Duylamneuuu/Kinetra/pull/573))
+- **animation**: root motion rejects glTF CUBICSPLINE tracks instead of reading tangents as positions (#522) ([#572](https://github.com/Duylamneuuu/Kinetra/pull/572))
+- **asset-pipeline**: `stop()` cancels queued changes; no transaction runs after the coordinator stopped ([#569](https://github.com/Duylamneuuu/Kinetra/pull/569))
+
+### Tests
+
+- **player**: supersession guard for `loadSave` + stop()/start() race tests (#544) ([#581](https://github.com/Duylamneuuu/Kinetra/pull/581))
+- **editor**: inspector RigidBody type defaults to fixed, mass applies only to dynamic (#529 item 3) ([#566](https://github.com/Duylamneuuu/Kinetra/pull/566))
+- **orb-run**: README held to the tree (slice 46) ([#575](https://github.com/Duylamneuuu/Kinetra/pull/575))
+
 ## 2026-10-14
 
 ### Added
@@ -15,6 +35,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **player**: bounded runtime log buffer; `#log` no longer throws on non-cloneable data ([#565](https://github.com/Duylamneuuu/Kinetra/pull/565))
+- **renderer-three**: `reloadAsset` claims the entity's load token; a slow `loadModels` no longer overwrites a reloaded instance ([#561](https://github.com/Duylamneuuu/Kinetra/pull/561))
 - **save-state**: tên file slot luôn chữ thường, Slot1/slot1 là một save (#524) ([#557](https://github.com/Duylamneuuu/Kinetra/pull/557))
 - **verification**: ElectronRuntimeHost tắt bridge kẹt khi quá hạn ready, request sau khởi động bridge mới ([#555](https://github.com/Duylamneuuu/Kinetra/pull/555))
 - **physics-rapier**: Transform.rotation là hướng ban đầu của body dựng từ scene (Fixes #466) ([#550](https://github.com/Duylamneuuu/Kinetra/pull/550))
@@ -27,6 +49,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **physics-rapier**: schema vs `resolveColliderPlan` RigidBody parity (#529 item 2) ([#562](https://github.com/Duylamneuuu/Kinetra/pull/562))
 - **orb-run**: slice 45 — planner slack held to the real bot on walled and muddy levels ([#560](https://github.com/Duylamneuuu/Kinetra/pull/560))
 - **renderer-three**: root motion invalidRoot diagnostics, refused-request isolation and default Hips root ([#556](https://github.com/Duylamneuuu/Kinetra/pull/556))
 - **orb-run**: slice 44 — browser sandbox guards and audio refusals in the browser-shaped host ([#554](https://github.com/Duylamneuuu/Kinetra/pull/554))
@@ -45,6 +68,8 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG and STATUS snapshot through PR #560 ([#563](https://github.com/Duylamneuuu/Kinetra/pull/563))
+- CHANGELOG + STATUS snapshot for PRs merged after #547 ([#559](https://github.com/Duylamneuuu/Kinetra/pull/559))
 - CHANGELOG and STATUS snapshot through PR #547 ([#551](https://github.com/Duylamneuuu/Kinetra/pull/551))
 - CHANGELOG and STATUS snapshot through PR #547 (replaces the stale snapshot PRs #516, #523, #533, #536)
 - CHANGELOG and STATUS snapshot through PR #515 ([#518](https://github.com/Duylamneuuu/Kinetra/pull/518))
