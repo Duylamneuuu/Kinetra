@@ -1,6 +1,6 @@
 import type { SceneDefinition } from "@kinetra/project-model";
 
-import { MAX_PHYSICS_LAYER, type Vec3 } from "./types.js";
+import { MAX_PHYSICS_LAYER, type Quaternion, type Vec3 } from "./types.js";
 import { RapierPhysicsWorld, type RapierPhysicsWorldOptions } from "./world.js";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -41,6 +41,31 @@ function vec3Value(
     return [value[0], value[1], value[2]];
   }
   return fallback;
+}
+
+/**
+ * Quaternion for a `Transform.rotation` (Euler XYZ radians, the order the render runtime applies
+ * with `object.rotation.set`). `undefined` for identity, so unrotated bodies are built exactly as
+ * before.
+ */
+function rotationQuaternion(value: unknown): Quaternion | undefined {
+  const [x, y, z] = vec3Value(value, [0, 0, 0]);
+  if (x === 0 && y === 0 && z === 0) return undefined;
+  const c1 = Math.cos(x / 2);
+  const c2 = Math.cos(y / 2);
+  const c3 = Math.cos(z / 2);
+  const s1 = Math.sin(x / 2);
+  const s2 = Math.sin(y / 2);
+  const s3 = Math.sin(z / 2);
+  const q = {
+    x: s1 * c2 * c3 + c1 * s2 * s3,
+    y: c1 * s2 * c3 - s1 * c2 * s3,
+    z: c1 * c2 * s3 + s1 * s2 * c3,
+    w: c1 * c2 * c3 - s1 * s2 * s3,
+  };
+  // Already unit up to rounding; normalise so the world's unit-quaternion check never trips.
+  const length = Math.hypot(q.x, q.y, q.z, q.w);
+  return { x: q.x / length, y: q.y / length, z: q.z / length, w: q.w / length };
 }
 
 /** Collider shapes the scene factory builds as declared. */
@@ -224,6 +249,11 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       z: posArray[2],
     };
 
+    // Authored orientation. A character capsule keeps identity: its facing is owned by the render
+    // object (root motion / scripts), and the player never copies a character's rotation back.
+    const orientation = rotationQuaternion(transform?.rotation);
+    const rotationOption = orientation ? { rotation: orientation } : {};
+
     const rigidBody = asObject(entity.components.RigidBody);
     const collider = asObject(entity.components.Collider);
     const character = asObject(entity.components.CharacterBody);
@@ -247,6 +277,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       const common = {
         id: entity.id,
         position,
+        ...rotationOption,
         ...(friction !== undefined ? { friction } : {}),
         ...(restitution !== undefined ? { restitution } : {}),
         ...layerOption,
@@ -325,6 +356,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "sphere",
           radius,
           ...(restitution !== undefined ? { restitution } : {}),
@@ -339,6 +371,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "capsule",
           radius,
           halfHeight,
@@ -368,6 +401,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "box",
           halfExtents,
           ...(restitution !== undefined ? { restitution } : {}),
@@ -394,6 +428,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       const fixedCommon = {
         id: entity.id,
         position,
+        ...rotationOption,
         ...(fixedFriction !== undefined ? { friction: fixedFriction } : {}),
         ...(fixedRestitution !== undefined ? { restitution: fixedRestitution } : {}),
         ...layerOption,
@@ -439,6 +474,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
     world.addFixedBox({
       id: entity.id,
       position,
+      ...rotationOption,
       halfExtents,
       ...(friction !== undefined ? { friction } : {}),
       ...(restitution !== undefined ? { restitution } : {}),

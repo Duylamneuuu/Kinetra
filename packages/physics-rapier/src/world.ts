@@ -62,6 +62,28 @@ function assertFiniteVec3(value: Vec3, label: string): void {
   }
 }
 
+/**
+ * Optional initial orientation of a body. Must be a finite unit quaternion (the scene factory
+ * builds it from `Transform.rotation`); a missing value means identity.
+ */
+function assertUnitQuaternion(
+  value: Quaternion | undefined,
+  label: string,
+): Quaternion | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !value ||
+    !Number.isFinite(value.x) ||
+    !Number.isFinite(value.y) ||
+    !Number.isFinite(value.z) ||
+    !Number.isFinite(value.w) ||
+    Math.abs(Math.hypot(value.x, value.y, value.z, value.w) - 1) > 1e-6
+  ) {
+    throw new RangeError(`${label} must be a finite unit quaternion`);
+  }
+  return { x: value.x, y: value.y, z: value.z, w: value.w };
+}
+
 function assertPositive(value: number, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new RangeError(`${label} must be finite and > 0`);
@@ -140,6 +162,8 @@ export class RapierPhysicsWorld {
   addFixedBox(input: {
     id: string;
     position: Vec3;
+    /** Initial orientation (unit quaternion); defaults to identity. */
+    rotation?: Quaternion;
     halfExtents: Vec3;
     friction?: number;
     restitution?: number;
@@ -148,6 +172,7 @@ export class RapierPhysicsWorld {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addFixedBox layer");
     assertFiniteVec3(input.position, "addFixedBox position");
+    const rotation = assertUnitQuaternion(input.rotation, "addFixedBox rotation");
     assertFiniteVec3(input.halfExtents, "addFixedBox halfExtents");
     assertPositive(input.halfExtents.x, "addFixedBox halfExtents.x");
     assertPositive(input.halfExtents.y, "addFixedBox halfExtents.y");
@@ -166,13 +191,13 @@ export class RapierPhysicsWorld {
     if (input.restitution !== undefined)
       colDesc.setRestitution(input.restitution);
 
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(
-        input.position.x,
-        input.position.y,
-        input.position.z,
-      ),
+    const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
+      input.position.x,
+      input.position.y,
+      input.position.z,
     );
+    if (rotation) bodyDesc.setRotation(rotation);
+    const body = this.world.createRigidBody(bodyDesc);
     const collider = this.#createCollider(colDesc, body);
     this.#register({
       id: input.id,
@@ -187,6 +212,8 @@ export class RapierPhysicsWorld {
   addFixedSphere(input: {
     id: string;
     position: Vec3;
+    /** Initial orientation (unit quaternion); defaults to identity. */
+    rotation?: Quaternion;
     radius: number;
     friction?: number;
     restitution?: number;
@@ -195,6 +222,7 @@ export class RapierPhysicsWorld {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addFixedSphere layer");
     assertFiniteVec3(input.position, "addFixedSphere position");
+    const rotation = assertUnitQuaternion(input.rotation, "addFixedSphere rotation");
     const radius = assertPositive(input.radius, "addFixedSphere radius");
     if (input.friction !== undefined)
       assertNonNegative(input.friction, "addFixedSphere friction");
@@ -205,13 +233,15 @@ export class RapierPhysicsWorld {
     if (input.friction !== undefined) colDesc.setFriction(input.friction);
     if (input.restitution !== undefined)
       colDesc.setRestitution(input.restitution);
-    this.#addFixed(input.id, input.position, colDesc, layer);
+    this.#addFixed(input.id, input.position, colDesc, layer, rotation);
   }
 
   /** Adds an immovable capsule collider (a fixed body that keeps its half height and radius). */
   addFixedCapsule(input: {
     id: string;
     position: Vec3;
+    /** Initial orientation (unit quaternion); defaults to identity. */
+    rotation?: Quaternion;
     halfHeight: number;
     radius: number;
     friction?: number;
@@ -221,6 +251,7 @@ export class RapierPhysicsWorld {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addFixedCapsule layer");
     assertFiniteVec3(input.position, "addFixedCapsule position");
+    const rotation = assertUnitQuaternion(input.rotation, "addFixedCapsule rotation");
     const halfHeight = assertPositive(input.halfHeight, "addFixedCapsule halfHeight");
     const radius = assertPositive(input.radius, "addFixedCapsule radius");
     if (input.friction !== undefined)
@@ -232,7 +263,7 @@ export class RapierPhysicsWorld {
     if (input.friction !== undefined) colDesc.setFriction(input.friction);
     if (input.restitution !== undefined)
       colDesc.setRestitution(input.restitution);
-    this.#addFixed(input.id, input.position, colDesc, layer);
+    this.#addFixed(input.id, input.position, colDesc, layer, rotation);
   }
 
   #addFixed(
@@ -240,14 +271,15 @@ export class RapierPhysicsWorld {
     position: Vec3,
     colDesc: RAPIER.ColliderDesc,
     layer: number,
+    rotation?: Quaternion,
   ): void {
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(
-        position.x,
-        position.y,
-        position.z,
-      ),
+    const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
+      position.x,
+      position.y,
+      position.z,
     );
+    if (rotation) bodyDesc.setRotation(rotation);
+    const body = this.world.createRigidBody(bodyDesc);
     const collider = this.#createCollider(colDesc, body);
     this.#register({ id, body, collider, isCharacter: false, layer });
   }
@@ -255,6 +287,8 @@ export class RapierPhysicsWorld {
   addDynamicBody(input: {
     id: string;
     position: Vec3;
+    /** Initial orientation (unit quaternion); defaults to identity. */
+    rotation?: Quaternion;
     shape: "box" | "sphere" | "capsule";
     halfExtents?: Vec3;
     radius?: number;
@@ -268,6 +302,7 @@ export class RapierPhysicsWorld {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addDynamicBody layer");
     assertFiniteVec3(input.position, "addDynamicBody position");
+    const rotation = assertUnitQuaternion(input.rotation, "addDynamicBody rotation");
     if (input.gravityScale !== undefined)
       assertFinite(input.gravityScale, "addDynamicBody gravityScale");
     if (input.restitution !== undefined)
@@ -319,6 +354,7 @@ export class RapierPhysicsWorld {
       input.position.y,
       input.position.z,
     );
+    if (rotation) bodyDesc.setRotation(rotation);
     if (input.gravityScale !== undefined) {
       bodyDesc.setGravityScale(input.gravityScale);
     }
@@ -407,6 +443,8 @@ export class RapierPhysicsWorld {
   addKinematicBody(input: {
     id: string;
     position: Vec3;
+    /** Initial orientation (unit quaternion); defaults to identity. moveKinematicBody keeps it. */
+    rotation?: Quaternion;
     shape: "box" | "sphere";
     halfExtents?: Vec3;
     radius?: number;
@@ -417,6 +455,7 @@ export class RapierPhysicsWorld {
     this.#assertNewId(input.id);
     const layer = assertLayer(input.layer, "addKinematicBody layer");
     assertFiniteVec3(input.position, "addKinematicBody position");
+    const rotation = assertUnitQuaternion(input.rotation, "addKinematicBody rotation");
     if (input.friction !== undefined)
       assertNonNegative(input.friction, "addKinematicBody friction");
     if (input.restitution !== undefined)
@@ -447,13 +486,13 @@ export class RapierPhysicsWorld {
     if (input.restitution !== undefined)
       colDesc.setRestitution(input.restitution);
 
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
-        input.position.x,
-        input.position.y,
-        input.position.z,
-      ),
+    const bodyDesc = RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
+      input.position.x,
+      input.position.y,
+      input.position.z,
     );
+    if (rotation) bodyDesc.setRotation(rotation);
+    const body = this.world.createRigidBody(bodyDesc);
     const collider = this.#createCollider(colDesc, body);
     this.#register({
       id: input.id,
