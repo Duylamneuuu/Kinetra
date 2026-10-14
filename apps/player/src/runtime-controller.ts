@@ -39,6 +39,7 @@ import { compareCodeUnits } from "./keyed-record.js";
 import { buildAssetQueryById, captureEntityStates } from "./keyed-snapshots.js";
 import { reloadDegradationFields, reloadDegradationLogs, type ReloadDegradation } from "./reload-degradation.js";
 import { KeyTracker } from "./key-tracker.js";
+import { RuntimeLogBuffer, type PlayerRuntimeLog, type PlayerRuntimeLogLevel } from "./log-buffer.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
@@ -96,14 +97,7 @@ import * as THREE from "three";
 const NAV_SUPERSEDED_MESSAGE =
   "The navigation request was superseded by a newer bake/load, or the runtime was stopped, before it finished";
 
-export type PlayerRuntimeLogLevel = "debug" | "info" | "warning" | "error";
-
-export interface PlayerRuntimeLog {
-  sequence: number;
-  level: PlayerRuntimeLogLevel;
-  message: string;
-  data?: Record<string, unknown>;
-}
+export type { PlayerRuntimeLog, PlayerRuntimeLogLevel };
 
 export interface PlayerRuntimeQuery {
   entityIds?: string[];
@@ -367,8 +361,8 @@ export class PlayerRuntimeController {
   #stepped = false;
   #camera: THREE.Camera;
   #projectRevision: number | undefined;
-  #logs: PlayerRuntimeLog[] = [];
-  #nextLogSequence = 1;
+  /** Bounded and never throws on odd payloads (see log-buffer.ts). */
+  #logs = new RuntimeLogBuffer();
   #storage: KeyValueStorage;
   #saveStore: JsonDocumentStore<SaveEnvelope<GameplaySaveData>>;
   #saveMigrator: SaveMigrator;
@@ -2416,9 +2410,7 @@ export class PlayerRuntimeController {
   }
 
   readLogs(sinceSequence = 0): PlayerRuntimeLog[] {
-    return this.#logs
-      .filter((entry) => entry.sequence > sinceSequence)
-      .map((entry) => structuredClone(entry));
+    return this.#logs.read(sinceSequence);
   }
 
   resize(): void {
@@ -2632,11 +2624,6 @@ export class PlayerRuntimeController {
     message: string,
     data?: Record<string, unknown>,
   ): void {
-    this.#logs.push({
-      sequence: this.#nextLogSequence++,
-      level,
-      message,
-      ...(data ? { data: structuredClone(data) } : {}),
-    });
+    this.#logs.push(level, message, data);
   }
 }
