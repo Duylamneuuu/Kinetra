@@ -8,6 +8,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ## 2026-10-14
 
+### Added
+
+- **project-model**: schemas for `Collider`, `RigidBody`, `CharacterBody` and `NavMesh` (Refs #462) ([#519](https://github.com/Duylamneuuu/Kinetra/pull/519))
+
 ### Fixed
 
 - **player**: the `requestAnimationFrame` loop no longer stops for good when a tick throws ([#520](https://github.com/Duylamneuuu/Kinetra/pull/520))
