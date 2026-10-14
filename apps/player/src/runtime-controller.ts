@@ -48,6 +48,7 @@ import {
   loadSaveSupersededMessage,
   type LoadSaveFailure,
 } from "./save-failure.js";
+import { createSupersessionGuard } from "./supersession-guard.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
 import { resolveStartScene } from "./start-scene.js";
@@ -1701,8 +1702,8 @@ export class PlayerRuntimeController {
     // failure, nothing applied) once either was replaced, instead of dereferencing a cleared field.
     const runtime = this.#runtime;
     const scripts = this.#scripts;
-    const isSuperseded = (): boolean =>
-      this.#runtime !== runtime || this.#scripts !== scripts;
+    const supersession = createSupersessionGuard(() => [this.#runtime, this.#scripts]);
+    const isSuperseded = (): boolean => supersession.isSuperseded();
 
     const slotId = options?.slotId ?? "default";
     let rawEnvelope = options?.envelope;
