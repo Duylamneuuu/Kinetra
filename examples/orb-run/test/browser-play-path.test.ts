@@ -119,7 +119,17 @@ before(async () => {
   inBrowser = JSON.parse(inBrowserText) as Session;
 });
 
+test("the scenario's source text reaches the sandbox as written (no compiler helpers, bounded size)", () => {
+  // The scenario is shipped as `scenario.toString()`. If the compiler target ever downlevels async/spread it
+  // would inject helpers (`__awaiter`, ...) that only exist at the top of the compiled test module, and the
+  // sandbox would fail with a ReferenceError instead of a useful assertion.
+  const text = scenario.toString();
+  assert.doesNotMatch(text, /__awaiter|__generator|__values|__spread|__assign|__rest/);
+  assert.ok(text.length > 1000 && text.length < 12000, `scenario text is ${text.length} chars`);
+});
+
 test("the whole session (HUD, save, quick-load, audio, animation, fuzz) is byte-identical in the browser sandbox", () => {
+  assert.ok(inBrowserText.length > 3000, `the browser session text is not vacuously short (${inBrowserText.length} chars)`);
   assert.equal(inBrowserText, inNodeText);
   assert.deepEqual(sandbox.calls(), [], "no stubbed Node builtin was called while playing");
 });
