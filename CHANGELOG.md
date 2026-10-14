@@ -27,6 +27,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 45 — planner slack held to the real bot on walled and muddy levels ([#560](https://github.com/Duylamneuuu/Kinetra/pull/560))
 - **renderer-three**: root motion invalidRoot diagnostics, refused-request isolation and default Hips root ([#556](https://github.com/Duylamneuuu/Kinetra/pull/556))
 - **orb-run**: slice 44 — browser sandbox guards and audio refusals in the browser-shaped host ([#554](https://github.com/Duylamneuuu/Kinetra/pull/554))
 - **renderer-three**: scene construction errors, component defaults and disposed loadModels ([#553](https://github.com/Duylamneuuu/Kinetra/pull/553))
