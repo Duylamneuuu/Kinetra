@@ -10,10 +10,15 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Added
 
+- forward dropped root-motion/IK/morph maps from asset reload to coordinator, bridge and logs (#310) ([#421](https://github.com/Duylamneuuu/Kinetra/pull/421))
 - **project-model**: schemas for the `Collider`, `RigidBody`, `CharacterBody` and `NavMesh` components (Refs #462) ([#519](https://github.com/Duylamneuuu/Kinetra/pull/519))
 
 ### Fixed
 
+- **save-state**: tên file slot luôn chữ thường, Slot1/slot1 là một save (#524) ([#557](https://github.com/Duylamneuuu/Kinetra/pull/557))
+- **verification**: ElectronRuntimeHost tắt bridge kẹt khi quá hạn ready, request sau khởi động bridge mới ([#555](https://github.com/Duylamneuuu/Kinetra/pull/555))
+- **physics-rapier**: Transform.rotation là hướng ban đầu của body dựng từ scene (Fixes #466) ([#550](https://github.com/Duylamneuuu/Kinetra/pull/550))
+- **renderer-three**: ModelTemplateCache fails with coded errors for unresolved/unsupported/bad base64/loadAsync (#548) ([#549](https://github.com/Duylamneuuu/Kinetra/pull/549))
 - **save-state**: the settings `fullscreen` flag accepts only boolean `true` ([#543](https://github.com/Duylamneuuu/Kinetra/pull/543))
 - **project-model**: `Collider.size` / `halfExtents` / `halfHeight` must be `> 0`, as `physics-rapier` already demanded ([#540](https://github.com/Duylamneuuu/Kinetra/pull/540))
 - **player**: `loadSave` no longer touches `#runtime` / `#scripts` after an `await` when `stop()` / `start()` interleaves; it returns a structured preparation failure instead (Fixes #537) ([#539](https://github.com/Duylamneuuu/Kinetra/pull/539))
@@ -22,6 +27,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **renderer-three**: root motion invalidRoot diagnostics, refused-request isolation and default Hips root ([#556](https://github.com/Duylamneuuu/Kinetra/pull/556))
+- **orb-run**: slice 44 — browser sandbox guards and audio refusals in the browser-shaped host ([#554](https://github.com/Duylamneuuu/Kinetra/pull/554))
+- **renderer-three**: scene construction errors, component defaults and disposed loadModels ([#553](https://github.com/Duylamneuuu/Kinetra/pull/553))
+- **orb-run**: slice 43 - HUD, save/quick-load, audio and animator run in the browser-shaped host (byte-identical to the Node build) ([#552](https://github.com/Duylamneuuu/Kinetra/pull/552))
 - **player**: saved entities and `assets.byId` keep an id named `__proto__` (pure builder + test, Refs #252) ([#547](https://github.com/Duylamneuuu/Kinetra/pull/547))
 - **orb-run**: slice 42 the play path runs in a browser-shaped host (replay yields without `setImmediate`) ([#546](https://github.com/Duylamneuuu/Kinetra/pull/546))
 - **renderer-three**: `ModelTemplateCache` source branches (Uint8Array view, ArrayBuffer, data/URL, invalid) ([#545](https://github.com/Duylamneuuu/Kinetra/pull/545))
@@ -35,6 +44,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG and STATUS snapshot through PR #547 ([#551](https://github.com/Duylamneuuu/Kinetra/pull/551))
 - CHANGELOG and STATUS snapshot through PR #547 (replaces the stale snapshot PRs #516, #523, #533, #536)
 - CHANGELOG and STATUS snapshot through PR #515 ([#518](https://github.com/Duylamneuuu/Kinetra/pull/518))
 
