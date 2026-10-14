@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import test, { before } from "node:test";
 import { createContext, runInContext, Script } from "node:vm";
 import { fileURLToPath } from "node:url";
 
-import { build, type Plugin } from "esbuild";
+import { build } from "esbuild";
 
 import { createOrbRunReplays, playOrbRunReplay, type OrbRunReplay } from "../src/index.js";
+import { buildBrowserSandbox, nodeBuiltinStubs, type BrowserSandbox } from "./browser-host.js";
 
 /**
  * Slice 41 (`real-bundle`) bundled the entry for `platform: "node"`, so the Node builtins stayed
@@ -28,32 +29,6 @@ import { createOrbRunReplays, playOrbRunReplay, type OrbRunReplay } from "../src
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const entry = resolve(here, "..", "..", "dist", "src", "index.js");
-
-const NODE_BUILTIN = /^(?:node:.+|(?:fs|path|crypto|os|url|module|child_process|net|readline|util|stream|buffer|events|assert|zlib|worker_threads|perf_hooks|process|timers)(?:\/.*)?)$/;
-
-const STRUCTURED_CLONE_IN_REALM = `
-globalThis.structuredClone = function structuredClone(value) {
-  const seen = new Map();
-  const copy = (v) => {
-    if (v === null || typeof v !== "object") {
-      if (typeof v === "function" || typeof v === "symbol") throw new Error("DataCloneError: " + typeof v);
-      return v;
-    }
-    if (seen.has(v)) return seen.get(v);
-    let out;
-    if (Array.isArray(v)) { out = []; seen.set(v, out); v.forEach((item, i) => { out[i] = copy(item); }); return out; }
-    if (v instanceof Date) return new Date(v.getTime());
-    if (v instanceof Map) { out = new Map(); seen.set(v, out); v.forEach((item, key) => out.set(copy(key), copy(item))); return out; }
-    if (v instanceof Set) { out = new Set(); seen.set(v, out); v.forEach((item) => out.add(copy(item))); return out; }
-    if (ArrayBuffer.isView(v)) return new v.constructor(v);
-    out = {}; seen.set(v, out);
-    for (const key of Object.keys(v)) out[key] = copy(v[key]);
-    return out;
-  };
-  return copy(value);
-};`;
-
 interface Bundled {
   createOrbRunReplays: () => Promise<{ win: OrbRunReplay; timeout: OrbRunReplay }>;
   recordOrbRunReplay: (
@@ -66,83 +41,10 @@ interface Bundled {
   ) => Promise<{ verified: boolean; finalDigest: string; summary: { status: string; step: number; collectedCount: number } }>;
 }
 
-interface Sandbox {
-  bundle: Bundled;
-  context: object;
-  calls: () => string[];
-  stubbed: string[];
-  warnings: string[];
-}
-
-let sandbox: Sandbox;
-
-function isIdentifier(name: string): boolean {
-  return /^[A-Za-z_$][\w$]*$/.test(name) && name !== "default";
-}
-
-/** Replaces every Node builtin with a module that has the real export names and throws when called. */
-function nodeBuiltinStubs(stubbed: Set<string>): Plugin {
-  return {
-    name: "node-builtin-stubs",
-    setup(pluginBuild) {
-      pluginBuild.onResolve({ filter: NODE_BUILTIN }, (args) => ({ path: args.path.replace(/^node:/, ""), namespace: "node-stub" }));
-      pluginBuild.onLoad({ filter: /.*/, namespace: "node-stub" }, async (args) => {
-        stubbed.add(args.path);
-        const real = (await import(`node:${args.path}`)) as Record<string, unknown>;
-        const names = Object.keys(real).filter(isIdentifier);
-        const lines = [
-          `const trap = (label) => function () { (globalThis.__nodeBuiltinCalls ??= []).push(label); throw new Error("Node builtin used in the browser bundle: " + label); };`,
-          ...names.map((name) => `export const ${name} = trap(${JSON.stringify(`${args.path}.${name}`)});`),
-          `export default { ${names.map((name) => `${name}`).join(", ")} };`,
-        ];
-        return { contents: lines.join("\n"), loader: "js" };
-      });
-    },
-  };
-}
+let sandbox: BrowserSandbox<Bundled>;
 
 before(async () => {
-  const stubbed = new Set<string>();
-  const result = await build({
-    entryPoints: [entry],
-    bundle: true,
-    write: false,
-    format: "iife",
-    globalName: "OrbRunBundle",
-    platform: "browser",
-    target: "es2022",
-    logLevel: "silent",
-    plugins: [nodeBuiltinStubs(stubbed)],
-  });
-  assert.equal(result.errors.length, 0, JSON.stringify(result.errors));
-  const code = result.outputFiles?.[0]?.text;
-  assert.ok(code, "esbuild produced the bundle");
-
-  const context = createContext({
-    console,
-    TextEncoder,
-    TextDecoder,
-    URL,
-    AbortController,
-    AbortSignal,
-    setTimeout,
-    clearTimeout,
-    queueMicrotask,
-    performance,
-  });
-  // `structuredClone` is installed from *inside* the context: the host's would build the clones in the
-  // host realm, whose `Object.prototype` is not the sandbox's, and the engine's plain-object checks would
-  // (rightly, for a cross-realm object) refuse them. A browser has one realm, so this is its behaviour.
-  new Script(STRUCTURED_CLONE_IN_REALM, { filename: "structured-clone.js" }).runInContext(context);
-  new Script(code, { filename: "orb-run.browser.js" }).runInContext(context);
-  const bundle = runInContext("OrbRunBundle", context) as Bundled;
-  sandbox = {
-    bundle,
-    context,
-    calls: () => Array.from(runInContext("globalThis.__nodeBuiltinCalls ?? []", context) as string[]),
-    stubbed: [...stubbed].sort(),
-    warnings: result.warnings.map((warning) => warning.text),
-  };
+  sandbox = await buildBrowserSandbox<Bundled>();
 });
 
 test("the sandbox is browser-shaped: none of Node's globals exist in it", () => {
