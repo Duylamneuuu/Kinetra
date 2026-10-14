@@ -25,6 +25,14 @@ export interface LoadSaveFailure {
   atomicityViolation?: boolean;
 }
 
+/**
+ * Message of the preparation failure returned when stop()/start() replaced the runtime while a
+ * loadSave was awaiting (the slot read, a script's prepareRestoreState). The load applied nothing.
+ */
+export function loadSaveSupersededMessage(): string {
+  return "Cannot load save: the runtime was stopped or restarted while the save was loading; nothing was applied";
+}
+
 export function loadSaveFailure(
   phase: LoadSaveFailurePhase,
   error: string,

@@ -40,7 +40,11 @@ import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
 import { preflightEntitySaveEntry } from "./save-entry.js";
-import { loadSaveFailure } from "./save-failure.js";
+import {
+  loadSaveFailure,
+  loadSaveSupersededMessage,
+  type LoadSaveFailure,
+} from "./save-failure.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
 import { resolveStartScene } from "./start-scene.js";
@@ -1683,6 +1687,12 @@ export class PlayerRuntimeController {
     }
   }
 
+  #loadSaveSuperseded(slotId: string): LoadSaveFailure {
+    const error = loadSaveSupersededMessage();
+    this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
+    return loadSaveFailure("preparation", error, slotId);
+  }
+
   async loadSave(options?: {
     slotId?: string;
     envelope?: SaveEnvelope;
@@ -1701,6 +1711,14 @@ export class PlayerRuntimeController {
       return loadSaveFailure("validation", error, options?.slotId);
     }
 
+    // Every await below can be overtaken by stop()/start(), which clear #runtime and swap #scripts.
+    // The load works on the runtime and script host it started with and gives up (structured
+    // failure, nothing applied) once either was replaced, instead of dereferencing a cleared field.
+    const runtime = this.#runtime;
+    const scripts = this.#scripts;
+    const isSuperseded = (): boolean =>
+      this.#runtime !== runtime || this.#scripts !== scripts;
+
     const slotId = options?.slotId ?? "default";
     let rawEnvelope = options?.envelope;
     if (!rawEnvelope) {
@@ -1710,6 +1728,9 @@ export class PlayerRuntimeController {
         const error = `Failed to read save document for slot "${slotId}": ${err instanceof Error ? err.message : String(err)}`;
         this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
         return loadSaveFailure("validation", error, slotId);
+      }
+      if (isSuperseded()) {
+        return this.#loadSaveSuperseded(slotId);
       }
     }
 
@@ -1745,13 +1766,13 @@ export class PlayerRuntimeController {
     }
 
     // Phase 3: Preparation & Target Validation (Preflight: apply nothing if any check fails)
-    if (migratedEnvelope.data?.sceneId !== this.#runtime.sceneId) {
-      const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${this.#runtime.sceneId}"`;
+    if (migratedEnvelope.data?.sceneId !== runtime.sceneId) {
+      const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${runtime.sceneId}"`;
       this.#log("error", "save.restoreFailed", {
         slotId,
         phase: "preparation",
         saveSceneId: migratedEnvelope.data?.sceneId,
-        activeSceneId: this.#runtime.sceneId,
+        activeSceneId: runtime.sceneId,
         error,
       });
       return loadSaveFailure("preparation", error, slotId);
@@ -1785,7 +1806,7 @@ export class PlayerRuntimeController {
     for (const [entityId, entry] of Object.entries(
       migratedEnvelope.data.entities,
     )) {
-      const obj = this.#runtime.getObject(entityId);
+      const obj = runtime.getObject(entityId);
       if (!obj) {
         const error = `Entity "${entityId}" from save does not exist in active scene`;
         this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
@@ -1819,25 +1840,25 @@ export class PlayerRuntimeController {
 
       const gameplay = preflight.gameplay;
       if (gameplay) {
-        if (!this.#scripts.hasScript(entityId)) {
+        if (!scripts.hasScript(entityId)) {
           const error = `Entity "${entityId}" has gameplay save state but no active script`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return loadSaveFailure("preparation", error, slotId);
         }
 
-        if (!this.#scripts.canRestoreScriptState(entityId)) {
+        if (!scripts.canRestoreScriptState(entityId)) {
           const error = `Script on entity "${entityId}" does not support state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return loadSaveFailure("preparation", error, slotId);
         }
 
-        if (!this.#scripts.canPrepareTransactionalRestore(entityId)) {
+        if (!scripts.canPrepareTransactionalRestore(entityId)) {
           const error = `Script on entity "${entityId}" does not support transactional state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return loadSaveFailure("preparation", error, slotId);
         }
 
-        const validation = this.#scripts.validateScriptRestoreState(entityId, gameplay);
+        const validation = scripts.validateScriptRestoreState(entityId, gameplay);
         if (!validation.valid) {
           const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
@@ -1848,14 +1869,20 @@ export class PlayerRuntimeController {
         // has been committed yet, so this is a structured failure rather than an exception.
         let preparedRestore: PreparedScriptRestore;
         try {
-          preparedRestore = await this.#scripts.prepareScriptRestore(entityId, gameplay);
+          preparedRestore = await scripts.prepareScriptRestore(entityId, gameplay);
         } catch (err) {
+          if (isSuperseded()) {
+            return this.#loadSaveSuperseded(slotId);
+          }
           const detail = err instanceof Error ? err.message : String(err);
           const error = `Script on entity "${entityId}" failed to prepare its state restore: ${detail}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
           return loadSaveFailure("preparation", error, slotId);
         }
 
+        if (isSuperseded()) {
+          return this.#loadSaveSuperseded(slotId);
+        }
         preparedScripts.push({
           entityId,
           restore: preparedRestore,
@@ -1878,7 +1905,7 @@ export class PlayerRuntimeController {
 
     const priorScriptStates = new Map<string, Record<string, unknown> | undefined>();
     for (const p of preparedScripts) {
-      const exec = this.#scripts.getExecutionState(p.entityId);
+      const exec = scripts.getExecutionState(p.entityId);
       priorScriptStates.set(
         p.entityId,
         exec?.state ? (structuredClone(exec.state) as Record<string, unknown>) : undefined,
@@ -1996,7 +2023,7 @@ export class PlayerRuntimeController {
 
       // Verify script states
       for (const [entityId, priorState] of priorScriptStates.entries()) {
-        const currentExec = this.#scripts.getExecutionState(entityId);
+        const currentExec = scripts.getExecutionState(entityId);
         const currentState = currentExec?.state;
         if (priorState !== undefined) {
           if (!isEqualJson(currentState, priorState)) {
