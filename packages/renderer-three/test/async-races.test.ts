@@ -271,3 +271,68 @@ test("reloadAsset: an attach of another asset that started during the reload is 
   assert.equal(runtime.instanceCount, 1);
   assert.equal(object.children.length, 1, "the reload must not leave a second model scene attached");
 });
+
+for (const order of ["first-then-second", "second-then-first"] as const) {
+  test(`reloadAsset: two overlapping reloads of one asset both apply (${order}) and leak no instance`, async () => {
+    const runtime = await runtimeWithLoadedModel("model_a");
+    const object = runtime.getObject(entityId)!;
+    const first = new GatedResolver();
+    const second = new GatedResolver();
+
+    const reloading1 = runtime.reloadAsset("model_a", first);
+    await first.until(1);
+    const reloading2 = runtime.reloadAsset("model_a", second);
+    await second.until(1);
+
+    const releaseFirst = async () => first.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+    const releaseSecond = async () => second.pending[0]!.release(await createSyntheticGlb({ size: [3, 3, 3] }));
+    let result1;
+    let result2;
+    if (order === "first-then-second") {
+      await releaseFirst();
+      result1 = await reloading1;
+      await releaseSecond();
+      result2 = await reloading2;
+    } else {
+      await releaseSecond();
+      result2 = await reloading2;
+      await releaseFirst();
+      result1 = await reloading1;
+    }
+
+    assert.equal(result1.success, true);
+    assert.equal(result2.success, true);
+    assert.deepEqual(result1.affectedEntities, [entityId]);
+    assert.deepEqual(result2.affectedEntities, [entityId], "the overlapping reload must not be filtered out");
+    assert.equal(runtime.instanceCount, 1);
+    assert.equal(object.children.length, 1, "overlapping reloads must leave exactly one model scene");
+    assert.equal(runtime.getInstance(entityId)?.template.refCount, 1);
+  });
+}
+
+test("reloadAsset: an attach between two overlapping reloads still wins over the later reload", async () => {
+  const runtime = await runtimeWithLoadedModel("model_a");
+  const object = runtime.getObject(entityId)!;
+  const first = new GatedResolver();
+  const second = new GatedResolver();
+  const attachResolver = new GatedResolver();
+
+  const reloading1 = runtime.reloadAsset("model_a", first);
+  await first.until(1);
+  const reloading2 = runtime.reloadAsset("model_a", second);
+  await second.until(1);
+
+  first.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  await reloading1;
+  const attaching = runtime.attachModel(entityId, "model_b", attachResolver);
+  await attachResolver.until(1);
+  second.pending[0]!.release(await createSyntheticGlb({ size: [3, 3, 3] }));
+  const result2 = await reloading2;
+  attachResolver.pending[0]!.release(await createSyntheticGlb({ size: [4, 4, 4] }));
+  await attaching;
+
+  assert.deepEqual(result2.affectedEntities, [], "an attach that started after the first reload owns the entity");
+  assert.equal(runtime.getInstance(entityId)?.assetId, "model_b");
+  assert.equal(runtime.instanceCount, 1);
+  assert.equal(object.children.length, 1);
+});
