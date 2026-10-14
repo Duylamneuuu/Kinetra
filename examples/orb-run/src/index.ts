@@ -20,3 +20,4 @@ export * from "./replay.js";
 export * from "./replay-fixtures.js";
 export * from "./level-check.js";
 export * from "./fuzz.js";
+export * from "./levels.js";
