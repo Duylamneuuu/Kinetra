@@ -285,6 +285,8 @@ export class ThreeSceneRuntime {
   #animationEvents = new AnimationEventDispatcher();
   /** Bumped by every attach/detach so an async load can tell it was superseded. */
   #modelLoadTokens = new Map<string, number>();
+  /** Entity -> the load token its most recent reloadAsset installed (lets overlapping reloads coexist). */
+  #reloadTokens = new Map<string, number>();
   #disposed = false;
 
 
@@ -618,10 +620,12 @@ export class ThreeSceneRuntime {
 
     affectedEntities = requestedEntities.filter((entityId) => {
       const metadata = this.#models.get(entityId);
-      return (
-        metadata?.assetId === assetId &&
-        (this.#modelLoadTokens.get(entityId) ?? 0) === tokensAtStart.get(entityId)
-      );
+      if (metadata?.assetId !== assetId) return false;
+      const current = this.#modelLoadTokens.get(entityId) ?? 0;
+      // Unmoved token: nothing touched the entity. A token that equals the one a *reload*
+      // installed means an overlapping reload of the same asset finished first; this (newer or
+      // slower) reload still applies. Any other move is an attach/detach and wins over us.
+      return current === tokensAtStart.get(entityId) || current === this.#reloadTokens.get(entityId);
     });
 
     for (const entityId of affectedEntities) {
@@ -651,7 +655,7 @@ export class ThreeSceneRuntime {
 
       // 0. The reload owns the entity from here on: a loadModels/attachModel still waiting on its
       // asset must not install a second instance over (and orphan) the one built below.
-      this.#beginModelLoad(entityId);
+      this.#reloadTokens.set(entityId, this.#beginModelLoad(entityId));
 
       // 1. Create new instance from newTemplate
       const newInstance = newTemplate.createInstance(entityId);
