@@ -130,6 +130,10 @@ semantic name, never by mesh or slot index. Names come from
 - `reloadAsset` carries overrides onto the new instance. Targets the new asset
   no longer has are dropped and reported (`droppedMorphOverrides`, logged as
   `animation.morphOverridesDropped`) instead of failing the reload.
+  The same holds for IK chains (`droppedIkChains`) and root motion
+  (`droppedRootMotion`); the asset hot-reload coordinator re-emits all three as an
+  `asset.runtimeReloadDegraded` event and on the transaction, and the player bridge
+  returns them in the `model.reloadAsset` reply.
 - Bridge commands: `animation.setMorphWeights { entityId, weights }` and
   `animation.clearMorphWeights { entityId, names? }`. Game scripts reach the
   same path through `animation.setMorphWeights` / `clearMorphWeights`.

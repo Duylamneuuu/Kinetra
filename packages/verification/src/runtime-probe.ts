@@ -1,6 +1,7 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 
 import type {
+  ReloadAssetResult,
   RuntimeInput,
   RuntimeLog,
   RuntimeMetrics,
@@ -145,9 +146,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     await this.#requireHost("updateAsset")(assetId, dataBase64, options);
   }
 
-  async reloadAsset(
-    assetId: string,
-  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+  async reloadAsset(assetId: string): Promise<ReloadAssetResult> {
     if (typeof this.#host.reloadAsset === "function") {
       return this.#host.reloadAsset(assetId);
     }

@@ -37,6 +37,7 @@ import { createScriptTransformService } from "./script-transform.js";
 import { decidePlayerInput } from "./input-event.js";
 import { compareCodeUnits } from "./keyed-record.js";
 import { buildAssetQueryById, captureEntityStates } from "./keyed-snapshots.js";
+import { reloadDegradationFields, reloadDegradationLogs, type ReloadDegradation } from "./reload-degradation.js";
 import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
@@ -1590,7 +1591,7 @@ export class PlayerRuntimeController {
 
   async reloadAsset(
     assetId: string,
-  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }> {
+  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string } & ReloadDegradation> {
     if (!this.#runtime) {
       const error = "Runtime is not running";
       this.#log("error", "asset.runtimeReloadFailed", { assetId, error });
@@ -1602,11 +1603,8 @@ export class PlayerRuntimeController {
 
     if (result.success) {
       this.#assetStatuses.set(assetId, "imported");
-      if (result.droppedMorphOverrides) {
-        this.#log("warning", "animation.morphOverridesDropped", {
-          assetId,
-          entities: result.droppedMorphOverrides,
-        });
+      for (const entry of reloadDegradationLogs(assetId, result)) {
+        this.#log("warning", entry.message, entry.data);
       }
       this.#log("info", "asset.runtimeReloadSucceeded", {
         assetId,
@@ -1626,6 +1624,7 @@ export class PlayerRuntimeController {
       success: result.success,
       affectedEntities: result.affectedEntities,
       ...(result.error ? { error: result.error } : {}),
+      ...reloadDegradationFields(result),
     };
   }
 

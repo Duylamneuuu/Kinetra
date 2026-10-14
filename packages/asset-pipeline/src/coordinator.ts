@@ -6,6 +6,27 @@ import type {
   ReimportEvent,
 } from "./reimport.js";
 import type { SourceAssetWatcher } from "./watcher.js";
+import type { AssetDiagnostic } from "./types.js";
+
+/**
+ * What a runtime reports it could not carry over when it swapped a reloaded asset in. A reload can
+ * succeed and still silently switch features off (the root bone is gone, an IK chain no longer
+ * exists); these maps make that visible to the agent layer. Every field is absent when empty.
+ */
+export interface RuntimeReloadDegradation {
+  /** Entity -> why root motion could not be re-enabled on the reloaded asset (e.g. root bone gone). */
+  droppedRootMotion?: Record<string, string> | undefined;
+  /** Entity -> IK chains with active targets the reloaded asset no longer supports. */
+  droppedIkChains?: Record<string, string[]> | undefined;
+  /** Entity -> morph overrides the reloaded asset no longer supports. */
+  droppedMorphOverrides?: Record<string, string[]> | undefined;
+}
+
+export interface RuntimeReloadResult extends RuntimeReloadDegradation {
+  success: boolean;
+  affectedEntities: string[];
+  error?: string | undefined;
+}
 
 export interface RuntimeReloadTarget {
   updateAsset(
@@ -13,14 +34,12 @@ export interface RuntimeReloadTarget {
     dataBase64: string,
     options?: { fingerprint?: string; sourceHash?: string },
   ): Promise<unknown>;
-  reloadAsset(
-    assetId: string,
-  ): Promise<{ success: boolean; affectedEntities: string[]; error?: string }>;
+  reloadAsset(assetId: string): Promise<RuntimeReloadResult>;
   queryEntities?(): Promise<Array<{ entityId: string; model?: { assetId?: string | undefined } | undefined }>>;
   queryState?(): Promise<any>;
 }
 
-export interface AssetHotReloadTransaction {
+export interface AssetHotReloadTransaction extends RuntimeReloadDegradation {
   rootAssetId: string;
   oldSourceHash?: string | undefined;
   newSourceHash: string;
@@ -40,6 +59,44 @@ export interface AssetHotReloadTransaction {
   runtimeReloadedEntityIds: string[];
   runtimeUnchangedEntityIds: string[];
   error?: string | undefined;
+}
+
+/**
+ * Own-property-safe merge of per-entity maps from a runtime (an entity id may be `__proto__`).
+ * The runtime is a plugin boundary, so entries whose value `accept` rejects are skipped rather than
+ * thrown on.
+ */
+function mergeEntityMaps<T>(
+  into: Map<string, T>,
+  from: unknown,
+  accept: (value: unknown) => T | undefined,
+): void {
+  if (typeof from !== "object" || from === null || Array.isArray(from)) return;
+  for (const key of Object.keys(from)) {
+    const value = accept(Object.getOwnPropertyDescriptor(from, key)?.value);
+    if (value !== undefined) into.set(key, value);
+  }
+}
+
+function acceptReason(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function acceptNames(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const names = value.filter((n): n is string => typeof n === "string");
+  return names.length > 0 ? names : undefined;
+}
+
+function entityMapToRecord<T>(map: Map<string, T>): Record<string, T> | undefined {
+  return map.size > 0 ? (Object.fromEntries(map) as Record<string, T>) : undefined;
+}
+
+/** Per-entity degradation reports collected while publishing one batch of assets to the runtime. */
+interface ReloadDegradationAccumulator {
+  droppedRootMotion: Map<string, string>;
+  droppedIkChains: Map<string, string[]>;
+  droppedMorphOverrides: Map<string, string[]>;
 }
 
 export interface AssetHotReloadCoordinatorOptions {
@@ -238,6 +295,9 @@ export class AssetHotReloadCoordinator {
 
     const runtimeReloadedEntityIds: string[] = [];
     const runtimeUnchangedEntityIds: string[] = [];
+    const droppedRootMotion = new Map<string, string>();
+    const droppedIkChains = new Map<string, string[]>();
+    const droppedMorphOverrides = new Map<string, string[]>();
 
     // Query entities before reload to know unaffected / unchanged entities if supported
     let allEntityIds: string[] = [];
@@ -278,7 +338,7 @@ export class AssetHotReloadCoordinator {
       for (const staleId of this.#runtimeStale) {
         if (!publishIds.includes(staleId)) publishIds.push(staleId);
       }
-      await this.#publishToRuntime(publishIds, runtimeReloadedEntityIds);
+      await this.#publishToRuntime(publishIds, runtimeReloadedEntityIds, { droppedRootMotion, droppedIkChains, droppedMorphOverrides });
     }
 
     // Determine unchanged entities
@@ -303,6 +363,11 @@ export class AssetHotReloadCoordinator {
       runtimeReloadedEntityIds,
       runtimeUnchangedEntityIds,
       error: rebuildResult.error,
+      ...(entityMapToRecord(droppedRootMotion) ? { droppedRootMotion: entityMapToRecord(droppedRootMotion) } : {}),
+      ...(entityMapToRecord(droppedIkChains) ? { droppedIkChains: entityMapToRecord(droppedIkChains) } : {}),
+      ...(entityMapToRecord(droppedMorphOverrides)
+        ? { droppedMorphOverrides: entityMapToRecord(droppedMorphOverrides) }
+        : {}),
     };
 
     this.#recordTransaction(tx);
@@ -310,7 +375,11 @@ export class AssetHotReloadCoordinator {
     return tx;
   }
 
-  async #publishToRuntime(assetIds: readonly string[], runtimeReloadedEntityIds: string[]): Promise<void> {
+  async #publishToRuntime(
+    assetIds: readonly string[],
+    runtimeReloadedEntityIds: string[],
+    dropped: ReloadDegradationAccumulator,
+  ): Promise<void> {
     if (!this.#runtimeTarget) return;
     for (const rebuiltId of assetIds) {
       const updatedRecord = this.#database.get(rebuiltId);
@@ -366,6 +435,54 @@ export class AssetHotReloadCoordinator {
             fingerprint: updatedRecord.fingerprint,
             affectedAssetIds: reloadRes.affectedEntities,
           });
+          // The reload worked but the runtime could not keep some features alive on the new
+          // asset. Surface it as a warning event and on the transaction instead of staying silent.
+          const degradedRoot = new Map<string, string>();
+          const degradedIk = new Map<string, string[]>();
+          const degradedMorph = new Map<string, string[]>();
+          mergeEntityMaps(degradedRoot, reloadRes.droppedRootMotion, acceptReason);
+          mergeEntityMaps(degradedIk, reloadRes.droppedIkChains, acceptNames);
+          mergeEntityMaps(degradedMorph, reloadRes.droppedMorphOverrides, acceptNames);
+          if (degradedRoot.size + degradedIk.size + degradedMorph.size > 0) {
+            for (const [k, v] of degradedRoot) dropped.droppedRootMotion.set(k, v);
+            for (const [k, v] of degradedIk) dropped.droppedIkChains.set(k, v);
+            for (const [k, v] of degradedMorph) dropped.droppedMorphOverrides.set(k, v);
+            const diagnostics: AssetDiagnostic[] = [];
+            for (const [entityId, reason] of degradedRoot) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.rootMotionDropped",
+                message: `Root motion on entity "${entityId}" was switched off by the reload of "${rebuiltId}": ${reason}`,
+                path: entityId,
+              });
+            }
+            for (const [entityId, chains] of degradedIk) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.ikChainsDropped",
+                message: `IK chains [${chains.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
+                path: entityId,
+              });
+            }
+            for (const [entityId, names] of degradedMorph) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.morphOverridesDropped",
+                message: `Morph overrides [${names.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
+                path: entityId,
+              });
+            }
+            this.#emit({
+              type: "asset.runtimeReloadDegraded",
+              assetId: rebuiltId,
+              fingerprint: updatedRecord.fingerprint,
+              affectedAssetIds: reloadRes.affectedEntities,
+              diagnostics,
+              ...(degradedRoot.size > 0 ? { droppedRootMotion: Object.fromEntries(degradedRoot) } : {}),
+              ...(degradedIk.size > 0 ? { droppedIkChains: Object.fromEntries(degradedIk) } : {}),
+              ...(degradedMorph.size > 0 ? { droppedMorphOverrides: Object.fromEntries(degradedMorph) } : {}),
+            });
+          }
         } else {
           this.#emit({
             type: "asset.runtimeReloadFailed",
@@ -387,7 +504,10 @@ export class AssetHotReloadCoordinator {
     if (!this.#runtimeTarget || this.#runtimeStale.size === 0) return null;
     const ids = [...this.#runtimeStale];
     const runtimeReloadedEntityIds: string[] = [];
-    await this.#publishToRuntime(ids, runtimeReloadedEntityIds);
+    const droppedRootMotion = new Map<string, string>();
+    const droppedIkChains = new Map<string, string[]>();
+    const droppedMorphOverrides = new Map<string, string[]>();
+    await this.#publishToRuntime(ids, runtimeReloadedEntityIds, { droppedRootMotion, droppedIkChains, droppedMorphOverrides });
 
     const rootId = ids[0] as string;
     const record = this.#database.get(rootId);
@@ -405,6 +525,11 @@ export class AssetHotReloadCoordinator {
       runtimeReloadedEntityIds,
       runtimeUnchangedEntityIds: [],
       error: this.#runtimeStale.size > 0 ? `runtime publish still failing for: ${[...this.#runtimeStale].join(", ")}` : undefined,
+      ...(entityMapToRecord(droppedRootMotion) ? { droppedRootMotion: entityMapToRecord(droppedRootMotion) } : {}),
+      ...(entityMapToRecord(droppedIkChains) ? { droppedIkChains: entityMapToRecord(droppedIkChains) } : {}),
+      ...(entityMapToRecord(droppedMorphOverrides)
+        ? { droppedMorphOverrides: entityMapToRecord(droppedMorphOverrides) }
+        : {}),
     };
     this.#recordTransaction(tx);
     return tx;
