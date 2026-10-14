@@ -90,6 +90,25 @@ test("a property the entity does not carry is listed as absent with its default"
   );
 });
 
+test("a RigidBody without a type shows the fixed default, and mass only binds a dynamic body", () => {
+  const model = buildInspector(entity({ RigidBody: { mass: 0 } }));
+  const type = row(model, "RigidBody", "type");
+  assert.equal(type.present, false);
+  assert.equal(type.default, "fixed");
+  // mass 0 is fine for the implicit fixed body: the row carries no issue even though exclusiveMin is 0.
+  assert.equal(row(model, "RigidBody", "mass").exclusiveMin, 0);
+  assert.equal(row(model, "RigidBody", "mass").issue, undefined);
+  assert.deepEqual(validateBuiltInComponent("RigidBody", { mass: 0 }), []);
+  // The same mass on an explicit dynamic body is rejected and the issue lands on the mass row.
+  const dynamic = buildInspector(entity({ RigidBody: { type: "dynamic", mass: 0 } }));
+  assert.equal(row(dynamic, "RigidBody", "mass").issue?.code, "component.RigidBody.mass.invalid");
+  // The dynamic check is case-insensitive like the physics factory; kinematic bodies ignore mass.
+  const upper = buildInspector(entity({ RigidBody: { type: "Dynamic", mass: 0 } }));
+  assert.equal(row(upper, "RigidBody", "mass").issue?.code, "component.RigidBody.mass.invalid");
+  const kinematic = buildInspector(entity({ RigidBody: { type: "kinematic", mass: 0 } }));
+  assert.equal(row(kinematic, "RigidBody", "mass").issue, undefined);
+});
+
 test("a component without a schema is shown raw and every row is flagged unknown", () => {
   const model = buildInspector(entity({ Stats: { hp: 10, name: "orc", boss: true, tags: ["a"], nested: { x: 1 } } }));
   const section = model.sections[0];
