@@ -119,6 +119,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: 2.3.1
         version: 2.3.1
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
 
   examples/reference-game:
     dependencies:
