@@ -301,6 +301,57 @@ export function findRootBoneName(clip: THREE.AnimationClip, preferredName?: stri
   return undefined;
 }
 
+type CubicSplineFactory = { isInterpolantFactoryMethodGLTFCubicSpline?: boolean };
+
+/** True for a track GLTFLoader built from a glTF CUBICSPLINE sampler (it replaces createInterpolant). */
+function hasCubicSplineFactory(track: THREE.KeyframeTrack): boolean {
+  const factory = (track as unknown as { createInterpolant?: CubicSplineFactory }).createInterpolant;
+  return factory?.isInterpolantFactoryMethodGLTFCubicSpline === true;
+}
+
+/**
+ * glTF CUBICSPLINE tracks store three numbers-per-component for every key (in-tangent, value,
+ * out-tangent), so `values.length === times.length * 3 * valueSize`, and `getInterpolation()`
+ * reports `undefined` for them. The layout is checked as well as the loader's factory flag because
+ * a clip that was copied or serialised keeps the 3x layout but loses the flag.
+ */
+function isCubicSplineTrack(track: THREE.KeyframeTrack, valueSize: number): boolean {
+  if (hasCubicSplineFactory(track)) return true;
+  return track.times.length > 0 && track.values.length === track.times.length * valueSize * 3;
+}
+
+/** Offset of key `index`'s VALUE in `track.values` (cubic keys are [in-tangent, value, out-tangent]). */
+function keyValueOffset(index: number, valueSize: number, cubic: boolean): number {
+  return cubic ? (index * 3 + 1) * valueSize : index * valueSize;
+}
+
+function unsupportedInterpolationDiagnostics(track: THREE.KeyframeTrack, valueSize: number): RootMotionDiagnostics {
+  return {
+    code: "animation.rootMotion.unsupportedInterpolation",
+    message: `Track "${track.name}" uses glTF CUBICSPLINE interpolation (${track.values.length} values for ${track.times.length} keys: in-tangent, value and out-tangent of ${valueSize} numbers each per key), which root motion extraction cannot sample`,
+    hint: "Bake the clip to LINEAR keyframes (resample it in Blender or glTF-Transform) before importing",
+  };
+}
+
+/**
+ * Copies a track without going through `KeyframeTrack.clone()`, which re-applies
+ * `getInterpolation()` (undefined for glTF CUBICSPLINE) and so would silently turn a cubic track
+ * into a LINEAR one over tangent-laden data. The loader's cubic factory is carried over.
+ */
+function cloneTrackKeepingInterpolation(track: THREE.KeyframeTrack): THREE.KeyframeTrack {
+  if (!hasCubicSplineFactory(track)) return track.clone();
+  const Ctor = track.constructor as new (
+    name: string,
+    times: ArrayLike<number>,
+    values: ArrayLike<number>,
+  ) => THREE.KeyframeTrack;
+  const copy = new Ctor(track.name, track.times.slice(), track.values.slice());
+  (copy as unknown as { createInterpolant: unknown }).createInterpolant = (
+    track as unknown as { createInterpolant: unknown }
+  ).createInterpolant;
+  return copy;
+}
+
 /**
  * Creates an in-place version of the clip where visual skeleton root displacement
  * is stripped according to RootMotionMode, leaving only in-place local motion (e.g. Y bobbing).
@@ -319,7 +370,14 @@ export function stripVisualRootDisplacement(
   const rotTrackName = `${rootBoneName}.quaternion`;
 
   for (const track of clip.tracks) {
-    if (track.name === posTrackName && track instanceof THREE.VectorKeyframeTrack) {
+    if (track.name === posTrackName && isCubicSplineTrack(track, 3)) {
+      // A glTF CUBICSPLINE root track (3 numbers per component per key) cannot be locked in place
+      // key by key: keep it verbatim rather than write garbage. extractRootMotionFromClip rejects
+      // such clips before it gets here.
+      inPlaceTracks.push(cloneTrackKeepingInterpolation(track));
+    } else if (track.name === rotTrackName && mode === "extract-xz-yaw" && isCubicSplineTrack(track, 4)) {
+      inPlaceTracks.push(cloneTrackKeepingInterpolation(track));
+    } else if (track.name === posTrackName && track instanceof THREE.VectorKeyframeTrack) {
       const times = new Float32Array(track.times);
       const values = new Float32Array(track.values.length);
       const firstX = track.values[0] ?? 0;
@@ -393,7 +451,7 @@ export function stripVisualRootDisplacement(
       }
       inPlaceTracks.push(new THREE.QuaternionKeyframeTrack(rotTrackName, times, values, track.getInterpolation()));
     } else {
-      inPlaceTracks.push(track.clone());
+      inPlaceTracks.push(cloneTrackKeepingInterpolation(track));
     }
   }
 
@@ -415,15 +473,21 @@ export function stripVisualRootDisplacement(
 function yawOfTrackAt(track: THREE.QuaternionKeyframeTrack, time: number): number {
   const count = track.times.length;
   if (count === 0) return 0;
-  const keyQuat = (index: number, out: THREE.Quaternion): THREE.Quaternion =>
-    out
+  // glTF CUBICSPLINE keys are [in-tangent, value, out-tangent]: read the value (the yaw between keys is
+  // then a slerp approximation; extractRootMotionFromClip rejects cubic tracks, so only the
+  // inspection report gets here).
+  const cubic = isCubicSplineTrack(track, 4);
+  const keyQuat = (index: number, out: THREE.Quaternion): THREE.Quaternion => {
+    const offset = keyValueOffset(index, 4, cubic);
+    return out
       .set(
-        track.values[index * 4 + 0] ?? 0,
-        track.values[index * 4 + 1] ?? 0,
-        track.values[index * 4 + 2] ?? 0,
-        track.values[index * 4 + 3] ?? 1,
+        track.values[offset + 0] ?? 0,
+        track.values[offset + 1] ?? 0,
+        track.values[offset + 2] ?? 0,
+        track.values[offset + 3] ?? 1,
       )
       .normalize();
+  };
 
   const q = new THREE.Quaternion();
   if (count === 1 || time <= track.times[0]!) {
@@ -482,11 +546,11 @@ function mergedKeyTimes(
 
 function positionOfTrackAt(track: THREE.VectorKeyframeTrack, time: number): [number, number, number] {
   const count = track.times.length;
-  const at = (index: number): [number, number, number] => [
-    track.values[index * 3 + 0] ?? 0,
-    track.values[index * 3 + 1] ?? 0,
-    track.values[index * 3 + 2] ?? 0,
-  ];
+  const cubic = isCubicSplineTrack(track, 3);
+  const at = (index: number): [number, number, number] => {
+    const offset = keyValueOffset(index, 3, cubic);
+    return [track.values[offset + 0] ?? 0, track.values[offset + 1] ?? 0, track.values[offset + 2] ?? 0];
+  };
   if (count === 1 || time <= track.times[0]!) return at(0);
   if (time >= track.times[count - 1]!) return at(count - 1);
   let high = 1;
@@ -558,6 +622,14 @@ export function extractRootMotionFromClip(
     return { success: false, error: diag.message, diagnostics: diag };
   }
 
+  // glTF CUBICSPLINE tracks carry tangents between the values; sampling them as plain keys would read
+  // the tangents as positions (and `values.length >= times * 3` below would not notice). Refuse with a
+  // structured error rather than produce a wrong root-motion table.
+  if (isCubicSplineTrack(posTrack, 3)) {
+    const diag = unsupportedInterpolationDiagnostics(posTrack, 3);
+    return { success: false, error: diag.message, diagnostics: diag };
+  }
+
   // Validate sample times (monotonicity and finiteness)
   for (let i = 0; i < posTrack.times.length; i++) {
     const t = posTrack.times[i]!;
@@ -586,6 +658,11 @@ export function extractRootMotionFromClip(
   const rotTrack = clip.tracks.find(
     (t) => t.name === rotTrackName && t instanceof THREE.QuaternionKeyframeTrack,
   ) as THREE.QuaternionKeyframeTrack | undefined;
+
+  if (rotTrack && isCubicSplineTrack(rotTrack, 4)) {
+    const diag = unsupportedInterpolationDiagnostics(rotTrack, 4);
+    return { success: false, error: diag.message, diagnostics: diag };
+  }
 
   if (rotTrack) {
     // The rotation track is held to the same contract as the position track: finite, non-decreasing
@@ -710,16 +787,13 @@ export function inspectClipRootMotion(
   }
 
   const count = posTrack.times.length;
-  const p0: [number, number, number] = [
-    posTrack.values[0] ?? 0,
-    posTrack.values[1] ?? 0,
-    posTrack.values[2] ?? 0,
-  ];
-  const pLast: [number, number, number] = [
-    posTrack.values[(count - 1) * 3 + 0] ?? 0,
-    posTrack.values[(count - 1) * 3 + 1] ?? 0,
-    posTrack.values[(count - 1) * 3 + 2] ?? 0,
-  ];
+  const posCubic = isCubicSplineTrack(posTrack, 3);
+  const keyPos = (index: number): [number, number, number] => {
+    const offset = keyValueOffset(index, 3, posCubic);
+    return [posTrack.values[offset + 0] ?? 0, posTrack.values[offset + 1] ?? 0, posTrack.values[offset + 2] ?? 0];
+  };
+  const p0 = keyPos(0);
+  const pLast = keyPos(count - 1);
 
   const netDisplacement: [number, number, number] = [
     pLast[0] - p0[0],
@@ -729,10 +803,9 @@ export function inspectClipRootMotion(
 
   let maxDisplacementXZ = 0;
   for (let i = 0; i < count; i++) {
-    const x = posTrack.values[i * 3 + 0] ?? 0;
-    const z = posTrack.values[i * 3 + 2] ?? 0;
-    const dx = x - p0[0];
-    const dz = z - p0[2];
+    const key = keyPos(i);
+    const dx = key[0] - p0[0];
+    const dz = key[2] - p0[2];
     const dist = Math.hypot(dx, dz);
     if (dist > maxDisplacementXZ) {
       maxDisplacementXZ = dist;
@@ -764,9 +837,14 @@ export function inspectClipRootMotion(
   // or if max deviation exceeds 0.5m.
   const isLocomotion = netXZ > 0.1 || maxDisplacementXZ > 0.5;
   const classification = isLocomotion ? "locomotion" : "in-place";
-  const reason = isLocomotion
+  const baseReason = isLocomotion
     ? `Net XZ displacement is ${netXZ.toFixed(4)}m (max deviation ${maxDisplacementXZ.toFixed(4)}m), carrying meaningful locomotion translation`
     : `Net XZ displacement is ${netXZ.toFixed(4)}m (max deviation ${maxDisplacementXZ.toFixed(4)}m), characteristic of an in-place cycle (treadmill walk / pelvic oscillation)`;
+  const cubicNote =
+    posCubic || (rotTrack !== undefined && isCubicSplineTrack(rotTrack, 4))
+      ? " (CUBICSPLINE track: key values read, tangents ignored; root motion extraction needs the clip baked to LINEAR)"
+      : "";
+  const reason = `${baseReason}${cubicNote}`;
 
   return {
     clipName: clip.name,
