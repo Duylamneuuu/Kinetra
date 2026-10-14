@@ -1,6 +1,14 @@
 import type { ProjectDocument } from "@kinetra/project-model";
 
-import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_EVENT, ORB_RUN_ORB_IDS, ORB_RUN_WALL_COMPONENT } from "./ids.js";
+import {
+  ORB_RUN_ACTION,
+  ORB_RUN_ENTITY,
+  ORB_RUN_EVENT,
+  ORB_RUN_ORB_IDS,
+  ORB_RUN_SLOW_ZONE_COMPONENT,
+  ORB_RUN_STOWED_Y,
+  ORB_RUN_WALL_COMPONENT,
+} from "./ids.js";
 import {
   captureOrbRunSave,
   orbRunAnimator,
@@ -20,6 +28,7 @@ import {
 } from "./replay.js";
 import type { HeadlessSceneSimulation, Vec3 } from "./simulation.js";
 import { circleHitsWall, type OrbRunWall } from "./walls.js";
+import { slowZoneMultiplierAt, type OrbRunSlowZone } from "./zones.js";
 
 /**
  * Seeded input fuzzing for Orb Run.
@@ -145,6 +154,7 @@ export const ORB_RUN_INVARIANTS = [
   "win_preconditions",
   "player_in_arena",
   "player_clear_of_walls",
+  "player_speed_bound",
   "static_entities_still",
   "orbs_stowed_when_collected",
   "positions_finite",
@@ -156,8 +166,7 @@ export const ORB_RUN_INVARIANTS = [
 export type OrbRunInvariant = (typeof ORB_RUN_INVARIANTS)[number];
 
 const EPSILON = 1e-6;
-/** Where `OrbRunOrb` puts a collected orb (its `HIDDEN_Y`): straight down, out of sight. */
-const ORB_STOWED_Y = -10;
+const ORB_STOWED_Y = ORB_RUN_STOWED_Y;
 
 function approx(a: number, b: number): boolean {
   return Math.abs(a - b) <= EPSILON;
@@ -184,6 +193,33 @@ function readAuthoredWalls(simulation: HeadlessSceneSimulation, positions: Recor
 }
 
 /**
+ * Slow zones as an observer sees them: entities whose authored `OrbRunSlowZone` component is well formed, centred
+ * where the simulation started. Malformed ones are skipped here (`readOrbRunSlowZones` rejects them when the game
+ * starts, so a running game has none).
+ */
+function readAuthoredSlowZones(simulation: HeadlessSceneSimulation, positions: Record<string, Vec3>): OrbRunSlowZone[] {
+  const zones: OrbRunSlowZone[] = [];
+  for (const [entityId, position] of Object.entries(positions)) {
+    const data = simulation.getAuthoredComponent(entityId, ORB_RUN_SLOW_ZONE_COMPONENT);
+    if (typeof data !== "object" || data === null || Array.isArray(data)) continue;
+    const { radius, speedMultiplier } = data as Record<string, unknown>;
+    if (typeof radius !== "number" || !Number.isFinite(radius) || !(radius > 0)) continue;
+    if (typeof speedMultiplier !== "number" || !(speedMultiplier > 0) || speedMultiplier > 1) continue;
+    zones.push({ entityId, x: position[0], z: position[2], radius, speedMultiplier });
+  }
+  return zones;
+}
+
+export interface OrbRunInvariantMonitorOptions {
+  maxViolations?: number;
+  /**
+   * The mud the speed invariant (`player_speed_bound`) holds the game to. Defaults to the zones authored in the
+   * observed project; pass the *intended* level to prove a game that ignores (or mis-applies) its mud is caught.
+   */
+  slowZones?: readonly OrbRunSlowZone[];
+}
+
+/**
  * Checks the rules of Orb Run after *every* fixed step of a simulation started with `startOrbRunSimulation`, from
  * outside, using only what a player or an acceptance manifest can observe. Violations are collected (capped) instead
  * of thrown, so one bad step still reports the next.
@@ -198,16 +234,22 @@ export class OrbRunInvariantMonitor {
   readonly #initialPositions: Record<string, Vec3>;
   readonly #arena: number;
   readonly #walls: OrbRunWall[];
+  readonly #slowZones: readonly OrbRunSlowZone[];
+  readonly #playerSpeed: number;
   readonly #timeLimit: number;
   #previous: OrbRunSummary;
+  #revision: number;
   #stop: (() => void) | undefined;
 
-  constructor(simulation: HeadlessSceneSimulation, options: { maxViolations?: number } = {}) {
+  constructor(simulation: HeadlessSceneSimulation, options: OrbRunInvariantMonitorOptions = {}) {
     this.#simulation = simulation;
     this.#limit = options.maxViolations ?? 50;
     this.#initialPositions = simulation.positions();
     this.#walls = readAuthoredWalls(simulation, this.#initialPositions);
+    this.#slowZones = options.slowZones ?? readAuthoredSlowZones(simulation, this.#initialPositions);
     const rules = readOrbRunRules(simulation);
+    this.#playerSpeed = rules.playerSpeed;
+    this.#revision = simulation.stateRevision;
     this.#arena = rules.arenaHalfExtent;
     this.#timeLimit = rules.timeLimitSeconds;
     this.#previous = summarizeOrbRun(simulation);
@@ -234,6 +276,10 @@ export class OrbRunInvariantMonitor {
     const previous = this.#previous;
     const current = summarizeOrbRun(simulation);
     this.checked += 1;
+    // A step bumps the state revision by exactly one. More means something else (a restore) changed the state since
+    // the last check, so the distance between the two observations is not a speed.
+    const plainStep = simulation.stateRevision - this.#revision === 1;
+    this.#revision = simulation.stateRevision;
 
     // Status only ever moves playing -> won|lost, and a finished run is frozen.
     if (previous.status !== "playing") {
@@ -324,6 +370,20 @@ export class OrbRunInvariantMonitor {
     // Walls: the player's circle never overlaps one (walls are authored data, so this holds for any level an agent builds).
     if (finite && circleHitsWall(this.#walls, current.player[0], current.player[2])) {
       this.#report("player_clear_of_walls", `player at ${JSON.stringify(current.player)} overlaps a wall`);
+    }
+
+    // Speed: in one step the player covers at most playerSpeed x the multiplier of the zone the step *started* in
+    // (the rule the player script follows); walls and the arena edge only ever shorten it.
+    if (finite && plainStep && this.#previous.player.every((value) => Number.isFinite(value))) {
+      const multiplier = slowZoneMultiplierAt(this.#slowZones, this.#previous.player[0], this.#previous.player[2]);
+      const limit = this.#playerSpeed * multiplier * simulation.fixedDeltaSeconds;
+      const moved = Math.hypot(current.player[0] - this.#previous.player[0], current.player[2] - this.#previous.player[2]);
+      if (moved > limit + EPSILON) {
+        this.#report(
+          "player_speed_bound",
+          `player moved ${moved} m in one step, at most ${limit} m allowed (${this.#playerSpeed} m/s x ${multiplier})`,
+        );
+      }
     }
 
     // Clock: elapsed + remaining is the limit until it runs out; the clock only runs while playing.

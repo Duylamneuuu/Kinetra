@@ -35,11 +35,22 @@ import {
 } from "@kinetra/core";
 import { createScriptTransformService } from "./script-transform.js";
 import { decidePlayerInput } from "./input-event.js";
-import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
+import { compareCodeUnits } from "./keyed-record.js";
+import { buildAssetQueryById, captureEntityStates } from "./keyed-snapshots.js";
 import { reloadDegradationFields, reloadDegradationLogs, type ReloadDegradation } from "./reload-degradation.js";
 import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
+import { preflightEntitySaveEntry } from "./save-entry.js";
+import {
+  loadSaveFailure,
+  loadSaveSupersededMessage,
+  type LoadSaveFailure,
+} from "./save-failure.js";
+import { applyPhysicsStateToObject } from "./physics-sync.js";
+import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
+import { resolveStartScene } from "./start-scene.js";
+import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
@@ -76,6 +87,7 @@ import { resolvePerformanceSampleOptions, type PerformanceSampleOptionsInput } f
 import {
   base64ToUint8Array,
   calculatePercentiles,
+  countInvalidSamples,
   isEqualJson,
   uint8ArrayToBase64,
 } from "./runtime-helpers.js";
@@ -294,6 +306,11 @@ export interface PlayerRuntimePerformanceEvidence {
   renderer: PlayerRuntimePerformanceRendererMetrics;
   scene: PlayerRuntimePerformanceSceneMetrics;
   physics?: PlayerRuntimePerformancePhysicsMetrics;
+  /**
+   * Present only when some timing samples were not finite numbers: how many per series.
+   * Those series report NaN percentiles (JSON `null` on the wire), so this says why.
+   */
+  invalidSamples?: { frame: number; simulation: number; render: number };
 }
 
 export interface PlayerRuntimeRendererState {
@@ -614,6 +631,8 @@ export class PlayerRuntimeController {
       this.enableTestScriptFixtures("save-load-atomicity");
     }
     assertValidProject(project);
+    // Reject an unknown scene before touching the running game or the asset registry.
+    const scene = resolveStartScene(project, sceneId);
     await this.#doStop();
     this.#stepped = options?.stepped ?? false;
 
@@ -622,11 +641,6 @@ export class PlayerRuntimeController {
         const meta = options.assetMetadata?.[assetId];
         this.registerAsset(assetId, base64, meta);
       }
-    }
-
-    const scene = project.scenes.find((candidate) => candidate.id === sceneId);
-    if (!scene) {
-      throw new Error(`Scene "${sceneId}" does not exist`);
     }
 
     this.#runtime = ThreeSceneRuntime.instantiate(project, sceneId);
@@ -656,7 +670,12 @@ export class PlayerRuntimeController {
       const { createPhysicsWorldFromScene } = await import(
         "@kinetra/physics-rapier"
       );
-      this.#physics = await createPhysicsWorldFromScene(scene);
+      this.#physics = await createPhysicsWorldFromScene(scene, {
+        // A collider that fell back to box/capsule is reported through the runtime log (and so the
+        // player bridge) instead of being silently substituted.
+        onDiagnostic: (diagnostic) =>
+          logPhysicsSceneDiagnostic((level, message, data) => this.#log(level, message, data), diagnostic),
+      });
       this.#syncTransformsFromPhysics();
     } catch (error) {
       console.error("Physics initialization error:", error);
@@ -907,15 +926,10 @@ export class PlayerRuntimeController {
     indices?: number[];
     config?: Record<string, unknown>;
   }): Promise<void> {
-    const positions = input.positions;
-    const indices = input.indices;
-
-    // Validate before touching the installed mesh: a rejected request must not destroy it.
-    if (!positions || !indices) {
-      throw new Error(
-        "Navigation bake requires positions and indices geometry buffers",
-      );
-    }
+    // Validate before touching the installed mesh: a rejected request must not destroy it. The
+    // validated geometry always wins over same-named keys in the untrusted `config`.
+    const bakeOptions = buildNavBakeOptions(input);
+    const { positions, indices } = bakeOptions;
 
     // Every request claims a new generation: the request started last wins, not the one that
     // happens to finish last (a slow older bake must not overwrite a newer mesh).
@@ -925,11 +939,7 @@ export class PlayerRuntimeController {
       cancelledMessage: NAV_SUPERSEDED_MESSAGE,
       current: () => this.#navMesh,
       create: () =>
-        RecastNavMesh.bake({
-          positions,
-          indices,
-          ...(input.config as any),
-        }),
+        RecastNavMesh.bake(bakeOptions as any),
       install: (next) => {
         // Mesh and navigationState change together, synchronously: a swap that completes right
         // after this one can never leave the serialized bytes describing a disposed mesh.
@@ -1631,18 +1641,9 @@ export class PlayerRuntimeController {
     }
 
     // Prototype-less record: an entity id such as "__proto__" must stay an own key in the save.
-    const entities: Record<string, EntitySaveState> = createKeyedRecord(
-      Array.from(this.#runtime.objects(), ([entityId, obj]): [string, EntitySaveState] => {
-        const execState = this.#scripts.getExecutionState(entityId);
-        return [
-          entityId,
-          {
-            position: [obj.position.x, obj.position.y, obj.position.z],
-            rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
-            ...(execState?.state ? { gameplay: structuredClone(execState.state) } : {}),
-          },
-        ];
-      }),
+    const entities: Record<string, EntitySaveState> = captureEntityStates(
+      this.#runtime.objects(),
+      (entityId) => this.#scripts.getExecutionState(entityId)?.state || undefined,
     );
 
     const envelope: SaveEnvelope<GameplaySaveData> = {
@@ -1677,6 +1678,12 @@ export class PlayerRuntimeController {
     }
   }
 
+  #loadSaveSuperseded(slotId: string): LoadSaveFailure {
+    const error = loadSaveSupersededMessage();
+    this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
+    return loadSaveFailure("preparation", error, slotId);
+  }
+
   async loadSave(options?: {
     slotId?: string;
     envelope?: SaveEnvelope;
@@ -1692,8 +1699,16 @@ export class PlayerRuntimeController {
     if (!this.#runtime) {
       const error = "Cannot load save: Runtime is not running";
       this.#log("error", "save.restoreFailed", { phase: "validation", error });
-      return { success: false, error };
+      return loadSaveFailure("validation", error, options?.slotId);
     }
+
+    // Every await below can be overtaken by stop()/start(), which clear #runtime and swap #scripts.
+    // The load works on the runtime and script host it started with and gives up (structured
+    // failure, nothing applied) once either was replaced, instead of dereferencing a cleared field.
+    const runtime = this.#runtime;
+    const scripts = this.#scripts;
+    const isSuperseded = (): boolean =>
+      this.#runtime !== runtime || this.#scripts !== scripts;
 
     const slotId = options?.slotId ?? "default";
     let rawEnvelope = options?.envelope;
@@ -1703,14 +1718,17 @@ export class PlayerRuntimeController {
       } catch (err) {
         const error = `Failed to read save document for slot "${slotId}": ${err instanceof Error ? err.message : String(err)}`;
         this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-        return { success: false, slotId, error, phase: "validation" };
+        return loadSaveFailure("validation", error, slotId);
+      }
+      if (isSuperseded()) {
+        return this.#loadSaveSuperseded(slotId);
       }
     }
 
     if (!rawEnvelope) {
       const error = `Save document not found for slot "${slotId}"`;
       this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, slotId, error, phase: "validation" };
+      return loadSaveFailure("validation", error, slotId);
     }
 
     // Phase 1: Validation
@@ -1723,7 +1741,7 @@ export class PlayerRuntimeController {
     ) {
       const error = "Invalid save envelope structure";
       this.#log("error", "save.restoreFailed", { slotId, phase: "validation", error });
-      return { success: false, error };
+      return loadSaveFailure("validation", error, slotId);
     }
 
     // Phase 2: Migration
@@ -1735,20 +1753,20 @@ export class PlayerRuntimeController {
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       this.#log("error", "save.restoreFailed", { slotId, phase: "migration", error });
-      return { success: false, error };
+      return loadSaveFailure("migration", error, slotId);
     }
 
     // Phase 3: Preparation & Target Validation (Preflight: apply nothing if any check fails)
-    if (migratedEnvelope.data?.sceneId !== this.#runtime.sceneId) {
-      const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${this.#runtime.sceneId}"`;
+    if (migratedEnvelope.data?.sceneId !== runtime.sceneId) {
+      const error = `Save sceneId "${migratedEnvelope.data?.sceneId}" does not match active sceneId "${runtime.sceneId}"`;
       this.#log("error", "save.restoreFailed", {
         slotId,
         phase: "preparation",
         saveSceneId: migratedEnvelope.data?.sceneId,
-        activeSceneId: this.#runtime.sceneId,
+        activeSceneId: runtime.sceneId,
         error,
       });
-      return { success: false, error };
+      return loadSaveFailure("preparation", error, slotId);
     }
 
     if (
@@ -1758,7 +1776,7 @@ export class PlayerRuntimeController {
     ) {
       const error = "Save contains invalid entities record";
       this.#log("error", "save.restoreFailed", { slotId, phase: "preparation", error });
-      return { success: false, error };
+      return loadSaveFailure("preparation", error, slotId);
     }
 
     interface PreparedTransform {
@@ -1779,41 +1797,28 @@ export class PlayerRuntimeController {
     for (const [entityId, entry] of Object.entries(
       migratedEnvelope.data.entities,
     )) {
-      const obj = this.#runtime.getObject(entityId);
+      const obj = runtime.getObject(entityId);
       if (!obj) {
         const error = `Entity "${entityId}" from save does not exist in active scene`;
         this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-        return { success: false, error };
+        return loadSaveFailure("preparation", error, slotId);
       }
 
-      let prepPos: [number, number, number] | undefined;
-      let prepRot: [number, number, number] | undefined;
-
-      if (entry.position) {
-        if (
-          !Array.isArray(entry.position) ||
-          entry.position.length !== 3 ||
-          entry.position.some((v) => typeof v !== "number" || !Number.isFinite(v))
-        ) {
-          const error = `Invalid position coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-        prepPos = [entry.position[0], entry.position[1], entry.position[2]];
+      // A malformed entry (null, a primitive, bad coordinates) is a structured preparation failure,
+      // not an exception out of loadSave.
+      const preflight = preflightEntitySaveEntry(entityId, entry);
+      if (!preflight.ok) {
+        this.#log("error", "save.restoreFailed", {
+          slotId,
+          entityId,
+          phase: "preparation",
+          error: preflight.error,
+        });
+        return loadSaveFailure("preparation", preflight.error, slotId);
       }
 
-      if (entry.rotation) {
-        if (
-          !Array.isArray(entry.rotation) ||
-          entry.rotation.length !== 3 ||
-          entry.rotation.some((v) => typeof v !== "number" || !Number.isFinite(v))
-        ) {
-          const error = `Invalid rotation coordinates for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-        prepRot = [entry.rotation[0], entry.rotation[1], entry.rotation[2]];
-      }
+      const prepPos = preflight.position;
+      const prepRot = preflight.rotation;
 
       if (prepPos || prepRot) {
         preparedTransforms.push({
@@ -1824,50 +1829,51 @@ export class PlayerRuntimeController {
         });
       }
 
-      if (entry.gameplay) {
-        if (
-          typeof entry.gameplay !== "object" ||
-          entry.gameplay === null ||
-          Array.isArray(entry.gameplay)
-        ) {
-          const error = `Invalid gameplay payload for entity "${entityId}"`;
-          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
-        }
-
-        if (!this.#scripts.hasScript(entityId)) {
+      const gameplay = preflight.gameplay;
+      if (gameplay) {
+        if (!scripts.hasScript(entityId)) {
           const error = `Entity "${entityId}" has gameplay save state but no active script`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
-        if (!this.#scripts.canRestoreScriptState(entityId)) {
+        if (!scripts.canRestoreScriptState(entityId)) {
           const error = `Script on entity "${entityId}" does not support state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
-        if (!this.#scripts.canPrepareTransactionalRestore(entityId)) {
+        if (!scripts.canPrepareTransactionalRestore(entityId)) {
           const error = `Script on entity "${entityId}" does not support transactional state restoration`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
-        const validation = this.#scripts.validateScriptRestoreState(
-          entityId,
-          entry.gameplay,
-        );
+        const validation = scripts.validateScriptRestoreState(entityId, gameplay);
         if (!validation.valid) {
           const error = `Invalid gameplay state for entity "${entityId}": ${validation.error ?? "Validation failed"}`;
           this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
-          return { success: false, error };
+          return loadSaveFailure("preparation", error, slotId);
         }
 
-        const preparedRestore = await this.#scripts.prepareScriptRestore(
-          entityId,
-          entry.gameplay,
-        );
+        // A script whose prepareRestoreState throws or rejects fails the preparation phase; nothing
+        // has been committed yet, so this is a structured failure rather than an exception.
+        let preparedRestore: PreparedScriptRestore;
+        try {
+          preparedRestore = await scripts.prepareScriptRestore(entityId, gameplay);
+        } catch (err) {
+          if (isSuperseded()) {
+            return this.#loadSaveSuperseded(slotId);
+          }
+          const detail = err instanceof Error ? err.message : String(err);
+          const error = `Script on entity "${entityId}" failed to prepare its state restore: ${detail}`;
+          this.#log("error", "save.restoreFailed", { slotId, entityId, phase: "preparation", error });
+          return loadSaveFailure("preparation", error, slotId);
+        }
 
+        if (isSuperseded()) {
+          return this.#loadSaveSuperseded(slotId);
+        }
         preparedScripts.push({
           entityId,
           restore: preparedRestore,
@@ -1890,7 +1896,7 @@ export class PlayerRuntimeController {
 
     const priorScriptStates = new Map<string, Record<string, unknown> | undefined>();
     for (const p of preparedScripts) {
-      const exec = this.#scripts.getExecutionState(p.entityId);
+      const exec = scripts.getExecutionState(p.entityId);
       priorScriptStates.set(
         p.entityId,
         exec?.state ? (structuredClone(exec.state) as Record<string, unknown>) : undefined,
@@ -2008,7 +2014,7 @@ export class PlayerRuntimeController {
 
       // Verify script states
       for (const [entityId, priorState] of priorScriptStates.entries()) {
-        const currentExec = this.#scripts.getExecutionState(entityId);
+        const currentExec = scripts.getExecutionState(entityId);
         const currentState = currentExec?.state;
         if (priorState !== undefined) {
           if (!isEqualJson(currentState, priorState)) {
@@ -2216,17 +2222,14 @@ export class PlayerRuntimeController {
 
   #getAssetsQueryState(): PlayerRuntimeAssetsQueryState {
     // Prototype-less record: an asset id such as "__proto__" must stay an own key in the query.
-    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = createKeyedRecord(
-      Array.from(this.#assetRegistry.keys(), (assetId): [string, PlayerRuntimeAssetQueryInfo] => [
-        assetId,
-        {
-          assetId,
-          ...(this.#assetSourceHashes.has(assetId) ? { sourceHash: this.#assetSourceHashes.get(assetId) } : {}),
-          ...(this.#assetFingerprints.has(assetId) ? { fingerprint: this.#assetFingerprints.get(assetId) } : {}),
-          importStatus: this.#assetStatuses.get(assetId) ?? "imported",
-          ...(this.#assetRevisions.has(assetId) ? { revision: this.#assetRevisions.get(assetId) } : {}),
-        },
-      ]),
+    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = buildAssetQueryById(
+      this.#assetRegistry.keys(),
+      {
+        sourceHashes: this.#assetSourceHashes,
+        fingerprints: this.#assetFingerprints,
+        statuses: this.#assetStatuses,
+        revisions: this.#assetRevisions,
+      },
     );
     return { byId };
   }
@@ -2532,10 +2535,18 @@ export class PlayerRuntimeController {
         }
       : undefined;
 
+    const invalidSamples = {
+      frame: countInvalidSamples(frameSamples),
+      simulation: countInvalidSamples(simSamples),
+      render: countInvalidSamples(renderSamples),
+    };
+    const hasInvalidSamples = invalidSamples.frame + invalidSamples.simulation + invalidSamples.render > 0;
+
     return {
       sampleCount: sampleFrames,
       warmupSamples: warmupFrames,
       executionMode: mode,
+      ...(hasInvalidSamples ? { invalidSamples } : {}),
       frame: calculatePercentiles(frameSamples),
       simulation: calculatePercentiles(simSamples),
       render: calculatePercentiles(renderSamples),
@@ -2589,6 +2600,9 @@ export class PlayerRuntimeController {
       return;
     }
 
+    // Kinematic characters are never rotated by physics; their facing (root-motion yaw) lives on
+    // the render object and must survive the sync.
+    const characters = new Set(this.#physics.characterIds());
     for (const id of this.#physics.bodyIds()) {
       const object = this.#runtime.getObject(id);
       if (!object) {
@@ -2597,17 +2611,9 @@ export class PlayerRuntimeController {
 
       try {
         const state = this.#physics.state(id);
-        object.position.set(
-          state.position.x,
-          state.position.y,
-          state.position.z,
-        );
-        object.quaternion.set(
-          state.rotation.x,
-          state.rotation.y,
-          state.rotation.z,
-          state.rotation.w,
-        );
+        applyPhysicsStateToObject(object, state, {
+          preserveRotation: characters.has(id),
+        });
       } catch (error) {
         console.error(`Physics state sync error for "${id}":`, error);
       }

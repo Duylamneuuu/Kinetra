@@ -136,6 +136,53 @@ export const BUILT_IN_INSPECTOR_SCHEMAS: readonly InspectorComponentSchema[] = [
       { name: "order", kind: "number" },
     ],
   },
+  {
+    name: "Collider",
+    fields: [
+      { name: "shape", kind: "string" },
+      vector("size", { exclusiveMin: 0 }),
+      vector("halfExtents", { exclusiveMin: 0 }),
+      { name: "radius", kind: "number", exclusiveMin: 0 },
+      { name: "halfHeight", kind: "number", exclusiveMin: 0 },
+      { name: "friction", kind: "number", min: 0 },
+      { name: "restitution", kind: "number", min: 0 },
+      // Integer query-filter layer (project-model MAX_COLLIDER_LAYER).
+      { name: "layer", kind: "number", min: 0, max: 31 },
+    ],
+  },
+  {
+    name: "RigidBody",
+    fields: [
+      // project-model accepts these case-insensitively (the physics factory lower-cases the value).
+      {
+        name: "type",
+        kind: "enum",
+        options: ["fixed", "static", "dynamic", "kinematic", "kinematicPositionBased", "kinematicVelocityBased"],
+      },
+      { name: "mass", kind: "number", exclusiveMin: 0 },
+      { name: "gravityScale", kind: "number" },
+      { name: "linearDamping", kind: "number", min: 0 },
+      { name: "angularDamping", kind: "number", min: 0 },
+    ],
+  },
+  {
+    name: "CharacterBody",
+    fields: [
+      { name: "speed", kind: "number", min: 0 },
+      { name: "offset", kind: "number", min: 0 },
+      { name: "autostepMaxHeight", kind: "number", min: 0 },
+      { name: "autostepMinWidth", kind: "number", min: 0 },
+    ],
+  },
+  {
+    name: "NavMesh",
+    fields: [
+      { name: "dataBase64", kind: "string" },
+      { name: "positions", kind: "json" },
+      { name: "indices", kind: "json" },
+      { name: "config", kind: "json" },
+    ],
+  },
 ];
 
 /** Names that have an inspector descriptor but no project-model schema, or vice versa (for tests). */

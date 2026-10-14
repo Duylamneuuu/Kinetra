@@ -74,6 +74,12 @@ function readVec3(value: JsonValue | undefined, fallback: Vec3): Vec3 {
   return [...fallback];
 }
 
+function assertStepCount(label: string, value: number): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${label} must be an integer >= 0, got ${String(value)}`);
+  }
+}
+
 export class HeadlessSceneSimulation {
   readonly sceneId: string;
   readonly fixedDeltaSeconds: number;
@@ -178,10 +184,16 @@ export class HeadlessSceneSimulation {
     return Object.fromEntries([...this.#actions.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   }
 
+  /**
+   * Run `steps` fixed steps. `steps` must be an integer >= 0: a fraction used to round up silently (2.5 ran three
+   * steps), `NaN` ran none, and `Infinity` never returned, so all three are refused with a `RangeError` before any
+   * step runs.
+   */
   advance(steps = 1): void {
     if (!this.#started) {
       throw new Error("Simulation must be started before advancing");
     }
+    assertStepCount("advance steps", steps);
     for (let index = 0; index < steps; index += 1) {
       this.#step += 1;
       this.#revision += 1;
@@ -217,6 +229,7 @@ export class HeadlessSceneSimulation {
 
   /** Advance until `predicate` is true or `maxSteps` elapse; returns whether it became true. */
   advanceUntil(predicate: () => boolean, maxSteps: number): boolean {
+    assertStepCount("advanceUntil maxSteps", maxSteps);
     for (let index = 0; index < maxSteps; index += 1) {
       if (predicate()) return true;
       this.advance(1);
@@ -260,6 +273,11 @@ export class HeadlessSceneSimulation {
     return structuredClone(entries);
   }
 
+  /** Ask the script of `entityId` whether it would accept `state`, without restoring anything. */
+  validateScriptState(entityId: string, state: Record<string, unknown>): { valid: boolean; error?: string } {
+    return this.#host.validateScriptRestoreState(entityId, state);
+  }
+
   async restoreScript(entityId: string, state: Record<string, unknown>): Promise<void> {
     const validation = this.#host.validateScriptRestoreState(entityId, state);
     if (!validation.valid) {
@@ -278,16 +296,43 @@ export class HeadlessSceneSimulation {
     this.#revision += 1;
   }
 
-  /** Set the step counter when resuming a saved run (only before the first advance). */
+  /**
+   * Set the step counter to a saved run's step: when resuming into a fresh simulation, or when quick-loading a save
+   * into a simulation that has already advanced (the clock follows the state, so `step`, `elapsedSeconds` and the
+   * audio clock agree with what was restored). This alone leaves `logs()`/`events()`/audio cues as they were; once the
+   * restore has succeeded, `discardHistoryAfter` drops what belongs to the abandoned timeline.
+   */
   restoreStep(step: number): void {
     if (!Number.isInteger(step) || step < 0) {
       throw new RangeError(`Saved step must be an integer >= 0, got ${String(step)}`);
     }
-    if (this.#step !== 0) {
-      throw new Error("restoreStep is only allowed on a fresh simulation");
-    }
     this.#step = step;
     this.#revision += 1;
+  }
+
+  /**
+   * Drop the log and event entries recorded after `step`, and tell the audio service to do the same when it can
+   * (`rewindTo(step)`). Quick-loading a save into a run that has moved on abandons that timeline: without this the
+   * history would carry steps from the future of the restored state and stop being monotonic. Entries at `step` itself
+   * stay (the saved state already includes them). When something was dropped, one `simulation.timelineRewound` log
+   * entry at `step` records how much, so the cut is visible rather than silent. Returns the counts.
+   */
+  discardHistoryAfter(step: number): { logs: number; events: number; cues: number } {
+    if (!Number.isInteger(step) || step < 0) {
+      throw new RangeError(`History cut-off step must be an integer >= 0, got ${String(step)}`);
+    }
+    const logsBefore = this.#logs.length;
+    const eventsBefore = this.#events.length;
+    this.#logs = this.#logs.filter((entry) => entry.step <= step);
+    this.#events = this.#events.filter((entry) => entry.step <= step);
+    const rewindable = this.audio as { rewindTo?: (step: number) => number } | undefined;
+    const cues = rewindable?.rewindTo?.(step) ?? 0;
+    const dropped = { logs: logsBefore - this.#logs.length, events: eventsBefore - this.#events.length, cues };
+    if (dropped.logs + dropped.events + dropped.cues > 0) {
+      this.#revision += 1;
+      this.#log("info", "simulation.timelineRewound", { toStep: step, droppedLogs: dropped.logs, droppedEvents: dropped.events, droppedCues: cues });
+    }
+    return dropped;
   }
 
   async dispose(): Promise<void> {

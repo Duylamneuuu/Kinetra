@@ -6,14 +6,100 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-14
+
+### Added
+
+- **project-model**: schemas for the `Collider`, `RigidBody`, `CharacterBody` and `NavMesh` components (Refs #462) ([#519](https://github.com/Duylamneuuu/Kinetra/pull/519))
+
+### Fixed
+
+- **save-state**: the settings `fullscreen` flag accepts only boolean `true` ([#543](https://github.com/Duylamneuuu/Kinetra/pull/543))
+- **project-model**: `Collider.size` / `halfExtents` / `halfHeight` must be `> 0`, as `physics-rapier` already demanded ([#540](https://github.com/Duylamneuuu/Kinetra/pull/540))
+- **player**: `loadSave` no longer touches `#runtime` / `#scripts` after an `await` when `stop()` / `start()` interleaves; it returns a structured preparation failure instead (Fixes #537) ([#539](https://github.com/Duylamneuuu/Kinetra/pull/539))
+- **core**: `PlayerControllerScript` restore clears `lastAction` when the save has no such key (`getState` omits the key when it is unset) ([#534](https://github.com/Duylamneuuu/Kinetra/pull/534))
+- **project-model**: a `RigidBody` without `type` is `fixed`, as in the physics factory, and no longer demands `mass > 0` ([#527](https://github.com/Duylamneuuu/Kinetra/pull/527))
+
+### Tests
+
+- **player**: saved entities and `assets.byId` keep an id named `__proto__` (pure builder + test, Refs #252) ([#547](https://github.com/Duylamneuuu/Kinetra/pull/547))
+- **orb-run**: slice 42 the play path runs in a browser-shaped host (replay yields without `setImmediate`) ([#546](https://github.com/Duylamneuuu/Kinetra/pull/546))
+- **renderer-three**: `ModelTemplateCache` source branches (Uint8Array view, ArrayBuffer, data/URL, invalid) ([#545](https://github.com/Duylamneuuu/Kinetra/pull/545))
+- **orb-run**: slice 41 a real esbuild bundle of the entry plays the same game (`test/real-bundle.test.ts`) ([#542](https://github.com/Duylamneuuu/Kinetra/pull/542))
+- **renderer-three**: `WebGL2Backend` lifecycle (initialize / render / getStats / dispose) ([#541](https://github.com/Duylamneuuu/Kinetra/pull/541))
+- **orb-run**: slice 40 the audio mix is a player preference, not game state ([#538](https://github.com/Duylamneuuu/Kinetra/pull/538))
+- **orb-run**: slice 39 what a running game sees of authoring done after it started (`test/late-authoring.test.ts`, #437 item 3) ([#535](https://github.com/Duylamneuuu/Kinetra/pull/535))
+- **verification**: zero-width PNG frames through evidence and comparison ([#532](https://github.com/Duylamneuuu/Kinetra/pull/532))
+- **orb-run**: slice 38 the sign of the level check's slack matches the bot ([#531](https://github.com/Duylamneuuu/Kinetra/pull/531))
+- **orb-run**: slice 37 random walled and muddy levels: level check = route plan = real game ([#525](https://github.com/Duylamneuuu/Kinetra/pull/525))
+
+### Documentation
+
+- CHANGELOG and STATUS snapshot through PR #547 (replaces the stale snapshot PRs #516, #523, #533, #536)
+- CHANGELOG and STATUS snapshot through PR #515 ([#518](https://github.com/Duylamneuuu/Kinetra/pull/518))
+
+### Maintenance
+
+- **physics-rapier**: one shared `resolveColliderPlan` for `populateWorld` and the diagnostics (Refs #383) ([#526](https://github.com/Duylamneuuu/Kinetra/pull/526))
+
 ## 2026-10-13
 
 ### Added
 
+- **mcp-server**: new tools `entity.removeComponent` and `entity.unsetFields` over the command-bus `component.remove` / `component.unsetFields` commands (#461) ([#502](https://github.com/Duylamneuuu/Kinetra/pull/502))
+- **orb-run**: slice 31 `advance`/`advanceUntil` refuse non-integer step counts ([#495](https://github.com/Duylamneuuu/Kinetra/pull/495))
+- **orb-run**: slice 29 quick-load drops the abandoned timeline's history (`HeadlessSceneSimulation.discardHistoryAfter`, `HeadlessAudioService.rewindTo`); rollback failures are reported ([#486](https://github.com/Duylamneuuu/Kinetra/pull/486))
+- **orb-run**: slice 28 review follow-ups on save validation ([#478](https://github.com/Duylamneuuu/Kinetra/pull/478))
+- **orb-run**: slice 27 a save from another level or a hand-edited counter is refused ([#476](https://github.com/Duylamneuuu/Kinetra/pull/476))
+- **orb-run**: slice 26 quick-load moves the simulation clock with the restored state ([#471](https://github.com/Duylamneuuu/Kinetra/pull/471))
+- **orb-run**: slice 25 saves are untrusted input: validated, all-or-nothing restore ([#468](https://github.com/Duylamneuuu/Kinetra/pull/468))
+- **command-bus**: new commands `component.remove` and `component.unsetFields` with structured `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` errors (Refs #321) ([#455](https://github.com/Duylamneuuu/Kinetra/pull/455))
+- **orb-run**: slice 23 the fuzzer holds the player to its speed limit, mud included (`player_speed_bound` invariant) ([#449](https://github.com/Duylamneuuu/Kinetra/pull/449))
+- **orb-run**: slice 22 the route planner prices mud (`OrbRunSlowZone` areas cost more on the navmesh route); #446 follows up the review notes ([#444](https://github.com/Duylamneuuu/Kinetra/pull/444), [#443](https://github.com/Duylamneuuu/Kinetra/pull/443))
+- **animation**: new warning `anim.graph.transition.sharedClipCut` and blend-space input diagnostics for animation graphs (Refs #159) ([#445](https://github.com/Duylamneuuu/Kinetra/pull/445))
+- **orb-run**: slice 21 mud (`OrbRunSlowZone`) authored as data ([#436](https://github.com/Duylamneuuu/Kinetra/pull/436))
 - **orb-run**: slice 20 the entry stays portable: `entry-portability` test guards the source import graph (no Node builtins/globals/Node-only modules), `Buffer` replaced by a strict portable base64 helper ([#416](https://github.com/Duylamneuuu/Kinetra/pull/416))
 
 ### Fixed
 
+- **player**: the frame loop keeps scheduling `requestAnimationFrame` when a tick throws ([#520](https://github.com/Duylamneuuu/Kinetra/pull/520))
+- **save-state**: the file storage refuses a `settings_` key alias whatever its letter case (`saves:Settings_user` is the same file on NTFS and macOS) ([#511](https://github.com/Duylamneuuu/Kinetra/pull/511))
+- **orb-run**: slice 34 stepping out of wall A can no longer end inside wall B (`axisMoveAllowed` judges every wall) ([#509](https://github.com/Duylamneuuu/Kinetra/pull/509))
+- **orb-run**: slice 33 a player pressed into a wall can walk out but not deeper (`resolveWallMotion`) ([#508](https://github.com/Duylamneuuu/Kinetra/pull/508))
+- **player**: the Electron player logs the physics collider fallback diagnostics (`physics.unsupportedColliderShape`) to its runtime log (Refs #383, #354) ([#506](https://github.com/Duylamneuuu/Kinetra/pull/506))
+- **animation**: `stripVisualRootDisplacement` keeps the interpolation (STEP) of the root track ([#504](https://github.com/Duylamneuuu/Kinetra/pull/504))
+- **player**: `loadSave` returns `phase` and `slotId` on every failure branch ([#501](https://github.com/Duylamneuuu/Kinetra/pull/501))
+- **orb-run**: `OrbRunReplayRecorder` handles quick-load / `restoreStep` while recording ([#497](https://github.com/Duylamneuuu/Kinetra/pull/497))
+- **asset-pipeline**: the coordinator republishes assets the runtime rejected (Refs #252 item 3) ([#496](https://github.com/Duylamneuuu/Kinetra/pull/496))
+- **asset-pipeline**: `createSyntheticGlb` normalizes rotation quaternions and rejects a zero-length quaternion (#481) ([#491](https://github.com/Duylamneuuu/Kinetra/pull/491))
+- **orb-run**: `HeadlessAudioService.rewindTo` undoes the `stop()` of an abandoned timeline's audio (bug introduced by #486) ([#490](https://github.com/Duylamneuuu/Kinetra/pull/490))
+- **animation**: `computeRetargetCacheKey` tells `NaN`/`Infinity` apart from `null` and keeps a `__proto__` key (shared `canonicalizeForCacheKey`) ([#484](https://github.com/Duylamneuuu/Kinetra/pull/484))
+- **animation**: `bakeRetargetedClip` keeps the step/smooth interpolation of the source track and drops a track whose value count does not match its key count ([#483](https://github.com/Duylamneuuu/Kinetra/pull/483))
+- **player**: an error with a code from the renderer reaches the bridge as `<code>: <message>` plus `code` (Refs #354) ([#433](https://github.com/Duylamneuuu/Kinetra/pull/433))
+- **asset-pipeline**: `createSyntheticGlb` rotation channels write quaternion (VEC4) output and validate `from`/`to` ([#477](https://github.com/Duylamneuuu/Kinetra/pull/477))
+- **player**: `bakeNavigation` geometry wins over `positions`/`indices` keys in the config ([#475](https://github.com/Duylamneuuu/Kinetra/pull/475))
+- **verification**: `metricMax`/`metricMin` and `detectBlankFrame` no longer pass with a `NaN` threshold or metric ([#473](https://github.com/Duylamneuuu/Kinetra/pull/473))
+- **player**: `start()` checks `sceneId` before it stops the running game and overwrites assets (`resolveStartScene`) ([#472](https://github.com/Duylamneuuu/Kinetra/pull/472))
+- **verification**: `compareVisualFrames` compares against the threshold with the unrounded value ([#469](https://github.com/Duylamneuuu/Kinetra/pull/469))
+- **verification**: `KinetraRuntimeProbe` throws when the host lacks an action method instead of passing falsely (Refs #460) ([#467](https://github.com/Duylamneuuu/Kinetra/pull/467))
+- **player**: a fatal load failure keeps exit code 1 (first exit code wins) and `loadFile` has a `.catch` (follow-up of #453) ([#456](https://github.com/Duylamneuuu/Kinetra/pull/456))
+- **player**: physics sync no longer wipes the root-motion yaw of a kinematic character ([#465](https://github.com/Duylamneuuu/Kinetra/pull/465))
+- **command-bus**: `component.unsetFields` keeps a `__proto__` field as plain data instead of re-prototyping the object or losing the field ([#464](https://github.com/Duylamneuuu/Kinetra/pull/464))
+- **player, verification**: non-finite frame-time samples give a `NaN` percentile and an explicit budget-violation reason instead of passing silently (Refs #187) ([#459](https://github.com/Duylamneuuu/Kinetra/pull/459))
+- **verification**: `assert.near` / `metricMax` / `metricMin` no longer pass with `NaN`; `assert.equal` ignores key order and no longer treats `NaN` as `null` ([#458](https://github.com/Duylamneuuu/Kinetra/pull/458))
+- **player**: `did-fail-load` is fatal only for the main frame and not for `ERR_ABORTED`; the fatal message is flushed before `app.exit` ([#453](https://github.com/Duylamneuuu/Kinetra/pull/453))
+- **player**: `loadSave` returns a structured failure for malformed entity entries and for a throwing `prepareRestoreState` instead of a raw `TypeError` ([#450](https://github.com/Duylamneuuu/Kinetra/pull/450))
+- **animation**: `extractRootMotionFromClip` rejects a corrupt rotation track (Refs #437) ([#447](https://github.com/Duylamneuuu/Kinetra/pull/447))
+- **orb-run**: slice 22b review follow-ups of the mud pricing ([#446](https://github.com/Duylamneuuu/Kinetra/pull/446))
+- **asset-pipeline**: `hashJson` rejects `Map`/`Set`/`RegExp`/`Promise`/`Error` instead of hashing them as `{}` ([#424](https://github.com/Duylamneuuu/Kinetra/pull/424))
+- **asset-pipeline**: `normalizeGlb` reports optional glTF extensions it drops (`droppedExtensions`) and no longer logs to the console ([#418](https://github.com/Duylamneuuu/Kinetra/pull/418))
+- **renderer-three**: `WebGL2Backend.resize` rejects non-finite/negative sizes and falls back to dpr 1 for `NaN`/`Infinity` ([#442](https://github.com/Duylamneuuu/Kinetra/pull/442))
+- **verification**: `ElectronRuntimeHost.close()` during startup fails the waiting request at once and lets later requests launch a fresh bridge ([#438](https://github.com/Duylamneuuu/Kinetra/pull/438))
+- **animation**: `extractRootMotionFromClip` rejects `NaN`/`Infinity` keyframe values and short position tracks ([#435](https://github.com/Duylamneuuu/Kinetra/pull/435))
+- **player**: `PlayerAudioController.reset()` drops the dead scene's asset resolver, so `play()` after stop fails as not initialized instead of bypassing bus volumes ([#430](https://github.com/Duylamneuuu/Kinetra/pull/430))
+- **orb-run**: the `entry-portability` test runs on Windows (fixes the red "Windows player package" job) ([#432](https://github.com/Duylamneuuu/Kinetra/pull/432))
+- **orb-run**: `navmesh_error` replaces `route_blocked` for navmesh failures; WAV extensible/empty/bit-depth handling; warning for a wrongly declared size (#411 #413 #415) ([#429](https://github.com/Duylamneuuu/Kinetra/pull/429))
+- **player**: `isEqualJson` treats `NaN` as equal to itself and no longer equates an array with an object of the same keys (so a clean rollback is no longer reported as an atomicity violation); the runtime-controller pure helpers (base64, `isEqualJson`, percentiles) are extracted into `runtime-helpers.ts` and unit-tested ([#417](https://github.com/Duylamneuuu/Kinetra/pull/417))
 - **orb-run**: the importer measures and reads real asset metadata instead of copying declared numbers (Refs #231 items 3–5) ([#407](https://github.com/Duylamneuuu/Kinetra/pull/407))
 - **orb-run**: `planOrbRunRoute` reports a stop walled in tighter than the route agent as `route_blocked` instead of throwing ([#406](https://github.com/Duylamneuuu/Kinetra/pull/406))
 - **verification**: `ElectronRuntimeHost.close()` no longer clobbers a replacement bridge launched during teardown; a close during pipe bind launches nothing ([#405](https://github.com/Duylamneuuu/Kinetra/pull/405))
@@ -22,7 +108,45 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Tests
 
+- **orb-run**: slice 36 a wall under the player, proven through the whole game (`test/wall-under-player.test.ts`, 6 tests) ([#521](https://github.com/Duylamneuuu/Kinetra/pull/521))
+- **orb-run**: `advanceUntil` boundary pinned: the predicate is true at the last step and `maxSteps=0` (Refs #500) ([#517](https://github.com/Duylamneuuu/Kinetra/pull/517))
+- **verification**: tiny, zero-area and mismatched-size frame edges of `visual.ts` covered ([#513](https://github.com/Duylamneuuu/Kinetra/pull/513))
+- **orb-run**: slice 35 wall clearance invariants and one distance formula (`signedDistanceToWall`) ([#515](https://github.com/Duylamneuuu/Kinetra/pull/515))
+- **asset-pipeline**: the visit-budget boundary of `glb-bounds` is pinned (Refs #383) ([#512](https://github.com/Duylamneuuu/Kinetra/pull/512))
+- **verification**: visual-baseline CLI argument, ENOTDIR and extension edges covered ([#510](https://github.com/Duylamneuuu/Kinetra/pull/510))
+- **mcp-server**: the `#flushUnsaved` failure path on a refused undo retry is covered ([#505](https://github.com/Duylamneuuu/Kinetra/pull/505))
+- **orb-run**: slice 32 mud asserted from an `AcceptanceManifest` (follow-up #437 item 2) ([#503](https://github.com/Duylamneuuu/Kinetra/pull/503))
+- **verification**: `AcceptanceRunner` wait/step fallback, path-traversal diagnostics and `logAbsent` filters covered ([#493](https://github.com/Duylamneuuu/Kinetra/pull/493))
+- **animation**: `inspectSkeletonFromGlb` fallbacks, parent lookup and durations covered ([#494](https://github.com/Duylamneuuu/Kinetra/pull/494))
+- **orb-run**: slice 30 duplicate `orbCollected` events count and cue once; stale README gap removed (#187) ([#489](https://github.com/Duylamneuuu/Kinetra/pull/489))
+- **animation**: clip event validation, duplicate bone targets, machine reset and retarget diagnostics ([#487](https://github.com/Duylamneuuu/Kinetra/pull/487))
+- **physics-rapier**: validation, `halfExtents` and diagnostics edge tests (branch coverage 93.4% → 97.7%) ([#488](https://github.com/Duylamneuuu/Kinetra/pull/488))
+- **animation**: branches of `validateClipMetadata` and `validateSkeletonProfile` (events outside the duration, unsorted, non-finite; duplicate bone target) ([#485](https://github.com/Duylamneuuu/Kinetra/pull/485))
+- **verification**: `close()` during startup fails the waiting request at once; dead `#rejectReady` removed ([#426](https://github.com/Duylamneuuu/Kinetra/pull/426))
+- **editor**: model-based fuzz of `EditorSession` (failed edits leave the bus untouched, undo/redo restore exact projects, selection never lists missing entities) ([#434](https://github.com/Duylamneuuu/Kinetra/pull/434))
+- **orb-run**: slice 24 transitive portability test follows the imports of the entry through the engine package barrels ([#452](https://github.com/Duylamneuuu/Kinetra/pull/452))
+- **asset-pipeline / physics-rapier**: glb-bounds sparse accessors, raw integer and truncated-BIN cases, plus pending kinematic body edge cases (Fixes #367) ([#454](https://github.com/Duylamneuuu/Kinetra/pull/454))
+- **reference-game**: enemy and player branches with a missing transform, scene, graph or player ([#451](https://github.com/Duylamneuuu/Kinetra/pull/451))
+- **animation**: retarget cache storage and record-validation edge cases ([#428](https://github.com/Duylamneuuu/Kinetra/pull/428))
+- **animation**: root-motion clip helper edge cases (coverage gap) ([#439](https://github.com/Duylamneuuu/Kinetra/pull/439))
+- **mcp-server**: `runtime.*` and `test.runAcceptance` MCP tool forwarding ([#425](https://github.com/Duylamneuuu/Kinetra/pull/425))
+- **asset-pipeline**: `SourceAssetWatcher` edge cases (initial hash baseline, `removeAsset`, listener isolation, `stop()` cancels the re-arm) and `hashFile` ([#409](https://github.com/Duylamneuuu/Kinetra/pull/409))
+- **core**: `ScriptHost` / `ScriptRegistry` / prefab API edge tests closing a coverage gap ([#410](https://github.com/Duylamneuuu/Kinetra/pull/410))
 - **animation**: regression suite for malformed animation graphs (supersedes #261) ([#403](https://github.com/Duylamneuuu/Kinetra/pull/403))
+
+### Documentation
+
+- CHANGELOG and STATUS snapshot through PR #504; the MCP guide lists `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` ([#507](https://github.com/Duylamneuuu/Kinetra/pull/507))
+- CHANGELOG and STATUS snapshot through PR #490 ([#492](https://github.com/Duylamneuuu/Kinetra/pull/492))
+- CHANGELOG and STATUS snapshot through PR #490 ([#492](https://github.com/Duylamneuuu/Kinetra/pull/492))
+- CHANGELOG and STATUS snapshot through PR #497 ([#499](https://github.com/Duylamneuuu/Kinetra/pull/499))
+- CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
+- CHANGELOG and STATUS snapshot through PR #458 ([#463](https://github.com/Duylamneuuu/Kinetra/pull/463))
+- CHANGELOG and STATUS snapshot through PR #446 ([#448](https://github.com/Duylamneuuu/Kinetra/pull/448))
+
+### Maintenance
+
+- **ci**: coverage retries a failed package once and annotates the failing tests ([#441](https://github.com/Duylamneuuu/Kinetra/pull/441))
 
 ## 2026-10-12
 

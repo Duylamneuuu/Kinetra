@@ -52,6 +52,8 @@ are persisted to the project file.
 | `entity.query` | query only what you need (paged) | `sceneId?`, `ids?` (≤500), `component?`, `nameContains?`, `selectComponents?`, `offset?`, `limit?` (1–500) |
 | `entity.create` | create an entity with components | `sceneId`, `name`, `id?`, `parentId?`, `components?`, `expectedProjectRevision?`, `dryRun?` |
 | `entity.patch` | merge fields into one component | `entityId`, `component`, `patch`, `expectedProjectRevision?`, `dryRun?` |
+| `entity.removeComponent` | remove one whole component (`component.remove`); `COMPONENT_NOT_FOUND` / `ENTITY_NOT_FOUND` when absent | `entityId`, `component`, `expectedProjectRevision?`, `dryRun?` |
+| `entity.unsetFields` | delete top-level fields of an object component (`component.unsetFields`); all-or-nothing, `FIELD_NOT_FOUND` / `COMPONENT_NOT_OBJECT` on bad input | `entityId`, `component`, `fields` (non-empty), `expectedProjectRevision?`, `dryRun?` |
 | `entity.reparent` | move an entity under another parent (or to the root) | `entityId`, `parentId?`, `expectedProjectRevision?`, `dryRun?` |
 | `entity.delete` | delete an entity; hierarchies need `cascade: true` | `entityId`, `cascade?`, `expectedProjectRevision?`, `dryRun?` |
 | `runtime.start` | instantiate the current revision of a scene into the local runtime | `sceneId` |
@@ -102,7 +104,8 @@ A failing tool returns `isError: true` and a JSON body:
 
 Command-bus codes: `STALE_REVISION`, `SCENE_NOT_FOUND`, `SCENE_ALREADY_EXISTS`,
 `ENTITY_NOT_FOUND`, `ENTITY_ALREADY_EXISTS`, `PARENT_NOT_FOUND`,
-`PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `INVALID_COMMAND`,
+`PARENT_CYCLE`, `CHILDREN_EXIST`, `COMPONENT_NOT_OBJECT`, `COMPONENT_NOT_FOUND`,
+`FIELD_NOT_FOUND`, `INVALID_COMMAND`,
 `UNDO_CONFLICT`, `UNDO_EXPIRED` (the undo token fell out of the bounded undo history,
 `maxUndoDepth` default 100). Project validation
 failures add an `issues` array of `{ path, code, message, remediation? }`.

@@ -118,6 +118,8 @@ interface PlaybackRecord {
   startSeconds: number;
   duration: number;
   stopped: boolean;
+  /** Simulation step when `stop` silenced it; `rewindTo` undoes the stop when that step was abandoned. */
+  stoppedAtStep: number | undefined;
 }
 
 export class HeadlessAudioService implements GameScriptAudioService {
@@ -164,6 +166,7 @@ export class HeadlessAudioService implements GameScriptAudioService {
       startSeconds: this.#options.now(),
       duration: orbRunClipDuration(options.assetId) ?? 0,
       stopped: false,
+      stoppedAtStep: undefined,
     };
     this.#records.push(record);
     this.#cues.push({
@@ -184,6 +187,7 @@ export class HeadlessAudioService implements GameScriptAudioService {
       if (options.playbackId !== undefined && record.playbackId !== options.playbackId) continue;
       if (options.entityId !== undefined && record.entityId !== options.entityId) continue;
       record.stopped = true;
+      record.stoppedAtStep = this.#options.step();
       stoppedCount += 1;
     }
     return { success: true, stoppedCount };
@@ -206,6 +210,33 @@ export class HeadlessAudioService implements GameScriptAudioService {
   cues(assetId?: string): PlayedCue[] {
     const cues = assetId ? this.#cues.filter((cue) => cue.assetId === assetId) : this.#cues;
     return structuredClone(cues);
+  }
+
+  /**
+   * Forget the cues (and playbacks) that started after simulation step `step`: a quick-load abandoned that timeline.
+   * Playback ids are never reused. A kept playback that was stopped after `step` is playing again, as it was at `step`.
+   * Returns how many cues were dropped.
+   */
+  rewindTo(step: number): number {
+    const before = this.#cues.length;
+    const keptIds = new Set<string>();
+    const kept = this.#cues.filter((cue) => {
+      if (cue.step > step) return false;
+      keptIds.add(cue.playbackId);
+      return true;
+    });
+    this.#cues.length = 0;
+    this.#cues.push(...kept);
+    const records = this.#records.filter((record) => keptIds.has(record.playbackId));
+    for (const record of records) {
+      if (record.stoppedAtStep !== undefined && record.stoppedAtStep > step) {
+        record.stopped = false;
+        record.stoppedAtStep = undefined;
+      }
+    }
+    this.#records.length = 0;
+    this.#records.push(...records);
+    return before - kept.length;
   }
 
   /** Plays that were refused (unknown bus/asset). A healthy run has none. */

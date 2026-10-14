@@ -92,6 +92,13 @@ function entityMapToRecord<T>(map: Map<string, T>): Record<string, T> | undefine
   return map.size > 0 ? (Object.fromEntries(map) as Record<string, T>) : undefined;
 }
 
+/** Per-entity degradation reports collected while publishing one batch of assets to the runtime. */
+interface ReloadDegradationAccumulator {
+  droppedRootMotion: Map<string, string>;
+  droppedIkChains: Map<string, string[]>;
+  droppedMorphOverrides: Map<string, string[]>;
+}
+
 export interface AssetHotReloadCoordinatorOptions {
   database: AssetDatabase;
   reimportService: AssetReimportService;
@@ -137,6 +144,12 @@ export class AssetHotReloadCoordinator {
   #inFlightPromise?: Promise<AssetHotReloadTransaction | null> | undefined;
   #started = false;
   readonly #maxHistory: number;
+  /**
+   * Assets whose newest artifact never reached the runtime (`updateAsset` threw or the artifact could not be
+   * read). The database and the watcher already hold the new hash, so no further file event would ever retry
+   * them: they stay here until a publish succeeds ({@link retryRuntimePublish}, or the next change event).
+   */
+  readonly #runtimeStale = new Set<string>();
 
   constructor(options: AssetHotReloadCoordinatorOptions) {
     const maxHistory = options.maxTransactionHistory ?? DEFAULT_MAX_TRANSACTION_HISTORY;
@@ -164,6 +177,30 @@ export class AssetHotReloadCoordinator {
 
   getTransactionHistory(): readonly AssetHotReloadTransaction[] {
     return this.#txHistory;
+  }
+
+  /** Asset ids whose latest rebuilt artifact the runtime has not received yet (publish failed), in insertion order. */
+  getRuntimeStaleAssetIds(): readonly string[] {
+    return [...this.#runtimeStale];
+  }
+
+  /**
+   * Publish every runtime-stale asset again (see {@link getRuntimeStaleAssetIds}). Returns the resulting
+   * transaction, or `null` when nothing was stale. Serialized with `processAssetChange`.
+   */
+  async retryRuntimePublish(): Promise<AssetHotReloadTransaction | null> {
+    while (this.#inFlightPromise) {
+      await this.#inFlightPromise.catch(() => {});
+    }
+    const currentPromise = this.#republishStale();
+    this.#inFlightPromise = currentPromise;
+    try {
+      return await currentPromise;
+    } finally {
+      if (this.#inFlightPromise === currentPromise) {
+        this.#inFlightPromise = undefined;
+      }
+    }
   }
 
   onEvent(listener: (event: ReimportEvent) => void): () => void {
@@ -250,7 +287,9 @@ export class AssetHotReloadCoordinator {
     const rebuildResult = await this.#reimportService.reimportWithDependents(assetId);
 
     if (rebuildResult.status === "noop") {
-      // Source content hash unchanged / touch only -> no runtime reload transaction
+      // Source content hash unchanged / touch only -> no new rebuild. But when an earlier publish of this
+      // asset failed, the runtime still holds the old bytes and this is the only chance to retry.
+      if (this.#runtimeStale.has(assetId)) return this.#republishStale();
       return null;
     }
 
@@ -292,118 +331,14 @@ export class AssetHotReloadCoordinator {
       } catch {}
     }
 
-    // 2. Publish and reload each successfully rebuilt asset to the runtime
+    // 2. Publish and reload each successfully rebuilt asset to the runtime. Assets left stale by an earlier
+    // failed publish ride along, so one successful transaction heals them.
     if (this.#runtimeTarget) {
-      for (const rebuiltId of rebuildResult.rebuiltAssetIds) {
-        const updatedRecord = this.#database.get(rebuiltId);
-        if (!updatedRecord) continue;
-
-        let artifactBytes: Uint8Array;
-        try {
-          artifactBytes = await this.#fs.readFile(updatedRecord.importedPath);
-        } catch {
-          continue;
-        }
-
-        const base64 = Buffer.from(artifactBytes).toString("base64");
-
-        // Publish to runtime resolver. A runtime that rejects the new bytes must not abort the whole
-        // transaction (it would be lost from the history and waitForAssetReload would time out), and
-        // reloading against stale bytes would be wrong, so report the failure and move on.
-        try {
-          await this.#runtimeTarget.updateAsset(rebuiltId, base64, {
-            fingerprint: updatedRecord.fingerprint,
-            sourceHash: updatedRecord.source.contentHash,
-          });
-        } catch (err) {
-          this.#emit({
-            type: "asset.runtimeReloadFailed",
-            assetId: rebuiltId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          continue;
-        }
-
-        // Trigger live reload
-        this.#emit({
-          type: "asset.runtimeReloadStarted",
-          assetId: rebuiltId,
-          fingerprint: updatedRecord.fingerprint,
-        });
-
-        try {
-          const reloadRes = await this.#runtimeTarget.reloadAsset(rebuiltId);
-          if (reloadRes.success) {
-            runtimeReloadedEntityIds.push(...reloadRes.affectedEntities);
-            this.#emit({
-              type: "asset.runtimeReloadSucceeded",
-              assetId: rebuiltId,
-              fingerprint: updatedRecord.fingerprint,
-              affectedAssetIds: reloadRes.affectedEntities,
-            });
-            // The reload worked but the runtime could not keep some features alive on the new
-            // asset. Surface it as a warning event and on the transaction instead of staying silent.
-            const degradedRoot = new Map<string, string>();
-            const degradedIk = new Map<string, string[]>();
-            const degradedMorph = new Map<string, string[]>();
-            mergeEntityMaps(degradedRoot, reloadRes.droppedRootMotion, acceptReason);
-            mergeEntityMaps(degradedIk, reloadRes.droppedIkChains, acceptNames);
-            mergeEntityMaps(degradedMorph, reloadRes.droppedMorphOverrides, acceptNames);
-            if (degradedRoot.size + degradedIk.size + degradedMorph.size > 0) {
-              for (const [k, v] of degradedRoot) droppedRootMotion.set(k, v);
-              for (const [k, v] of degradedIk) droppedIkChains.set(k, v);
-              for (const [k, v] of degradedMorph) droppedMorphOverrides.set(k, v);
-              const diagnostics: AssetDiagnostic[] = [];
-              for (const [entityId, reason] of degradedRoot) {
-                diagnostics.push({
-                  severity: "warning",
-                  code: "asset.reload.rootMotionDropped",
-                  message: `Root motion on entity "${entityId}" was switched off by the reload of "${rebuiltId}": ${reason}`,
-                  path: entityId,
-                });
-              }
-              for (const [entityId, chains] of degradedIk) {
-                diagnostics.push({
-                  severity: "warning",
-                  code: "asset.reload.ikChainsDropped",
-                  message: `IK chains [${chains.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
-                  path: entityId,
-                });
-              }
-              for (const [entityId, names] of degradedMorph) {
-                diagnostics.push({
-                  severity: "warning",
-                  code: "asset.reload.morphOverridesDropped",
-                  message: `Morph overrides [${names.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
-                  path: entityId,
-                });
-              }
-              this.#emit({
-                type: "asset.runtimeReloadDegraded",
-                assetId: rebuiltId,
-                fingerprint: updatedRecord.fingerprint,
-                affectedAssetIds: reloadRes.affectedEntities,
-                diagnostics,
-                ...(degradedRoot.size > 0 ? { droppedRootMotion: Object.fromEntries(degradedRoot) } : {}),
-                ...(degradedIk.size > 0 ? { droppedIkChains: Object.fromEntries(degradedIk) } : {}),
-                ...(degradedMorph.size > 0 ? { droppedMorphOverrides: Object.fromEntries(degradedMorph) } : {}),
-              });
-            }
-          } else {
-            this.#emit({
-              type: "asset.runtimeReloadFailed",
-              assetId: rebuiltId,
-              error: reloadRes.error,
-            });
-          }
-        } catch (err) {
-          this.#emit({
-            type: "asset.runtimeReloadFailed",
-            assetId: rebuiltId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
+      const publishIds = [...rebuildResult.rebuiltAssetIds];
+      for (const staleId of this.#runtimeStale) {
+        if (!publishIds.includes(staleId)) publishIds.push(staleId);
       }
+      await this.#publishToRuntime(publishIds, runtimeReloadedEntityIds, { droppedRootMotion, droppedIkChains, droppedMorphOverrides });
     }
 
     // Determine unchanged entities
@@ -435,6 +370,172 @@ export class AssetHotReloadCoordinator {
         : {}),
     };
 
+    this.#recordTransaction(tx);
+
+    return tx;
+  }
+
+  async #publishToRuntime(
+    assetIds: readonly string[],
+    runtimeReloadedEntityIds: string[],
+    dropped: ReloadDegradationAccumulator,
+  ): Promise<void> {
+    if (!this.#runtimeTarget) return;
+    for (const rebuiltId of assetIds) {
+      const updatedRecord = this.#database.get(rebuiltId);
+      if (!updatedRecord) {
+        this.#runtimeStale.delete(rebuiltId);
+        continue;
+      }
+
+      let artifactBytes: Uint8Array;
+      try {
+        artifactBytes = await this.#fs.readFile(updatedRecord.importedPath);
+      } catch {
+        this.#runtimeStale.add(rebuiltId);
+        continue;
+      }
+
+      const base64 = Buffer.from(artifactBytes).toString("base64");
+
+      // Publish to runtime resolver. A runtime that rejects the new bytes must not abort the whole
+      // transaction (it would be lost from the history and waitForAssetReload would time out), and
+      // reloading against stale bytes would be wrong, so report the failure, remember the asset as
+      // runtime-stale (nothing else would retry it) and move on.
+      try {
+        await this.#runtimeTarget.updateAsset(rebuiltId, base64, {
+          fingerprint: updatedRecord.fingerprint,
+          sourceHash: updatedRecord.source.contentHash,
+        });
+      } catch (err) {
+        this.#runtimeStale.add(rebuiltId);
+        this.#emit({
+          type: "asset.runtimeReloadFailed",
+          assetId: rebuiltId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+      this.#runtimeStale.delete(rebuiltId);
+
+      // Trigger live reload
+      this.#emit({
+        type: "asset.runtimeReloadStarted",
+        assetId: rebuiltId,
+        fingerprint: updatedRecord.fingerprint,
+      });
+
+      try {
+        const reloadRes = await this.#runtimeTarget.reloadAsset(rebuiltId);
+        if (reloadRes.success) {
+          runtimeReloadedEntityIds.push(...reloadRes.affectedEntities);
+          this.#emit({
+            type: "asset.runtimeReloadSucceeded",
+            assetId: rebuiltId,
+            fingerprint: updatedRecord.fingerprint,
+            affectedAssetIds: reloadRes.affectedEntities,
+          });
+          // The reload worked but the runtime could not keep some features alive on the new
+          // asset. Surface it as a warning event and on the transaction instead of staying silent.
+          const degradedRoot = new Map<string, string>();
+          const degradedIk = new Map<string, string[]>();
+          const degradedMorph = new Map<string, string[]>();
+          mergeEntityMaps(degradedRoot, reloadRes.droppedRootMotion, acceptReason);
+          mergeEntityMaps(degradedIk, reloadRes.droppedIkChains, acceptNames);
+          mergeEntityMaps(degradedMorph, reloadRes.droppedMorphOverrides, acceptNames);
+          if (degradedRoot.size + degradedIk.size + degradedMorph.size > 0) {
+            for (const [k, v] of degradedRoot) dropped.droppedRootMotion.set(k, v);
+            for (const [k, v] of degradedIk) dropped.droppedIkChains.set(k, v);
+            for (const [k, v] of degradedMorph) dropped.droppedMorphOverrides.set(k, v);
+            const diagnostics: AssetDiagnostic[] = [];
+            for (const [entityId, reason] of degradedRoot) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.rootMotionDropped",
+                message: `Root motion on entity "${entityId}" was switched off by the reload of "${rebuiltId}": ${reason}`,
+                path: entityId,
+              });
+            }
+            for (const [entityId, chains] of degradedIk) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.ikChainsDropped",
+                message: `IK chains [${chains.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
+                path: entityId,
+              });
+            }
+            for (const [entityId, names] of degradedMorph) {
+              diagnostics.push({
+                severity: "warning",
+                code: "asset.reload.morphOverridesDropped",
+                message: `Morph overrides [${names.join(", ")}] on entity "${entityId}" were dropped by the reload of "${rebuiltId}"`,
+                path: entityId,
+              });
+            }
+            this.#emit({
+              type: "asset.runtimeReloadDegraded",
+              assetId: rebuiltId,
+              fingerprint: updatedRecord.fingerprint,
+              affectedAssetIds: reloadRes.affectedEntities,
+              diagnostics,
+              ...(degradedRoot.size > 0 ? { droppedRootMotion: Object.fromEntries(degradedRoot) } : {}),
+              ...(degradedIk.size > 0 ? { droppedIkChains: Object.fromEntries(degradedIk) } : {}),
+              ...(degradedMorph.size > 0 ? { droppedMorphOverrides: Object.fromEntries(degradedMorph) } : {}),
+            });
+          }
+        } else {
+          this.#emit({
+            type: "asset.runtimeReloadFailed",
+            assetId: rebuiltId,
+            error: reloadRes.error,
+          });
+        }
+      } catch (err) {
+        this.#emit({
+          type: "asset.runtimeReloadFailed",
+          assetId: rebuiltId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  async #republishStale(): Promise<AssetHotReloadTransaction | null> {
+    if (!this.#runtimeTarget || this.#runtimeStale.size === 0) return null;
+    const ids = [...this.#runtimeStale];
+    const runtimeReloadedEntityIds: string[] = [];
+    const droppedRootMotion = new Map<string, string>();
+    const droppedIkChains = new Map<string, string[]>();
+    const droppedMorphOverrides = new Map<string, string[]>();
+    await this.#publishToRuntime(ids, runtimeReloadedEntityIds, { droppedRootMotion, droppedIkChains, droppedMorphOverrides });
+
+    const rootId = ids[0] as string;
+    const record = this.#database.get(rootId);
+    const tx: AssetHotReloadTransaction = {
+      rootAssetId: rootId,
+      oldSourceHash: record?.source.contentHash,
+      newSourceHash: record?.source.contentHash ?? "",
+      importer: record?.recipe.importer ?? "",
+      rebuildOrder: ids,
+      rebuiltAssetIds: ids.filter((id) => !this.#runtimeStale.has(id)),
+      blockedAssetIds: [],
+      unaffectedAssetIds: [],
+      oldFingerprint: record?.fingerprint,
+      newFingerprint: record?.fingerprint ?? "",
+      runtimeReloadedEntityIds,
+      runtimeUnchangedEntityIds: [],
+      error: this.#runtimeStale.size > 0 ? `runtime publish still failing for: ${[...this.#runtimeStale].join(", ")}` : undefined,
+      ...(entityMapToRecord(droppedRootMotion) ? { droppedRootMotion: entityMapToRecord(droppedRootMotion) } : {}),
+      ...(entityMapToRecord(droppedIkChains) ? { droppedIkChains: entityMapToRecord(droppedIkChains) } : {}),
+      ...(entityMapToRecord(droppedMorphOverrides)
+        ? { droppedMorphOverrides: entityMapToRecord(droppedMorphOverrides) }
+        : {}),
+    };
+    this.#recordTransaction(tx);
+    return tx;
+  }
+
+  #recordTransaction(tx: AssetHotReloadTransaction): void {
     this.#txHistory.push(tx);
     if (this.#txHistory.length > this.#maxHistory) {
       this.#txHistory.splice(0, this.#txHistory.length - this.#maxHistory);
@@ -446,8 +547,6 @@ export class AssetHotReloadCoordinator {
         console.error("Error in transaction listener:", err);
       }
     }
-
-    return tx;
   }
 
   waitForAssetReload(assetId: string, timeoutMs = 10_000): Promise<AssetHotReloadTransaction> {

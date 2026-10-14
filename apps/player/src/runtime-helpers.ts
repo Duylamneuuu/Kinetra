@@ -59,10 +59,27 @@ export interface PercentileTiming {
   maxMs: number;
 }
 
-/** Linear-interpolated p50/p95/p99 and max of the samples, rounded to microseconds. */
+/** How many samples are not finite numbers (NaN, Infinity, or not a number at all). */
+export function countInvalidSamples(samples: readonly number[]): number {
+  let invalid = 0;
+  for (const sample of samples) {
+    if (typeof sample !== "number" || !Number.isFinite(sample)) invalid += 1;
+  }
+  return invalid;
+}
+
+/**
+ * Linear-interpolated p50/p95/p99 and max of the samples, rounded to microseconds.
+ * Any non-finite sample makes every percentile NaN (same contract as the verification package's
+ * copy): a NaN breaks the sort comparator, so a finite-looking number would be arbitrary.
+ */
 export function calculatePercentiles(samples: number[]): PercentileTiming {
   if (samples.length === 0) {
     return { p50Ms: 0, p95Ms: 0, p99Ms: 0, maxMs: 0 };
+  }
+
+  if (countInvalidSamples(samples) > 0) {
+    return { p50Ms: Number.NaN, p95Ms: Number.NaN, p99Ms: Number.NaN, maxMs: Number.NaN };
   }
 
   const sorted = [...samples].sort((a, b) => a - b);

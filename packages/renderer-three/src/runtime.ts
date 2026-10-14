@@ -5,6 +5,7 @@ import type {
 } from "@kinetra/project-model";
 import {
   AnimationGraphMachine,
+  analyzeAnimationGraph,
   validateAnimationGraph,
   type AnimationGraphDefinition,
   type AnimationGraphDiagnostic,
@@ -107,6 +108,8 @@ export interface EntityAnimatorSession {
   /** Blend space fading out during a graph crossfade (weight ramps down by its group weight). */
   outgoingBlendSpace?: BlendSpacePlayback | undefined;
   outgoingBlendSpaceStateId?: string | undefined;
+  /** First failure applying a graph state's blend-space input, keyed by state id. */
+  graphInputDiagnostics?: Map<string, AnimationGraphDiagnostic> | undefined;
 }
 
 export interface BlendSpaceRuntimeResult {
@@ -915,7 +918,13 @@ export class ThreeSceneRuntime {
   initAnimationGraph(
     entityId: string,
     graph: AnimationGraphDefinition,
-  ): { success: boolean; diagnostics?: AnimationGraphDiagnostic[]; error?: string } {
+  ): {
+    success: boolean;
+    diagnostics?: AnimationGraphDiagnostic[];
+    /** Non-fatal findings on a graph that was accepted (e.g. `anim.graph.transition.sharedClipCut`). */
+    warnings?: AnimationGraphDiagnostic[];
+    error?: string;
+  } {
     if (this.#disposed) {
       return { success: false, error: "Runtime is disposed" };
     }
@@ -1011,6 +1020,7 @@ export class ThreeSceneRuntime {
     session.graphDefinition = graph;
     session.previousGraphState = undefined;
     session.lastTransitionId = undefined;
+    session.graphInputDiagnostics = undefined;
 
     // Start entry state with zero blend
     const entryDef = machine.currentStateDefinition;
@@ -1046,7 +1056,18 @@ export class ThreeSceneRuntime {
       }
     }
 
-    return { success: true };
+    const warnings = analyzeAnimationGraph(graph);
+    return warnings.length > 0 ? { success: true, warnings } : { success: true };
+  }
+
+  /**
+   * Graph-driven blend-space inputs the runtime could not apply (one entry per
+   * graph state, the first failure only), or `[]`. A state's entry clears when
+   * its blend space is entered again.
+   */
+  getGraphInputDiagnostics(entityId: string): AnimationGraphDiagnostic[] {
+    const diagnostics = this.#animatorSessions.get(entityId)?.graphInputDiagnostics;
+    return diagnostics ? [...diagnostics.values()] : [];
   }
 
   setAnimationGraphParameter(
@@ -1167,7 +1188,21 @@ export class ThreeSceneRuntime {
     ] as const) {
       if (!playback || playback.stopped || stateId === undefined) continue;
       const input = machine.getBlendSpaceInput(stateId);
-      if (input) playback.setInput(input);
+      if (!input) continue;
+      const result = playback.setInput(input);
+      if (!result.success) {
+        // The weights stay where they were; surface it once per state instead of silently.
+        const recorded = (session.graphInputDiagnostics ??= new Map());
+        if (!recorded.has(stateId)) {
+          recorded.set(stateId, {
+            code: result.code,
+            message: `Graph state "${stateId}" could not apply its blend-space input on entity "${session.entityId}": ${result.error}`,
+            remediation: "Check that the blend space axes are number parameters of the graph.",
+          });
+        }
+      } else {
+        session.graphInputDiagnostics?.delete(stateId);
+      }
     }
     if (metadata?.animation && session.blendSpace && !session.blendSpace.stopped) {
       this.#publishBlendSpaceState(session, session.blendSpace, metadata);

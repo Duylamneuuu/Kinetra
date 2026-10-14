@@ -485,3 +485,62 @@ test("live reload rebuilds a graph-driven blend space from the graph instead of 
   assert.deepEqual(runtime.getBlendSpaceState(heroId)?.input, { speed: 1 });
   runtime.dispose();
 });
+
+test("initAnimationGraph accepts idle -> locomotion but reports the shared-clip cut as a warning", async () => {
+  const runtime = await heroRuntime();
+  const g = graph();
+  g.blendSpaces = [
+    {
+      schemaVersion: 1,
+      kind: "1d",
+      id: "locomotion",
+      parameter: "speed",
+      samples: [
+        { clipId: "stand", position: 0 },
+        { clipId: "walk", position: 1 },
+      ],
+    },
+    crouchLocomotion,
+  ];
+  const init = runtime.initAnimationGraph(heroId, g);
+  assert.equal(init.success, true, init.error);
+  assert.equal(init.warnings?.length, 1);
+  assert.equal(init.warnings?.[0]?.code, "anim.graph.transition.sharedClipCut");
+  assert.match(init.warnings?.[0]?.message ?? "", /Transition "start"/);
+
+  // A graph without overlap carries no warnings field at all.
+  const clean = await heroRuntime();
+  const cleanInit = clean.initAnimationGraph(heroId, graph());
+  assert.equal(cleanInit.success, true, cleanInit.error);
+  assert.equal(cleanInit.warnings, undefined);
+  runtime.dispose();
+  clean.dispose();
+});
+
+test("a graph-driven blend-space input the playback rejects is recorded once per state, not swallowed", async () => {
+  const runtime = await heroRuntime();
+  assert.equal(runtime.initAnimationGraph(heroId, graph()).success, true);
+  setSpeed(runtime, 2);
+  runtime.updateAnimation(0.3);
+  assert.deepEqual(runtime.getGraphInputDiagnostics(heroId), []);
+
+  const playback = sessionOf(runtime).blendSpace!;
+  const original = playback.setInput.bind(playback);
+  playback.setInput = () => ({
+    success: false,
+    code: "anim.blendSpace.input.unknownParameter",
+    error: 'Blend space "locomotion" has no parameter "speed"',
+  });
+  setSpeed(runtime, 2.5);
+  setSpeed(runtime, 2.75);
+  const diagnostics = runtime.getGraphInputDiagnostics(heroId);
+  assert.equal(diagnostics.length, 1, "one entry per state, not one per step");
+  assert.equal(diagnostics[0]?.code, "anim.blendSpace.input.unknownParameter");
+  assert.match(diagnostics[0]?.message ?? "", /Graph state "move"/);
+
+  // Once the playback accepts input again the stale diagnostic is cleared.
+  playback.setInput = original;
+  setSpeed(runtime, 2);
+  assert.deepEqual(runtime.getGraphInputDiagnostics(heroId), []);
+  runtime.dispose();
+});

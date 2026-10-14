@@ -14,6 +14,27 @@ import type { RuntimePerformanceEvidence } from "./performance.js";
 /** Largest delay setTimeout honours (2^31-1 ms); larger values fire after 1 ms. */
 const MAX_WAIT_MS = 2_147_483_647;
 
+type HostMethodName =
+  | "registerAsset"
+  | "updateAsset"
+  | "bakeNavigation"
+  | "loadNavigation"
+  | "closestPointNavigation"
+  | "computePathNavigation"
+  | "playAnimation"
+  | "registerAnimationClip"
+  | "stopAnimation"
+  | "playAudio"
+  | "stopAudio"
+  | "setAudioBusGain"
+  | "setAudioBusMuted"
+  | "pause"
+  | "resume"
+  | "detachModel"
+  | "attachModel";
+
+type HostArgs<K extends HostMethodName> = Parameters<NonNullable<RuntimeProbeHost[K]>>;
+
 export interface KinetraRuntimeProbeOptions {
   host: RuntimeProbeHost;
   project: ProjectDocument | (() => ProjectDocument | Promise<ProjectDocument>);
@@ -96,14 +117,25 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     );
   }
 
+  /**
+   * Resolve an optional host capability or fail loudly. A host that cannot perform an action must
+   * not make the acceptance step succeed: silently skipping `playAnimation`, `pause`, a navigation
+   * bake and friends turned a missing capability into a false pass.
+   */
+  #requireHost<K extends HostMethodName>(name: K): (...args: HostArgs<K>) => Promise<unknown> {
+    const method = this.#host[name] as unknown;
+    if (typeof method !== "function") {
+      throw new Error(`Host does not support ${name}`);
+    }
+    return (...args: HostArgs<K>) => (method as (...a: unknown[]) => Promise<unknown>).apply(this.#host, args);
+  }
+
   async registerAsset(
     assetId: string,
     dataBase64: string,
     options?: { fingerprint?: string; sourceHash?: string },
   ): Promise<void> {
-    if (typeof this.#host.registerAsset === "function") {
-      await this.#host.registerAsset(assetId, dataBase64, options);
-    }
+    await this.#requireHost("registerAsset")(assetId, dataBase64, options);
   }
 
   async updateAsset(
@@ -111,9 +143,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     dataBase64: string,
     options?: { fingerprint?: string; sourceHash?: string },
   ): Promise<void> {
-    if (typeof this.#host.updateAsset === "function") {
-      await this.#host.updateAsset(assetId, dataBase64, options);
-    }
+    await this.#requireHost("updateAsset")(assetId, dataBase64, options);
   }
 
   async reloadAsset(assetId: string): Promise<ReloadAssetResult> {
@@ -193,24 +223,18 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     indices?: number[];
     config?: Record<string, unknown>;
   }): Promise<void> {
-    if (typeof this.#host.bakeNavigation === "function") {
-      await this.#host.bakeNavigation(params);
-    }
+    await this.#requireHost("bakeNavigation")(params);
   }
 
   async loadNavigation(params: { dataBase64: string }): Promise<void> {
-    if (typeof this.#host.loadNavigation === "function") {
-      await this.#host.loadNavigation(params);
-    }
+    await this.#requireHost("loadNavigation")(params);
   }
 
   async closestPointNavigation(params: {
     position: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void> {
-    if (typeof this.#host.closestPointNavigation === "function") {
-      await this.#host.closestPointNavigation(params);
-    }
+    await this.#requireHost("closestPointNavigation")(params);
   }
 
   async computePathNavigation(params: {
@@ -218,9 +242,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     end: [number, number, number];
     halfExtents?: [number, number, number];
   }): Promise<void> {
-    if (typeof this.#host.computePathNavigation === "function") {
-      await this.#host.computePathNavigation(params);
-    }
+    await this.#requireHost("computePathNavigation")(params);
   }
 
   async playAnimation(
@@ -232,24 +254,18 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
       retargetCacheKey?: string;
     },
   ): Promise<void> {
-    if (typeof this.#host.playAnimation === "function") {
-      await this.#host.playAnimation(entityId, clip, options);
-    }
+    await this.#requireHost("playAnimation")(entityId, clip, options);
   }
 
   async registerAnimationClip(
     entityId: string,
     clip: unknown,
   ): Promise<void> {
-    if (typeof this.#host.registerAnimationClip === "function") {
-      await this.#host.registerAnimationClip(entityId, clip);
-    }
+    await this.#requireHost("registerAnimationClip")(entityId, clip);
   }
 
   async stopAnimation(entityId: string): Promise<void> {
-    if (typeof this.#host.stopAnimation === "function") {
-      await this.#host.stopAnimation(entityId);
-    }
+    await this.#requireHost("stopAnimation")(entityId);
   }
 
   async playAudio(params: {
@@ -259,27 +275,19 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
     gain?: number;
     entityId?: string;
   }): Promise<void> {
-    if (typeof this.#host.playAudio === "function") {
-      await this.#host.playAudio(params);
-    }
+    await this.#requireHost("playAudio")(params);
   }
 
   async stopAudio(params?: { playbackId?: string; entityId?: string }): Promise<void> {
-    if (typeof this.#host.stopAudio === "function") {
-      await this.#host.stopAudio(params);
-    }
+    await this.#requireHost("stopAudio")(params);
   }
 
   async setAudioBusGain(busId: string, gain: number): Promise<void> {
-    if (typeof this.#host.setAudioBusGain === "function") {
-      await this.#host.setAudioBusGain(busId, gain);
-    }
+    await this.#requireHost("setAudioBusGain")(busId, gain);
   }
 
   async setAudioBusMuted(busId: string, muted: boolean): Promise<void> {
-    if (typeof this.#host.setAudioBusMuted === "function") {
-      await this.#host.setAudioBusMuted(busId, muted);
-    }
+    await this.#requireHost("setAudioBusMuted")(busId, muted);
   }
 
   async captureSave(slotId?: string): Promise<{
@@ -320,29 +328,19 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
   }
 
   async pause(): Promise<void> {
-    if (typeof this.#host.pause === "function") {
-      await this.#host.pause();
-    }
+    await this.#requireHost("pause")();
   }
 
   async resume(): Promise<void> {
-    if (typeof this.#host.resume === "function") {
-      await this.#host.resume();
-    }
+    await this.#requireHost("resume")();
   }
 
   async detachModel(entityId: string): Promise<unknown> {
-    if (typeof this.#host.detachModel === "function") {
-      return this.#host.detachModel(entityId);
-    }
-    return undefined;
+    return this.#requireHost("detachModel")(entityId);
   }
 
   async attachModel(entityId: string, assetId: string): Promise<unknown> {
-    if (typeof this.#host.attachModel === "function") {
-      return this.#host.attachModel(entityId, assetId);
-    }
-    return undefined;
+    return this.#requireHost("attachModel")(entityId, assetId);
   }
 
 

@@ -36,6 +36,18 @@ if (launchNumber === 1) {
 }
 `;
 
+/**
+ * Stdio bridge that is still starting up (no "ready" event for 20 s) when the host is closed.
+ */
+const FAKE_SLOW_READY_PLAYER = `
+import fs from "node:fs";
+
+fs.appendFileSync(process.env.KINETRA_FAKE_LAUNCH_LOG, "launch\\n");
+setTimeout(() => process.stdout.write(JSON.stringify({ type: "event", event: "ready" }) + "\\n"), 20000);
+setTimeout(() => process.exit(0), 20000);
+process.stdin.resume();
+`;
+
 async function prepare(prefix: string, source: string): Promise<{
   directory: string;
   playerEntry: string;
@@ -119,12 +131,15 @@ test("concurrent close() calls share one teardown", posixOnly, async () => {
 });
 
 test("close() while the pipe server is still binding does not launch an unowned process", posixOnly, async () => {
-  const { playerEntry, launchLog } = await prepare("kinetra-fake-close3-", FAKE_STDIO_PLAYER);
+  const { directory, playerEntry, launchLog } = await prepare("kinetra-fake-close3-", FAKE_STDIO_PLAYER);
+  // Run the fake player under this Node binary (never a real Electron, which would start too
+  // slowly for the launch count below to prove anything) and ignore KINETRA_RUNTIME_EXECUTABLE.
   const host = new ElectronRuntimeHost({
     electronExecutable: process.execPath,
     runtimeExecutable: undefined,
     playerEntry,
     requestTimeoutMs: 3_000,
+    userDataDir: join(directory, "user-data"),
   });
 
   try {
@@ -142,3 +157,43 @@ test("close() while the pipe server is still binding does not launch an unowned 
     await host.close();
   }
 });
+
+test(
+  "close() while the stdio bridge is still starting fails the waiting request immediately, not after the request timeout",
+  posixOnly,
+  async () => {
+    const { directory, playerEntry } = await prepare("kinetra-fake-close4-", FAKE_SLOW_READY_PLAYER);
+    const requestTimeoutMs = 6_000;
+    const host = new ElectronRuntimeHost({
+      electronExecutable: process.execPath,
+      runtimeExecutable: undefined,
+      playerEntry,
+      transport: "stdio",
+      requestTimeoutMs,
+      userDataDir: join(directory, "user-data"),
+    });
+
+    try {
+      const startedAt = Date.now();
+      const request = host.query().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      // Let the child spawn so close() takes the "process launched, not ready yet" path.
+      await new Promise((resolveWait) => setTimeout(resolveWait, 300));
+      await host.close();
+      const outcome = await request;
+      const elapsedMs = Date.now() - startedAt;
+
+      assert.ok(outcome instanceof Error, "the request waiting for ready must fail");
+      assert.match(outcome.message, /closed/, `expected a close error, got: ${outcome.message}`);
+      assert.ok(
+        elapsedMs < requestTimeoutMs - 1_500,
+        `request failed after ${String(elapsedMs)}ms; it should not wait for the ${String(requestTimeoutMs)}ms timeout`,
+      );
+    } finally {
+      delete process.env.KINETRA_FAKE_LAUNCH_LOG;
+      await host.close();
+    }
+  },
+);

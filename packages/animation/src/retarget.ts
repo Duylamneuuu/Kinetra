@@ -6,6 +6,7 @@ import {
   type SkeletonProfile,
   type RetargetPlan,
   buildRetargetPlan,
+  canonicalizeForCacheKey,
   skeletonSignature,
 } from "./skeleton.js";
 
@@ -93,17 +94,7 @@ function canonicalRestPoses(map: RestPoseMap | undefined): Array<[string, RestPo
 }
 
 export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string {
-  const stable = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(stable);
-    if (value && typeof value === "object") {
-      const result: Record<string, unknown> = {};
-      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-        result[key] = stable((value as Record<string, unknown>)[key]);
-      }
-      return result;
-    }
-    return value;
-  };
+  const stable = canonicalizeForCacheKey;
 
   const mapping = input.semanticMapping ?? buildRetargetPlan(input.source, input.target).pairs;
   const canonicalMapping = mapping
@@ -447,6 +438,23 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
 
     const { targetBone, semantic } = mapping;
 
+    // A track whose value buffer does not hold exactly one value per key (a truncated track, or a
+    // glTF CUBICSPLINE track that stores in/out tangents next to every key) cannot be baked key by
+    // key: it used to come out with fewer values than keys or with tangents mistaken for poses.
+    const stride = property === "quaternion" || property === "rotation" ? 4 : property === "position" ? 3 : undefined;
+    if (stride !== undefined && track.values.length !== track.times.length * stride) {
+      diagnostics.push({
+        severity: "warning",
+        code: "retarget.track.malformed",
+        message: `Track "${track.name}" has ${track.values.length} values for ${track.times.length} keys (expected ${track.times.length * stride}); skipped`,
+        nodeName: sourceNodeName,
+        hint: "Bake the source clip to one value per key (no CUBICSPLINE tangents) before retargeting",
+      });
+      continue;
+    }
+    // Step (discrete) and smooth tracks must keep their interpolation; a new track defaults to linear.
+    const interpolation = track.getInterpolation();
+
     if (property === "quaternion" || property === "rotation") {
       const sourceRest = getRestPose(options.sourceRestPoses, sourceNodeName);
       const targetRest = getRestPose(options.targetRestPoses, targetBone);
@@ -481,7 +489,7 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
       }
 
       bakedTracks.push(
-        new THREE.QuaternionKeyframeTrack(`${targetBone}.quaternion`, times, values),
+        new THREE.QuaternionKeyframeTrack(`${targetBone}.quaternion`, times, values, interpolation),
       );
     } else if (property === "position") {
       if (semantic === "hips" && hipsPolicy !== "ignore") {
@@ -517,7 +525,7 @@ export function bakeRetargetedClip(options: BakeRetargetOptions): BakeRetargetRe
         }
 
         bakedTracks.push(
-          new THREE.VectorKeyframeTrack(`${targetBone}.position`, times, values),
+          new THREE.VectorKeyframeTrack(`${targetBone}.position`, times, values, interpolation),
         );
       } else {
         diagnostics.push({

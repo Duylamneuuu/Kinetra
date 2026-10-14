@@ -59,8 +59,9 @@ export class FileKeyValueStorage implements KeyValueStorage {
     }
 
     // "settings:user" is stored as "settings_user.json", so a save slot whose name starts with
-    // "settings_" would alias a settings file and overwrite it.
-    if (key.startsWith("saves:") && cleanKey.startsWith("settings_")) {
+    // "settings_" would alias a settings file and overwrite it. The comparison ignores case: Windows (NTFS) and
+    // macOS file systems are case-insensitive, so "saves:Settings_user" would open the very same file.
+    if (key.startsWith("saves:") && /^settings_/i.test(cleanKey)) {
       throw new Error(
         `Invalid storage key "${key}": save slot names starting with "settings_" collide with the settings namespace`,
       );

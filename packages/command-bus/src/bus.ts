@@ -183,6 +183,81 @@ function applyCommand(project: ProjectDocument, command: EngineCommand): ChangeR
       ];
     }
 
+    case "component.remove": {
+      assertComponentName(command.payload.component);
+      const located = findEntity(project, command.payload.entityId);
+      if (!located) {
+        throw new CommandError(
+          "ENTITY_NOT_FOUND",
+          `Entity "${command.payload.entityId}" does not exist`,
+        );
+      }
+
+      if (ownComponent(located.entity, command.payload.component) === undefined) {
+        throw new CommandError(
+          "COMPONENT_NOT_FOUND",
+          `Entity "${located.entity.id}" has no component "${command.payload.component}"`,
+        );
+      }
+
+      delete located.entity.components[command.payload.component];
+      return [{ kind: "deleted", id: located.entity.id, resource: "component" }];
+    }
+
+    case "component.unsetFields": {
+      assertComponentName(command.payload.component);
+      const located = findEntity(project, command.payload.entityId);
+      if (!located) {
+        throw new CommandError(
+          "ENTITY_NOT_FOUND",
+          `Entity "${command.payload.entityId}" does not exist`,
+        );
+      }
+
+      const existing = ownComponent(located.entity, command.payload.component);
+      if (existing === undefined) {
+        throw new CommandError(
+          "COMPONENT_NOT_FOUND",
+          `Entity "${located.entity.id}" has no component "${command.payload.component}"`,
+        );
+      }
+      if (!isJsonObject(existing)) {
+        throw new CommandError(
+          "COMPONENT_NOT_OBJECT",
+          `Component "${command.payload.component}" is not object data; use component.remove to delete it`,
+        );
+      }
+
+      const missing = command.payload.fields.filter(
+        (field) => !Object.prototype.hasOwnProperty.call(existing, field),
+      );
+      if (missing.length > 0) {
+        throw new CommandError(
+          "FIELD_NOT_FOUND",
+          `Component "${command.payload.component}" on "${located.entity.id}" has no field(s): ${missing
+            .map((field) => `"${field}"`)
+            .join(", ")}`,
+        );
+      }
+
+      const remaining: JsonObject = {};
+      for (const [key, value] of Object.entries(existing)) {
+        if (!command.payload.fields.includes(key)) {
+          // defineProperty, not assignment: a JSON.parse'd "__proto__" field is an own data
+          // property, and `remaining["__proto__"] = value` would re-prototype the new component
+          // (object value) or silently drop the field (primitive value).
+          Object.defineProperty(remaining, key, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+        }
+      }
+      located.entity.components[command.payload.component] = remaining;
+      return [{ kind: "updated", id: located.entity.id, resource: "component" }];
+    }
+
     case "entity.reparent": {
       const located = findEntity(project, command.payload.entityId);
       if (!located) {

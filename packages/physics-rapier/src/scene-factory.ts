@@ -1,6 +1,6 @@
 import type { SceneDefinition } from "@kinetra/project-model";
 
-import { MAX_PHYSICS_LAYER, type Vec3 } from "./types.js";
+import { MAX_PHYSICS_LAYER, type Quaternion, type Vec3 } from "./types.js";
 import { RapierPhysicsWorld, type RapierPhysicsWorldOptions } from "./world.js";
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -41,6 +41,31 @@ function vec3Value(
     return [value[0], value[1], value[2]];
   }
   return fallback;
+}
+
+/**
+ * Quaternion for a `Transform.rotation` (Euler XYZ radians, the order the render runtime applies
+ * with `object.rotation.set`). `undefined` for identity, so unrotated bodies are built exactly as
+ * before.
+ */
+function rotationQuaternion(value: unknown): Quaternion | undefined {
+  const [x, y, z] = vec3Value(value, [0, 0, 0]);
+  if (x === 0 && y === 0 && z === 0) return undefined;
+  const c1 = Math.cos(x / 2);
+  const c2 = Math.cos(y / 2);
+  const c3 = Math.cos(z / 2);
+  const s1 = Math.sin(x / 2);
+  const s2 = Math.sin(y / 2);
+  const s3 = Math.sin(z / 2);
+  const q = {
+    x: s1 * c2 * c3 + c1 * s2 * s3,
+    y: c1 * s2 * c3 - s1 * c2 * s3,
+    z: c1 * c2 * s3 + s1 * s2 * c3,
+    w: c1 * c2 * c3 - s1 * s2 * s3,
+  };
+  // Already unit up to rounding; normalise so the world's unit-quaternion check never trips.
+  const length = Math.hypot(q.x, q.y, q.z, q.w);
+  return { x: q.x / length, y: q.y / length, z: q.z / length, w: q.w / length };
 }
 
 /** Collider shapes the scene factory builds as declared. */
@@ -85,7 +110,28 @@ function declaredShapeOf(
   return undefined;
 }
 
-function diagnoseEntity(entity: SceneDefinition["entities"][number]): PhysicsSceneDiagnostic | undefined {
+/**
+ * How one scene entity's physics body is built. This is the single decision point shared by
+ * `populateWorld` (which builds the body) and `diagnoseEntity` (which reports what was
+ * substituted), so the two can no longer disagree about which shape an entity ends up with.
+ */
+export interface ColliderPlan {
+  /** `kinematic` is a non-character kinematic body; `character` has a CharacterBody component. */
+  readonly bodyType: "fixed" | "dynamic" | "kinematic" | "character";
+  /** The shape actually built (`ball` is normalised to `sphere`). */
+  readonly shape: "box" | "sphere" | "capsule";
+  /** Set when the declared shape was not built as authored; `shape` is then the fallback. */
+  readonly unsupported?: {
+    /** The declared value, stringified (`7` for a non-string shape). */
+    readonly shape: string;
+    readonly source: PhysicsSceneDiagnostic["source"];
+  };
+}
+
+/** The body an entity gets in the physics world, or `undefined` when it has no physics components. */
+export function resolveColliderPlan(
+  entity: SceneDefinition["entities"][number],
+): ColliderPlan | undefined {
   const rigidBody = asObject(entity.components.RigidBody);
   const collider = asObject(entity.components.Collider);
   const character = asObject(entity.components.CharacterBody);
@@ -93,42 +139,62 @@ function diagnoseEntity(entity: SceneDefinition["entities"][number]): PhysicsSce
   if (!rigidBody && !collider && !character) return undefined;
 
   const declared = declaredShapeOf(collider, primitive);
-  if (!declared) return undefined;
-  const shape = String(declared.value);
+  const declaredText = declared ? String(declared.value) : "";
 
   const rbType = stringValue(rigidBody?.type, "fixed").toLowerCase();
+  // Every kinematic flavour declared by RigidBodyType is driven through the character
+  // controller; "kinematicVelocityBased" used to fall through to a fixed box.
   const isCharacter =
     Boolean(character) ||
     rbType === "kinematic" ||
     rbType === "kinematicpositionbased" ||
     rbType === "kinematicvelocitybased";
 
-  let bodyType: PhysicsSceneDiagnostic["bodyType"];
-  let fallback: PhysicsSceneDiagnostic["fallback"];
   if (isCharacter) {
-    if (!character && (shape === "box" || shape === "sphere" || shape === "ball")) return undefined;
+    // A kinematic body that declares a box/sphere collider (a moving platform, a door) and is not
+    // a CharacterBody must keep that shape; only capsule / undeclared shapes are character bodies.
+    if (!character && (declaredText === "box" || declaredText === "sphere" || declaredText === "ball")) {
+      return { bodyType: "kinematic", shape: declaredText === "box" ? "box" : "sphere" };
+    }
+    const bodyType = character ? "character" : "kinematic";
     // A character is always a capsule; a Primitive kind is only the render mesh, so only an
     // explicit non-capsule Collider.shape is a mismatch worth reporting.
-    if (declared.source !== "Collider.shape" || shape === "capsule") return undefined;
-    bodyType = character ? "character" : "kinematic";
-    fallback = "capsule";
-  } else {
-    if (typeof declared.value === "string" && SUPPORTED_SHAPES.has(shape)) return undefined;
-    // A plane Primitive is built as a box from Primitive.size (its render mesh is a thin box too).
-    if (declared.source === "Primitive.kind" && shape === "plane") return undefined;
-    bodyType = rbType === "dynamic" ? "dynamic" : "fixed";
-    fallback = "box";
+    if (declared && declared.source === "Collider.shape" && declaredText !== "capsule") {
+      return { bodyType, shape: "capsule", unsupported: { shape: declaredText, source: declared.source } };
+    }
+    return { bodyType, shape: "capsule" };
   }
+
+  const bodyType = rbType === "dynamic" ? "dynamic" : "fixed";
+  const shape: ColliderPlan["shape"] =
+    declaredText === "sphere" || declaredText === "ball"
+      ? "sphere"
+      : declaredText === "capsule"
+        ? "capsule"
+        : "box";
+  if (!declared) return { bodyType, shape };
+  if (typeof declared.value === "string" && SUPPORTED_SHAPES.has(declaredText)) return { bodyType, shape };
+  // A plane Primitive is built as a box from Primitive.size (its render mesh is a thin box too).
+  if (declared.source === "Primitive.kind" && declaredText === "plane") return { bodyType, shape };
+  return { bodyType, shape: "box", unsupported: { shape: declaredText, source: declared.source } };
+}
+
+function diagnoseEntity(entity: SceneDefinition["entities"][number]): PhysicsSceneDiagnostic | undefined {
+  const plan = resolveColliderPlan(entity);
+  if (!plan?.unsupported) return undefined;
+  const { shape, source } = plan.unsupported;
+  const { bodyType } = plan;
+  const fallback = plan.shape as PhysicsSceneDiagnostic["fallback"];
 
   return {
     code: "physics.unsupportedColliderShape",
     severity: "warning",
     entityId: entity.id,
     shape,
-    source: declared.source,
+    source,
     bodyType,
     fallback,
-    message: `Entity "${entity.id}" declares ${declared.source} "${shape}", which the ${bodyType} physics path does not support; a ${fallback} collider was built instead.`,
+    message: `Entity "${entity.id}" declares ${source} "${shape}", which the ${bodyType} physics path does not support; a ${fallback} collider was built instead.`,
     remediation:
       bodyType === "character"
         ? `CharacterBody colliders are capsules: set Collider.shape to "capsule" (radius, halfHeight) or remove it.`
@@ -183,6 +249,11 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       z: posArray[2],
     };
 
+    // Authored orientation. A character capsule keeps identity: its facing is owned by the render
+    // object (root motion / scripts), and the player never copies a character's rotation back.
+    const orientation = rotationQuaternion(transform?.rotation);
+    const rotationOption = orientation ? { rotation: orientation } : {};
+
     const rigidBody = asObject(entity.components.RigidBody);
     const collider = asObject(entity.components.Collider);
     const character = asObject(entity.components.CharacterBody);
@@ -190,27 +261,13 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
     const layer = layerValue(collider?.layer);
     const layerOption = layer !== undefined ? { layer } : {};
 
-    if (!rigidBody && !collider && !character) {
+    // One shared decision (see resolveColliderPlan) so the world and the diagnostics agree.
+    const plan = resolveColliderPlan(entity);
+    if (!plan) {
       continue;
     }
 
-    const rbType = stringValue(rigidBody?.type, "fixed").toLowerCase();
-    // Every kinematic flavour declared by RigidBodyType is driven through the character
-    // controller; "kinematicVelocityBased" used to fall through to a fixed box.
-    const isCharacter =
-      Boolean(character) ||
-      rbType === "kinematic" ||
-      rbType === "kinematicpositionbased" ||
-      rbType === "kinematicvelocitybased";
-
-    // A kinematic body that declares a box/sphere collider (a moving platform, a door) and is not
-    // a CharacterBody must keep that shape; only capsule / undeclared shapes are character bodies.
-    const declaredShape = stringValue(collider?.shape ?? primitive?.kind, "");
-    if (
-      isCharacter &&
-      !character &&
-      (declaredShape === "box" || declaredShape === "sphere" || declaredShape === "ball")
-    ) {
+    if (plan.bodyType === "kinematic" && plan.shape !== "capsule") {
       const friction =
         typeof collider?.friction === "number" ? collider.friction : undefined;
       const restitution =
@@ -220,11 +277,12 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       const common = {
         id: entity.id,
         position,
+        ...rotationOption,
         ...(friction !== undefined ? { friction } : {}),
         ...(restitution !== undefined ? { restitution } : {}),
         ...layerOption,
       };
-      if (declaredShape === "box") {
+      if (plan.shape === "box") {
         let halfExtents: Vec3;
         if (Array.isArray(collider?.halfExtents)) {
           const ext = vec3Value(collider.halfExtents, [0.5, 0.5, 0.5]);
@@ -244,7 +302,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       continue;
     }
 
-    if (isCharacter) {
+    if (plan.bodyType === "kinematic" || plan.bodyType === "character") {
       const radius = numberValue(
         collider?.radius ?? primitive?.radius,
         0.4,
@@ -273,11 +331,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       continue;
     }
 
-    if (rbType === "dynamic") {
-      const shape = stringValue(
-        collider?.shape ?? primitive?.kind,
-        "box",
-      );
+    if (plan.bodyType === "dynamic") {
       const restitution =
         typeof collider?.restitution === "number"
           ? collider.restitution
@@ -294,7 +348,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         typeof rigidBody?.mass === "number" ? rigidBody.mass : undefined;
       const massOption = mass !== undefined ? { mass } : {};
 
-      if (shape === "sphere" || shape === "ball") {
+      if (plan.shape === "sphere") {
         const radius = numberValue(
           collider?.radius ?? primitive?.radius,
           0.5,
@@ -302,6 +356,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "sphere",
           radius,
           ...(restitution !== undefined ? { restitution } : {}),
@@ -310,12 +365,13 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
           ...massOption,
           ...layerOption,
         });
-      } else if (shape === "capsule") {
+      } else if (plan.shape === "capsule") {
         const radius = numberValue(collider?.radius, 0.4);
         const halfHeight = numberValue(collider?.halfHeight, 0.5);
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "capsule",
           radius,
           halfHeight,
@@ -345,6 +401,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
         world.addDynamicBody({
           id: entity.id,
           position,
+          ...rotationOption,
           shape: "box",
           halfExtents,
           ...(restitution !== undefined ? { restitution } : {}),
@@ -361,8 +418,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
 
     // Default to fixed / static collider. A declared sphere or capsule keeps its shape; the fixed
     // path used to build a (default 1x1x1) cuboid whatever the Collider / Primitive declared.
-    const fixedShape = stringValue(collider?.shape ?? primitive?.kind, "box");
-    if (fixedShape === "sphere" || fixedShape === "ball" || fixedShape === "capsule") {
+    if (plan.shape === "sphere" || plan.shape === "capsule") {
       const fixedFriction =
         typeof collider?.friction === "number" ? collider.friction : undefined;
       const fixedRestitution =
@@ -372,11 +428,12 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
       const fixedCommon = {
         id: entity.id,
         position,
+        ...rotationOption,
         ...(fixedFriction !== undefined ? { friction: fixedFriction } : {}),
         ...(fixedRestitution !== undefined ? { restitution: fixedRestitution } : {}),
         ...layerOption,
       };
-      if (fixedShape === "capsule") {
+      if (plan.shape === "capsule") {
         world.addFixedCapsule({
           ...fixedCommon,
           radius: numberValue(collider?.radius, 0.4),
@@ -417,6 +474,7 @@ function populateWorld(world: RapierPhysicsWorld, scene: SceneDefinition): void 
     world.addFixedBox({
       id: entity.id,
       position,
+      ...rotationOption,
       halfExtents,
       ...(friction !== undefined ? { friction } : {}),
       ...(restitution !== undefined ? { restitution } : {}),

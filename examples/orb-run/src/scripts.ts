@@ -15,11 +15,12 @@ import {
   ORB_RUN_EVENT,
   ORB_RUN_RULES_COMPONENT,
   ORB_RUN_SCRIPT,
+  ORB_RUN_STOWED_Y,
 } from "./ids.js";
 
 type Vec3 = [number, number, number];
 
-const HIDDEN_Y = -10;
+const HIDDEN_Y = ORB_RUN_STOWED_Y;
 
 function horizontalDistance(a: Vec3, b: Vec3): number {
   return Math.hypot(a[0] - b[0], a[2] - b[2]);

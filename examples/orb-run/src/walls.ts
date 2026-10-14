@@ -82,9 +82,7 @@ export function readOrbRunWalls(entities: ReadonlyArray<{ id: string; components
 
 /** Distance from a ground point to the wall's rectangle (0 inside). */
 export function distanceToWall(wall: OrbRunWall, x: number, z: number): number {
-  const dx = Math.max(Math.abs(x - wall.x) - wall.halfWidth, 0);
-  const dz = Math.max(Math.abs(z - wall.z) - wall.halfDepth, 0);
-  return Math.hypot(dx, dz);
+  return Math.max(signedDistanceToWall(wall, x, z), 0);
 }
 
 /** Whether a circle of `radius` centred at (x, z) overlaps any wall (touching does not count). */
@@ -106,9 +104,48 @@ export function resolveWallMotion(
   if (walls.length === 0) return { x: to.x, z: to.z };
   let x = from.x;
   let z = from.z;
-  if (!circleHitsWall(walls, to.x, z, radius)) x = to.x;
-  if (!circleHitsWall(walls, x, to.z, radius)) z = to.z;
+  if (axisMoveAllowed(walls, x, z, to.x, z, radius)) x = to.x;
+  if (axisMoveAllowed(walls, x, z, x, to.z, radius)) z = to.z;
   return { x, z };
+}
+
+/**
+ * Signed distance from a ground point to a wall's rectangle: positive outside,
+ * negative inside (how far the point is from the nearest edge, going out).
+ */
+export function signedDistanceToWall(wall: OrbRunWall, x: number, z: number): number {
+  const dx = Math.abs(x - wall.x) - wall.halfWidth;
+  const dz = Math.abs(z - wall.z) - wall.halfDepth;
+  if (dx > 0 || dz > 0) return Math.hypot(Math.max(dx, 0), Math.max(dz, 0));
+  return Math.max(dx, dz);
+}
+
+/**
+ * A single-axis step is allowed when the circle ends free of every wall. A
+ * player who already overlaps a wall (a wall authored or hot-reloaded on top of
+ * them) may also take a step that does not push them deeper into THAT wall
+ * (and into no wall they were not already overlapping), otherwise every
+ * axis would be refused forever and they could never leave. From a free
+ * position this is exactly the plain "end free" rule, so behaviour (and every
+ * golden digest) outside an overlap is unchanged.
+ */
+function axisMoveAllowed(
+  walls: readonly OrbRunWall[],
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius: number,
+): boolean {
+  // Judged wall by wall: every wall the end position still overlaps must be one
+  // the start position already overlapped, and the step must not take the player
+  // deeper into it. Easing off wall A never licenses stepping into wall B.
+  for (const wall of walls) {
+    if (distanceToWall(wall, toX, toZ) >= radius - 1e-9) continue;
+    if (distanceToWall(wall, fromX, fromZ) >= radius - 1e-9) return false;
+    if (signedDistanceToWall(wall, toX, toZ) < signedDistanceToWall(wall, fromX, fromZ) - 1e-12) return false;
+  }
+  return true;
 }
 
 /** The MCP-shaped `entity.create` components for a wall of `width` x `depth` metres and `height` tall. */

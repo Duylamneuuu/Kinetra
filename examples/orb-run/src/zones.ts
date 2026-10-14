@@ -105,6 +105,46 @@ export function slowZoneMultiplierAt(zones: readonly OrbRunSlowZone[], x: number
   return multiplier;
 }
 
+/** Distance between samples when pricing a path through mud, in metres. */
+export const ORB_RUN_PATH_PRICE_STEP_METERS = 0.01;
+
+/**
+ * Seconds a player at `playerSpeed` needs to walk a polyline on the ground plane, slowed by the zones it crosses:
+ * the path is cut into `ORB_RUN_PATH_PRICE_STEP_METERS` pieces and each piece is priced at the speed of the zone
+ * under its midpoint (the slowest wins, like the player script). It is the continuous-time cousin of the per-step
+ * rule (no 1/30 s quantisation, like the plain `length / speed` estimate); with no zones it is exactly
+ * `length / speed`. Pure: the route planner, the tests and any HUD estimate read the same definition.
+ */
+export function walkSecondsAlong(
+  path: ReadonlyArray<{ x: number; z: number }>,
+  playerSpeed: number,
+  zones: readonly OrbRunSlowZone[],
+): number {
+  if (!(playerSpeed > 0) || !Number.isFinite(playerSpeed)) throw new RangeError("playerSpeed must be a finite number > 0");
+  for (const entry of zones) {
+    if (!Number.isFinite(entry.speedMultiplier) || !(entry.speedMultiplier > 0) || entry.speedMultiplier > 1) {
+      throw new RangeError(`slow zone ${entry.entityId}: speedMultiplier must be a finite number in (0, 1]`);
+    }
+  }
+  let length = 0;
+  let seconds = 0;
+  for (let index = 1; index < path.length; index += 1) {
+    const a = path[index - 1]!;
+    const b = path[index]!;
+    const segment = Math.hypot(b.x - a.x, b.z - a.z);
+    length += segment;
+    if (zones.length === 0 || segment === 0) continue;
+    const pieces = Math.max(1, Math.ceil(segment / ORB_RUN_PATH_PRICE_STEP_METERS));
+    const piece = segment / pieces;
+    for (let k = 0; k < pieces; k += 1) {
+      const t = (k + 0.5) / pieces;
+      const multiplier = slowZoneMultiplierAt(zones, a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
+      seconds += piece / (playerSpeed * multiplier);
+    }
+  }
+  return zones.length === 0 ? length / playerSpeed : seconds;
+}
+
 /** The MCP-shaped `entity.create` components for a mud patch of `radius` metres that slows the player to `speedMultiplier`. */
 export function orbRunSlowZoneComponents(
   centre: { x: number; z: number },

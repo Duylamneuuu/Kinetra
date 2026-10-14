@@ -71,6 +71,39 @@ test("a deep diamond chain returns promptly", async () => {
   assert.ok(performance.now() - started < 1000, "bounds walk did not stop early");
 });
 
+// Follow-up to #383 item 5: pin the visit-budget boundary. The budget is nodes x max(4, scenes), so a node
+// graph with modest fan-in (a DAG, not a tree) is still measured, while a diamond chain whose path count
+// outgrows the budget is reported unmeasurable. This is deliberate: a valid glTF node graph is a forest.
+
+test("modest fan-in (diamond chain up to depth 3, or many parents of one mesh node) is still measured", async () => {
+  for (const depth of [1, 2, 3]) {
+    const size = measureGlbBoundsFromJson(await diamondChain(depth));
+    assert.ok(size, `diamond chain depth ${depth} (2^${depth} paths) should stay under the visit budget`);
+    assert.deepEqual(size.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4], `depth ${depth}`);
+  }
+
+  const plain = await createSyntheticGlb({ size: [2, 3, 4] });
+  const parents = 12;
+  const flat = editGlbJson(plain, (json) => {
+    json.extensionsRequired = ["KHR_mesh_quantization"];
+    const meshIndex = json.nodes[0].mesh;
+    // node 0 = root, nodes 1..parents = parents, last node = shared mesh holder listed by every parent.
+    const nodes: Array<Record<string, unknown>> = [{ children: Array.from({ length: parents }, (_, i) => i + 1) }];
+    for (let i = 0; i < parents; i++) nodes.push({ children: [parents + 1] });
+    nodes.push({ mesh: meshIndex });
+    json.nodes = nodes;
+    json.scenes = [{ nodes: [0] }];
+    json.scene = 0;
+  });
+  const flatSize = measureGlbBoundsFromJson(flat);
+  assert.ok(flatSize, "linear fan-in (2 visits per parent) must stay under the budget");
+  assert.deepEqual(flatSize.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4]);
+});
+
+test("a diamond chain whose path count exceeds the visit budget is unmeasurable (depth 4 = 31 visits > 5 nodes x 4)", async () => {
+  assert.equal(measureGlbBoundsFromJson(await diamondChain(4)), undefined);
+});
+
 test("a node reachable from two scenes is still measured (each scene is its own tree)", async () => {
   const plain = await createSyntheticGlb({ size: [2, 3, 4] });
   const twoScenes = editGlbJson(plain, (json) => {
@@ -112,6 +145,61 @@ test("a GLB without meshes imports without an unmeasured-dimensions warning", as
   const result = await new GlbDirectImporter().import(context(animationOnly));
   assert.equal(result.metadata?.dimensions, undefined);
   assert.equal(result.diagnostics?.some((d) => d.code === "asset.dimensions.unmeasured") ?? false, false);
+});
+
+// Follow-up to #355 (issue #367 item 3): accessor shapes the JSON-only fallback must handle.
+
+function positionIndex(json: Record<string, any>): number {
+  return json.meshes[0].primitives[0].attributes.POSITION;
+}
+
+test("a sparse POSITION accessor is measured from its declared min/max (the spec bounds the final values)", async () => {
+  const plain = await createSyntheticGlb({ size: [2, 3, 4] });
+  const sparse = editGlbJson(plain, (json) => {
+    json.extensionsRequired = ["KHR_mesh_quantization"];
+    const accessor = json.accessors[positionIndex(json)];
+    // A sparse accessor may drop its base bufferView entirely; min/max still describe the substituted result.
+    delete accessor.bufferView;
+    accessor.sparse = {
+      count: 1,
+      indices: { bufferView: 0, componentType: 5123 },
+      values: { bufferView: 0 },
+    };
+  });
+  const size = measureGlbBoundsFromJson(sparse);
+  assert.ok(size);
+  assert.deepEqual(size.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4]);
+});
+
+test("a non-normalized SHORT/BYTE POSITION accessor is measured in raw component units, unsigned ones too", async () => {
+  const plain = await createSyntheticGlb({ size: [2, 3, 4] });
+  for (const [componentType, min, max] of [
+    [5122, [-100, -200, -300], [100, 200, 300]],
+    [5120, [-10, -20, -30], [10, 20, 30]],
+    [5123, [0, 0, 0], [1000, 2000, 3000]],
+    [5121, [0, 0, 0], [10, 20, 30]],
+  ] as const) {
+    const raw = editGlbJson(plain, (json) => {
+      json.extensionsRequired = ["KHR_mesh_quantization"];
+      const position = positionIndex(json);
+      json.accessors[position] = { ...json.accessors[position], componentType, normalized: false, min, max };
+    });
+    assert.deepEqual(measureGlbBoundsFromJson(raw), [max[0] - min[0], max[1] - min[1], max[2] - min[2]], `componentType ${componentType}`);
+  }
+});
+
+test("a GLB whose binary chunk is truncated still reports dimensions from the JSON chunk", async () => {
+  const plain = await createSyntheticGlb({ size: [2, 3, 4] });
+  const view = new DataView(plain.buffer, plain.byteOffset, plain.byteLength);
+  const jsonEnd = 20 + view.getUint32(12, true);
+  // Keep the JSON chunk and the BIN chunk header, drop the BIN payload (the declared length now overruns the file).
+  const truncated = plain.slice(0, jsonEnd + 8 + 4);
+  new DataView(truncated.buffer).setUint32(8, truncated.byteLength, true);
+  const size = measureGlbBoundsFromJson(truncated);
+  assert.ok(size, "JSON chunk is intact, so the bounds must still be readable");
+  assert.deepEqual(size.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4]);
+  const imported = await new GlbDirectImporter().import(context(truncated));
+  assert.deepEqual(imported.metadata?.dimensions?.map((value) => Math.round(value * 1e6) / 1e6), [2, 3, 4]);
 });
 
 test("a GLB with meshes that cannot be measured still warns", async () => {

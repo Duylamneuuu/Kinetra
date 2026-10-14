@@ -93,7 +93,7 @@ export class RendererRequestTracker {
     id: string,
     reply:
       | { ok: true; result?: unknown }
-      | { ok: false; error?: string | undefined },
+      | { ok: false; error?: string | undefined; code?: string | undefined },
   ): boolean {
     const pending = this.#take(id);
     if (!pending) {
@@ -103,7 +103,12 @@ export class RendererRequestTracker {
     if (reply.ok) {
       pending.resolve(reply.result);
     } else {
-      pending.reject(new Error(reply.error ?? "Unknown renderer runtime failure"));
+      const failure = new Error(reply.error ?? "Unknown renderer runtime failure");
+      // Keep the renderer's stable error code so the bridge reply stays structured.
+      if (typeof reply.code === "string" && reply.code.length > 0) {
+        Object.assign(failure, { code: reply.code });
+      }
+      pending.reject(failure);
     }
     return true;
   }

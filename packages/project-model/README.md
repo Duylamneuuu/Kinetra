@@ -91,7 +91,11 @@ assert.match(issue?.remediation ?? "", /box, sphere, plane/);
 
 // Unknown fields and components without a schema stay free-form.
 assert.deepEqual(validateBuiltInComponent("Transform", { position: [0, 1, 2], tag: "free" }), []);
-assert.deepEqual(validateBuiltInComponent("Collider", { shape: 12 }), []);
+assert.deepEqual(validateBuiltInComponent("Health", { current: "lots" }), []);
+
+// Physics and navigation components are checked too.
+assert.equal(validateBuiltInComponent("Collider", { shape: 12 })[0]?.code, "component.Collider.shape.invalid");
+assert.equal(validateBuiltInComponent("RigidBody", { type: "DYNAMIC", mass: 2 }).length, 0);
 
 // validateProject reports the same problem at the field path.
 const project = createProject({ name: "Demo" });

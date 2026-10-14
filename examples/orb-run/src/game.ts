@@ -4,6 +4,7 @@ import { OrbRunAnimator, type OrbRunAnimatorOptions } from "./animator.js";
 import { HeadlessAudioService } from "./audio.js";
 import { ORB_RUN_DEFAULT_RULES, createOrbRunProject } from "./authoring.js";
 import { ORB_RUN_ACTION, ORB_RUN_ENTITY, ORB_RUN_SCENE_ID } from "./ids.js";
+import { OrbRunSaveError, validateOrbRunSave } from "./save-validation.js";
 import { createOrbRunScriptRegistry, type OrbRunStatus } from "./scripts.js";
 import { HeadlessSceneSimulation, type Vec3 } from "./simulation.js";
 
@@ -183,17 +184,69 @@ export function captureOrbRunSave(simulation: HeadlessSceneSimulation): OrbRunSa
   return { schemaVersion: 1, step: simulation.step, scripts, positions };
 }
 
+/**
+ * Thrown when applying a validated save failed *and* putting the previous state back failed too: the game may be
+ * half restored. `cause` is the original failure (the one that explains what went wrong), `rollbackError` is why the
+ * undo did not work. When the undo works, the original error is thrown as it is and nothing is left half restored.
+ */
+export class OrbRunRestoreError extends Error {
+  readonly code = "ORB_RUN_RESTORE_FAILED";
+  readonly rolledBack = false;
+  readonly rollbackError: unknown;
+
+  constructor(cause: unknown, rollbackError: unknown) {
+    super(`Orb Run restore failed (${describeError(cause)}) and the rollback failed too (${describeError(rollbackError)})`, {
+      cause,
+    });
+    this.rollbackError = rollbackError;
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Restore a save into a started simulation, all or nothing. The save is validated first
+ * (`validateOrbRunSave`; throws `OrbRunSaveError` listing every problem, nothing touched). If applying a
+ * validated save still fails, the state captured just before is put back, so the game is never left half restored
+ * (the original error is thrown); if that undo fails as well, `OrbRunRestoreError` reports both. Either way the
+ * runner animation starts again from rest at wherever the player now is, and only a successful restore drops the log,
+ * event and audio-cue entries of the abandoned timeline (`discardHistoryAfter`), so a failed one loses no history.
+ */
 export async function restoreOrbRunSave(
   simulation: HeadlessSceneSimulation,
   save: OrbRunSaveData,
 ): Promise<void> {
-  if (save.schemaVersion !== 1) throw new Error(`Unsupported Orb Run save schema ${String(save.schemaVersion)}`);
+  const issues = validateOrbRunSave(simulation, save);
+  if (issues.length > 0) throw new OrbRunSaveError(issues);
+  const previous = captureOrbRunSave(simulation);
+  try {
+    await applyOrbRunSave(simulation, save);
+  } catch (error) {
+    let failure: unknown = error;
+    try {
+      await applyOrbRunSave(simulation, previous);
+    } catch (rollbackError) {
+      failure = new OrbRunRestoreError(error, rollbackError);
+    }
+    // The animation is derived from the player's position: whatever state the rollback left, it has to follow it.
+    animators.get(simulation)?.resync();
+    throw failure;
+  }
+  simulation.discardHistoryAfter(save.step);
+  // The animation is derived from movement and isn't saved: restart it from rest.
+  animators.get(simulation)?.resync();
+}
+
+async function applyOrbRunSave(simulation: HeadlessSceneSimulation, save: OrbRunSaveData): Promise<void> {
+  // The clock first: the save's state belongs to its own step, so a quick-load into a run that has moved on must not
+  // leave `simulation.step` (and the elapsed time / audio clock derived from it) at the abandoned timeline.
+  simulation.restoreStep(save.step);
   for (const [entityId, position] of Object.entries(save.positions)) {
     simulation.restorePosition(entityId, position);
   }
   for (const [entityId, state] of Object.entries(save.scripts)) {
     await simulation.restoreScript(entityId, state);
   }
-  // The animation is derived from movement and isn't saved: restart it from rest.
-  animators.get(simulation)?.resync();
 }
