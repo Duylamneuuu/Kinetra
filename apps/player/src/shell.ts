@@ -12,6 +12,7 @@ import type {
   PlayerRuntimeController,
   GameShellMode,
 } from "./runtime-controller.js";
+import { returnToMainMenu, runArenaStart } from "./arena-session.js";
 import { singleFlight } from "./single-flight.js";
 import { normalizeGain } from "./gain-value.js";
 import { setKeyedEntry } from "./keyed-record.js";
@@ -170,19 +171,40 @@ export class GameShellController {
     this.#startArenaGameUnguarded(fromSave),
   );
 
-  async #startArenaGameUnguarded(fromSave: boolean): Promise<void> {
-    await this.#runtime.stop();
-    const defaultArenaProject = createArenaProject();
-    await this.#runtime.start(defaultArenaProject, ARENA_SCENE_ID, 0, {
-      assets: arenaAudioAssets,
+  #startArenaGameUnguarded(fromSave: boolean): Promise<void> {
+    // A failing start (corrupt save on Continue, scene that fails to boot) must
+    // not leave a half-started runtime behind the previous view.
+    return runArenaStart({
+      stop: () => this.#runtime.stop(),
+      start: () =>
+        this.#runtime.start(createArenaProject(), ARENA_SCENE_ID, 0, {
+          assets: arenaAudioAssets,
+        }),
+      loadSave: fromSave ? () => this.#runtime.loadSave({ slotId: "arena-progress" }) : null,
+      enterPlaying: () => {
+        this.setMode("playing");
+        this.updateFromRuntime();
+      },
+      enterMainMenu: async () => {
+        this.setMode("mainMenu");
+        await this.refreshContinueAvailable();
+      },
     });
+  }
 
-    if (fromSave) {
-      await this.#runtime.loadSave({ slotId: "arena-progress" });
-    }
+  /** Fire-and-forget for DOM listeners: failures are logged, never unhandled rejections. */
+  #report(action: Promise<unknown>, what: string): void {
+    action.catch((error: unknown) => {
+      console.error(`${what} failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
 
-    this.setMode("playing");
-    this.updateFromRuntime();
+  #leaveToMainMenu(): Promise<void> {
+    return returnToMainMenu({
+      stop: () => this.#runtime.stop(),
+      refreshContinueAvailable: () => this.refreshContinueAvailable(),
+      enterMainMenu: () => this.setMode("mainMenu"),
+    });
   }
 
   openSettings(sourceMode: GameShellMode): void {
@@ -299,11 +321,11 @@ export class GameShellController {
 
   #attachListeners(): void {
     this.#btnNewGame?.addEventListener("click", () => {
-      void this.startArenaGame(false);
+      this.#report(this.startArenaGame(false), "Starting the arena");
     });
 
     this.#btnContinue?.addEventListener("click", () => {
-      void this.startArenaGame(true);
+      this.#report(this.startArenaGame(true), "Continuing the saved game");
     });
 
     this.#btnMenuSettings?.addEventListener("click", () => {
@@ -333,28 +355,26 @@ export class GameShellController {
     });
 
     this.#btnPauseRestart?.addEventListener("click", () => {
-      void this.startArenaGame(false);
+      this.#report(this.startArenaGame(false), "Starting the arena");
     });
 
-    this.#btnPauseMainMenu?.addEventListener("click", async () => {
-      await this.#runtime.stop();
-      await this.refreshContinueAvailable();
-      this.setMode("mainMenu");
+    this.#btnPauseMainMenu?.addEventListener("click", () => {
+      this.#report(this.#leaveToMainMenu(), "Returning to the main menu");
     });
 
     this.#settingMasterGain?.addEventListener("input", (e) => {
       const target = e.target as HTMLInputElement;
-      void this.setMasterVolume(parseFloat(target.value));
+      this.#report(this.setMasterVolume(parseFloat(target.value)), "Saving the master volume");
     });
 
     this.#settingSfxGain?.addEventListener("input", (e) => {
       const target = e.target as HTMLInputElement;
-      void this.setSfxVolume(parseFloat(target.value));
+      this.#report(this.setSfxVolume(parseFloat(target.value)), "Saving the SFX volume");
     });
 
     this.#settingFullscreen?.addEventListener("change", (e) => {
       const target = e.target as HTMLInputElement;
-      void this.setFullscreen(target.checked);
+      this.#report(this.setFullscreen(target.checked), "Changing fullscreen");
     });
 
     this.#btnSettingsBack?.addEventListener("click", () => {
@@ -362,23 +382,19 @@ export class GameShellController {
     });
 
     this.#btnWinRestart?.addEventListener("click", () => {
-      void this.startArenaGame(false);
+      this.#report(this.startArenaGame(false), "Starting the arena");
     });
 
-    this.#btnWinMainMenu?.addEventListener("click", async () => {
-      await this.#runtime.stop();
-      await this.refreshContinueAvailable();
-      this.setMode("mainMenu");
+    this.#btnWinMainMenu?.addEventListener("click", () => {
+      this.#report(this.#leaveToMainMenu(), "Returning to the main menu");
     });
 
     this.#btnLoseRestart?.addEventListener("click", () => {
-      void this.startArenaGame(false);
+      this.#report(this.startArenaGame(false), "Starting the arena");
     });
 
-    this.#btnLoseMainMenu?.addEventListener("click", async () => {
-      await this.#runtime.stop();
-      await this.refreshContinueAvailable();
-      this.setMode("mainMenu");
+    this.#btnLoseMainMenu?.addEventListener("click", () => {
+      this.#report(this.#leaveToMainMenu(), "Returning to the main menu");
     });
   }
 
@@ -401,7 +417,7 @@ export class GameShellController {
     }
 
     if (this.#settings.display.fullscreen) {
-      void this.setFullscreen(true);
+      this.#report(this.setFullscreen(true), "Applying fullscreen");
     }
 
     this.#syncSettingsControls();
