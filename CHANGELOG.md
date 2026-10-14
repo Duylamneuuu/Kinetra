@@ -6,6 +6,29 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-14
+
+### Added
+
+- **project-model**: schemas cho Collider, RigidBody, CharacterBody, NavMesh (Refs #462) ([#519](https://github.com/Duylamneuuu/Kinetra/pull/519))
+
+### Changed
+
+- **physics-rapier**: một resolveColliderPlan chung cho populateWorld và diagnostics (Refs #383) ([#526](https://github.com/Duylamneuuu/Kinetra/pull/526))
+
+### Fixed
+
+- **project-model**: RigidBody thiếu type là fixed như factory vật lý, không đòi mass > 0 ([#527](https://github.com/Duylamneuuu/Kinetra/pull/527))
+
+### Tests
+
+- **orb-run**: the sign of the level check's slack matches the bot (slice 38) ([#531](https://github.com/Duylamneuuu/Kinetra/pull/531))
+- **orb-run**: random walled and muddy levels, level check = route plan = real game (slice 37) ([#525](https://github.com/Duylamneuuu/Kinetra/pull/525))
+
+### Documentation
+
+- CHANGELOG and STATUS snapshot through PR #515 ([#518](https://github.com/Duylamneuuu/Kinetra/pull/518))
+
 ## 2026-10-13
 
 ### Added
@@ -100,6 +123,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- CHANGELOG and STATUS snapshot through PR #490 ([#492](https://github.com/Duylamneuuu/Kinetra/pull/492))
+- add PR #416 (Orb Run slice 20) to CHANGELOG and STATUS, snapshot ([#422](https://github.com/Duylamneuuu/Kinetra/pull/422))
+- add PRs #403, #405-#407 to CHANGELOG, STATUS snapshot ([#414](https://github.com/Duylamneuuu/Kinetra/pull/414))
+- add PRs #386,#398,#402,#404 to CHANGELOG, Orb Run slice 19 in STATUS, snapshot ([#408](https://github.com/Duylamneuuu/Kinetra/pull/408))
 - CHANGELOG and STATUS snapshot through PR #504; the MCP guide lists `COMPONENT_NOT_FOUND` / `FIELD_NOT_FOUND` ([#507](https://github.com/Duylamneuuu/Kinetra/pull/507))
 - CHANGELOG and STATUS snapshot through PR #497 ([#499](https://github.com/Duylamneuuu/Kinetra/pull/499))
 - CHANGELOG/STATUS through #468; the command-bus README documents `component.remove`/`unsetFields` ([#470](https://github.com/Duylamneuuu/Kinetra/pull/470))
@@ -115,6 +142,10 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 ### Added
 
 - **orb-run**: slice 18 follow-up navigation probe: `state.navigation` from the navmesh route planner and the navigation acceptance manifest ([#398](https://github.com/Duylamneuuu/Kinetra/pull/398))
+
+### Documentation
+
+- add PRs #391,#393-#397 to CHANGELOG, STATUS snapshot ([#401](https://github.com/Duylamneuuu/Kinetra/pull/401))
 
 ## 2026-10-11
 
@@ -134,6 +165,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **renderer-three**: animation events reach the log and listeners in firing order even when a listener steps the animation ([#340](https://github.com/Duylamneuuu/Kinetra/pull/340))
 - **verification**: `ElectronRuntimeHost` survives EPIPE on a dead bridge and releases its server and temp dir when the bridge exits ([#386](https://github.com/Duylamneuuu/Kinetra/pull/386))
 - **player**: main→renderer requests fail fast when the window closes or send throws; bridge socket keeps an error listener ([#395](https://github.com/Duylamneuuu/Kinetra/pull/395))
 - **mcp-server**: `formatToolError` reports `projectRevision` and `rolledBack` of a `ProjectPersistError` as fields ([#391](https://github.com/Duylamneuuu/Kinetra/pull/391))
@@ -201,6 +233,11 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Documentation
 
+- add PRs #385-#390 to CHANGELOG, HANDOFF 30, STATUS snapshot ([#392](https://github.com/Duylamneuuu/Kinetra/pull/392))
+- add PRs #366-#382 to CHANGELOG, HANDOFF 29 + Orb Run slices 12-16, STATUS snapshot ([#384](https://github.com/Duylamneuuu/Kinetra/pull/384))
+- **changelog**: add PRs #338-#349 (2026-10-11) ([#350](https://github.com/Duylamneuuu/Kinetra/pull/350))
+- CHANGELOG through #336, HANDOFF 28 (hardening batch), COMMAND_API INVALID_COMMAND wording ([#343](https://github.com/Duylamneuuu/Kinetra/pull/343))
+- CHANGELOG through #308, HANDOFF 27 (built-in component validation) + Orb Run slices 10-11, project-model README, AI agent guide issues ([#318](https://github.com/Duylamneuuu/Kinetra/pull/318))
 - **docs**: add PRs #353-#365 to CHANGELOG, STATUS snapshot and HANDOFF range ([#368](https://github.com/Duylamneuuu/Kinetra/pull/368))
 - **docs**: record Orb Run slice 14 (seeded input fuzzing) in STATUS ([#363](https://github.com/Duylamneuuu/Kinetra/pull/363))
 - **docs**: add PRs #351-#352 to CHANGELOG, HANDOFF hardening batch and STATUS snapshot ([#353](https://github.com/Duylamneuuu/Kinetra/pull/353))
