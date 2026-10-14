@@ -158,7 +158,10 @@ export const BUILT_IN_INSPECTOR_SCHEMAS: readonly InspectorComponentSchema[] = [
         name: "type",
         kind: "enum",
         options: ["fixed", "static", "dynamic", "kinematic", "kinematicPositionBased", "kinematicVelocityBased"],
+        // A body with no `type` is fixed (physics-rapier `resolveColliderPlan` and project-model agree).
+        default: "fixed",
       },
+      // `exclusiveMin` only binds a dynamic body; a fixed/kinematic body ignores `mass`.
       { name: "mass", kind: "number", exclusiveMin: 0 },
       { name: "gravityScale", kind: "number" },
       { name: "linearDamping", kind: "number", min: 0 },
