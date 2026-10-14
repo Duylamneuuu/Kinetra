@@ -97,3 +97,21 @@ test("SettingsStore works with FileKeyValueStorage in isolated temp directory", 
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("SettingsStore only treats a literal true as fullscreen (hand-edited strings/numbers are ignored)", async () => {
+  for (const bad of ["false", "true", "0", 1, 0, {}, [], null]) {
+    const memory = new MemoryStorage();
+    const store = new SettingsStore(memory);
+    await store.save({
+      schemaVersion: 1,
+      audio: { masterGain: 1, sfxGain: 1 },
+      display: { fullscreen: bad as unknown as boolean },
+    });
+    const loaded = await store.load();
+    assert.equal(loaded.display.fullscreen, false, `fullscreen ${JSON.stringify(bad)} must fall back to the default false`);
+  }
+  const memory = new MemoryStorage();
+  const store = new SettingsStore(memory);
+  await store.save({ schemaVersion: 1, audio: { masterGain: 1, sfxGain: 1 }, display: { fullscreen: true } });
+  assert.equal((await store.load()).display.fullscreen, true);
+});
