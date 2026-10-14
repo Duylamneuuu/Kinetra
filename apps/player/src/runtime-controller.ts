@@ -35,7 +35,8 @@ import {
 } from "@kinetra/core";
 import { createScriptTransformService } from "./script-transform.js";
 import { decidePlayerInput } from "./input-event.js";
-import { compareCodeUnits, createKeyedRecord } from "./keyed-record.js";
+import { compareCodeUnits } from "./keyed-record.js";
+import { buildAssetQueryById, captureEntityStates } from "./keyed-snapshots.js";
 import { KeyTracker } from "./key-tracker.js";
 import { replaceDisposable } from "./resource-swap.js";
 import { registerSaveLoadTestFixtures } from "./test-fixtures.js";
@@ -1641,18 +1642,9 @@ export class PlayerRuntimeController {
     }
 
     // Prototype-less record: an entity id such as "__proto__" must stay an own key in the save.
-    const entities: Record<string, EntitySaveState> = createKeyedRecord(
-      Array.from(this.#runtime.objects(), ([entityId, obj]): [string, EntitySaveState] => {
-        const execState = this.#scripts.getExecutionState(entityId);
-        return [
-          entityId,
-          {
-            position: [obj.position.x, obj.position.y, obj.position.z],
-            rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
-            ...(execState?.state ? { gameplay: structuredClone(execState.state) } : {}),
-          },
-        ];
-      }),
+    const entities: Record<string, EntitySaveState> = captureEntityStates(
+      this.#runtime.objects(),
+      (entityId) => this.#scripts.getExecutionState(entityId)?.state || undefined,
     );
 
     const envelope: SaveEnvelope<GameplaySaveData> = {
@@ -2231,17 +2223,14 @@ export class PlayerRuntimeController {
 
   #getAssetsQueryState(): PlayerRuntimeAssetsQueryState {
     // Prototype-less record: an asset id such as "__proto__" must stay an own key in the query.
-    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = createKeyedRecord(
-      Array.from(this.#assetRegistry.keys(), (assetId): [string, PlayerRuntimeAssetQueryInfo] => [
-        assetId,
-        {
-          assetId,
-          ...(this.#assetSourceHashes.has(assetId) ? { sourceHash: this.#assetSourceHashes.get(assetId) } : {}),
-          ...(this.#assetFingerprints.has(assetId) ? { fingerprint: this.#assetFingerprints.get(assetId) } : {}),
-          importStatus: this.#assetStatuses.get(assetId) ?? "imported",
-          ...(this.#assetRevisions.has(assetId) ? { revision: this.#assetRevisions.get(assetId) } : {}),
-        },
-      ]),
+    const byId: Record<string, PlayerRuntimeAssetQueryInfo> = buildAssetQueryById(
+      this.#assetRegistry.keys(),
+      {
+        sourceHashes: this.#assetSourceHashes,
+        fingerprints: this.#assetFingerprints,
+        statuses: this.#assetStatuses,
+        revisions: this.#assetRevisions,
+      },
     );
     return { byId };
   }
