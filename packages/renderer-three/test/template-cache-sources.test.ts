@@ -138,3 +138,70 @@ test("template sources: an unresolvable or unsupported resolution fails, and the
   const template = await cache.resolveTemplate("model_a", resolverOf(glb));
   assert.equal(cache.get("model_a"), template);
 });
+
+test("template sources: every failure carries a [model.cache.*] or [model.instance.*] code", async () => {
+  const cache = new ModelTemplateCache();
+
+  await assert.rejects(
+    cache.resolveTemplate("model_none", resolverOf(undefined)),
+    /^Error: \[model\.cache\.unresolved\] Asset "model_none" could not be resolved$/,
+  );
+  await assert.rejects(
+    cache.resolveTemplate("model_num", resolverOf(42)),
+    /^Error: \[model\.cache\.unsupportedSource\] Unsupported asset resolution type for "model_num"$/,
+  );
+  // "!" is not a base64 character: atob throws a bare InvalidCharacterError.
+  await assert.rejects(
+    cache.resolveTemplate("model_b64", resolverOf("data:model/gltf-binary;base64,!!!!")),
+    /\[model\.cache\.sourceDecodeFailed\] Asset "model_b64" has an invalid base64 data URL/,
+  );
+  assert.equal(cache.has("model_b64"), false);
+});
+
+test("template sources: a loader that rejects is reported as loadFailed with the cause and is not cached", async () => {
+  const cache = new ModelTemplateCache();
+  const loader = {
+    loadAsync: async () => {
+      throw new Error("404 Not Found");
+    },
+  } as unknown as GLTFLoader;
+
+  await assert.rejects(
+    cache.resolveTemplate("model_404", resolverOf("https://example.test/missing.glb"), loader),
+    /\[model\.cache\.loadFailed\] Failed to load model "model_404": 404 Not Found/,
+  );
+  assert.equal(cache.has("model_404"), false);
+  assert.equal(cache.parseCount, 1, "the attempt is still counted as a parse");
+
+  // A rejected non-Error value is stringified rather than lost.
+  const stringLoader = {
+    loadAsync: async () => {
+      throw "boom";
+    },
+  } as unknown as GLTFLoader;
+  await assert.rejects(
+    cache.resolveTemplate("model_str", resolverOf("data:text/plain,x"), stringLoader),
+    /\[model\.cache\.loadFailed\] Failed to load model "model_str": boom/,
+  );
+});
+
+test("template sources: a failed URL load clears the in-flight entry so a retry can succeed", async () => {
+  const cache = new ModelTemplateCache();
+  const failing = {
+    loadAsync: async () => {
+      throw new Error("offline");
+    },
+  } as unknown as GLTFLoader;
+  await assert.rejects(
+    cache.resolveTemplate("model_retry", resolverOf("https://example.test/r.glb"), failing),
+    /loadFailed/,
+  );
+
+  const ok = fakeLoader({ scene: true });
+  const template = await cache.resolveTemplate(
+    "model_retry",
+    resolverOf("https://example.test/r.glb"),
+    ok.loader,
+  );
+  assert.equal(cache.get("model_retry"), template);
+});
