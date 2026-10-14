@@ -334,7 +334,7 @@ export class ModelTemplateCache {
       try {
         const resolved = await resolver.resolve(assetId);
         if (!resolved) {
-          throw new Error(`Asset "${assetId}" could not be resolved`);
+          throw new Error(`[model.cache.unresolved] Asset "${assetId}" could not be resolved`);
         }
 
         const createTemplate = (gltf: GLTF): ModelAssetTemplate => {
@@ -360,6 +360,24 @@ export class ModelTemplateCache {
           return template;
         };
 
+        const loadFromUrl = async (url: string): Promise<GLTF> => {
+          this.#parseCount++;
+          let gltf: GLTF;
+          try {
+            gltf = await loader.loadAsync(url);
+          } catch (err) {
+            throw new Error(
+              `[model.cache.loadFailed] Failed to load model "${assetId}": ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+          if (!gltf || !gltf.scene) {
+            throw new Error(
+              `[model.instance.templateInvalid] Model "${assetId}" contains no valid scene`,
+            );
+          }
+          return gltf;
+        };
+
         let arrayBuffer: ArrayBuffer;
         if (resolved instanceof Uint8Array) {
           const copy = new Uint8Array(resolved.byteLength);
@@ -371,34 +389,29 @@ export class ModelTemplateCache {
           if (resolved.startsWith("data:")) {
             const base64Index = resolved.indexOf("base64,");
             if (base64Index !== -1) {
-              const raw = atob(resolved.slice(base64Index + 7));
+              let raw: string;
+              try {
+                raw = atob(resolved.slice(base64Index + 7));
+              } catch (err) {
+                throw new Error(
+                  `[model.cache.sourceDecodeFailed] Asset "${assetId}" has an invalid base64 data URL: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
               const bytes = new Uint8Array(raw.length);
               for (let i = 0; i < raw.length; i++) {
                 bytes[i] = raw.charCodeAt(i);
               }
               arrayBuffer = bytes.buffer;
             } else {
-              this.#parseCount++;
-              const gltf = await loader.loadAsync(resolved);
-              if (!gltf || !gltf.scene) {
-                throw new Error(
-                  `[model.instance.templateInvalid] Model "${assetId}" contains no valid scene`,
-                );
-              }
-              return createTemplate(gltf);
+              return createTemplate(await loadFromUrl(resolved));
             }
           } else {
-            this.#parseCount++;
-            const gltf = await loader.loadAsync(resolved);
-            if (!gltf || !gltf.scene) {
-              throw new Error(
-                `[model.instance.templateInvalid] Model "${assetId}" contains no valid scene`,
-              );
-            }
-            return createTemplate(gltf);
+            return createTemplate(await loadFromUrl(resolved));
           }
         } else {
-          throw new Error(`Unsupported asset resolution type for "${assetId}"`);
+          throw new Error(
+            `[model.cache.unsupportedSource] Unsupported asset resolution type for "${assetId}"`,
+          );
         }
 
         this.#parseCount++;
