@@ -143,6 +143,8 @@ export class AssetHotReloadCoordinator {
   #serviceUnsubscribe?: (() => void) | undefined;
   #inFlightPromise?: Promise<AssetHotReloadTransaction | null> | undefined;
   #started = false;
+  /** Bumped by stop(): changes queued before a stop must not run after it. */
+  #epoch = 0;
   readonly #maxHistory: number;
   /**
    * Assets whose newest artifact never reached the runtime (`updateAsset` threw or the artifact could not be
@@ -189,9 +191,11 @@ export class AssetHotReloadCoordinator {
    * transaction, or `null` when nothing was stale. Serialized with `processAssetChange`.
    */
   async retryRuntimePublish(): Promise<AssetHotReloadTransaction | null> {
+    const epoch = this.#epoch;
     while (this.#inFlightPromise) {
       await this.#inFlightPromise.catch(() => {});
     }
+    if (epoch !== this.#epoch) return null;
     const currentPromise = this.#republishStale();
     this.#inFlightPromise = currentPromise;
     try {
@@ -249,6 +253,8 @@ export class AssetHotReloadCoordinator {
 
   async stop(): Promise<void> {
     this.#started = false;
+    // Cancels every change still queued behind the in-flight transaction (see processAssetChange).
+    this.#epoch++;
     if (this.#watcherUnsubscribe) {
       this.#watcherUnsubscribe();
       this.#watcherUnsubscribe = undefined;
@@ -264,9 +270,13 @@ export class AssetHotReloadCoordinator {
   }
 
   async processAssetChange(assetId: string): Promise<AssetHotReloadTransaction | null> {
+    const epoch = this.#epoch;
     while (this.#inFlightPromise) {
       await this.#inFlightPromise.catch(() => {});
     }
+    // stop() was called while this change was queued behind another transaction: drop it instead of
+    // reimporting and publishing to a runtime the caller already tore down.
+    if (epoch !== this.#epoch) return null;
 
     const currentPromise = this.#executeTransaction(assetId);
     this.#inFlightPromise = currentPromise;
