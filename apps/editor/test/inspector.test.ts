@@ -102,6 +102,11 @@ test("a RigidBody without a type shows the fixed default, and mass only binds a 
   // The same mass on an explicit dynamic body is rejected and the issue lands on the mass row.
   const dynamic = buildInspector(entity({ RigidBody: { type: "dynamic", mass: 0 } }));
   assert.equal(row(dynamic, "RigidBody", "mass").issue?.code, "component.RigidBody.mass.invalid");
+  // The dynamic check is case-insensitive like the physics factory; kinematic bodies ignore mass.
+  const upper = buildInspector(entity({ RigidBody: { type: "Dynamic", mass: 0 } }));
+  assert.equal(row(upper, "RigidBody", "mass").issue?.code, "component.RigidBody.mass.invalid");
+  const kinematic = buildInspector(entity({ RigidBody: { type: "kinematic", mass: 0 } }));
+  assert.equal(row(kinematic, "RigidBody", "mass").issue, undefined);
 });
 
 test("a component without a schema is shown raw and every row is flagged unknown", () => {
