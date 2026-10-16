@@ -584,6 +584,12 @@ export class ThreeSceneRuntime {
     success: boolean;
     affectedEntities: string[];
     error?: string | undefined;
+    /**
+     * Entities that used the asset when the reload started but were left untouched because an
+     * attach/detach or a newer reload of the same asset took them over while the bytes resolved.
+     * Lets callers tell "reload superseded" from "no entity uses this asset".
+     */
+    skippedEntities?: string[] | undefined;
     /** Entity -> morph overrides the reloaded asset no longer supports. */
     droppedMorphOverrides?: Record<string, string[]> | undefined;
     /** Entity -> IK chains with active targets the reloaded asset no longer supports. */
@@ -636,6 +642,13 @@ export class ThreeSceneRuntime {
       // while the template cache serves the newer one.
       return (this.#installedReloadSequence.get(entityId) ?? 0) < reloadSequence;
     });
+    const applied = new Set(affectedEntities);
+    const skippedEntities = requestedEntities.filter((entityId) => !applied.has(entityId));
+    // A template no entity owns and the cache no longer serves (a stale reload filtered out above)
+    // would otherwise keep its geometry/textures alive with nobody left to dispose it.
+    if (affectedEntities.length === 0 && newTemplate.refCount === 0 && this.#templateCache.get(assetId) !== newTemplate) {
+      newTemplate.dispose();
+    }
 
     for (const entityId of affectedEntities) {
       const object = this.#objects.get(entityId);
@@ -764,6 +777,7 @@ export class ThreeSceneRuntime {
     return {
       success: true,
       affectedEntities,
+      ...(skippedEntities.length > 0 ? { skippedEntities } : {}),
       ...(Object.keys(droppedMorphOverrides).length > 0 ? { droppedMorphOverrides } : {}),
       ...(Object.keys(droppedIkChains).length > 0 ? { droppedIkChains } : {}),
       ...(Object.keys(droppedRootMotion).length > 0 ? { droppedRootMotion } : {}),
