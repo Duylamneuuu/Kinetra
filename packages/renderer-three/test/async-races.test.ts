@@ -346,3 +346,39 @@ test("reloadAsset: an attach between two overlapping reloads still wins over the
   assert.equal(runtime.instanceCount, 1);
   assert.equal(object.children.length, 1);
 });
+
+test("reloadAsset: a stale reload filtered out by a newer one disposes its unowned template and reports the skip", async () => {
+  const runtime = await runtimeWithLoadedModel("model_a");
+  const cache = runtime.getTemplateCache();
+  const original = cache.resolveNewTemplate.bind(cache);
+  const templates: Awaited<ReturnType<typeof cache.resolveNewTemplate>>[] = [];
+  cache.resolveNewTemplate = async (...args) => {
+    const template = await original(...args);
+    templates.push(template);
+    return template;
+  };
+  const first = new GatedResolver();
+  const second = new GatedResolver();
+
+  const reloading1 = runtime.reloadAsset("model_a", first);
+  await first.until(1);
+  const reloading2 = runtime.reloadAsset("model_a", second);
+  await second.until(1);
+
+  second.pending[0]!.release(await createSyntheticGlb({ size: [3, 3, 3] }));
+  const result2 = await reloading2;
+  first.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  const result1 = await reloading1;
+
+  assert.equal(templates.length, 2);
+  const [staleTemplate, newestTemplate] = [templates[0]!, templates[1]!];
+  // Resolution order: the newest finished first, so it is templates[0] in call-completion order.
+  const stale = staleTemplate.refCount === 0 ? staleTemplate : newestTemplate;
+  const newest = stale === staleTemplate ? newestTemplate : staleTemplate;
+  assert.deepEqual(result1.affectedEntities, []);
+  assert.deepEqual(result1.skippedEntities, [entityId], "a superseded reload must say which entities it skipped");
+  assert.equal(result2.skippedEntities, undefined);
+  assert.equal(stale.isDisposed, true, "the stale reload's unowned template must be disposed");
+  assert.equal(newest.isDisposed, false);
+  assert.equal(runtime.getInstance(entityId)?.template, newest);
+});
