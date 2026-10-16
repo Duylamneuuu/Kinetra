@@ -6,6 +6,12 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-16
+
+### Fixed
+
+- **renderer-three**: dispose template của reload bị thay thế, báo skippedEntities (Refs #579) ([#585](https://github.com/Duylamneuuu/Kinetra/pull/585))
+
 ## 2026-10-15
 
 ### Added
