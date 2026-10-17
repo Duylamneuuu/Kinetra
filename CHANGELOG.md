@@ -6,6 +6,16 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-17
+
+### Fixed
+
+- **player**: ép thứ tự kiểm sceneId trước khi dừng game + test (Fixes #479) ([#587](https://github.com/Duylamneuuu/Kinetra/pull/587))
+
+### Documentation
+
+- **status**: đóng ô bảng hàng P7 bị thiếu dấu `|` cuối (#528) ([#584](https://github.com/Duylamneuuu/Kinetra/pull/584))
+
 ## 2026-10-16
 
 ### Fixed
