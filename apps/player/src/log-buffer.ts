@@ -41,15 +41,17 @@ export function cloneLogData(data: Record<string, unknown>): Record<string, unkn
     // fall through to the lossy copy
   }
   try {
-    const seen = new WeakSet<object>();
-    const json = JSON.stringify(data, (_key, value: unknown) => {
+    const ancestors: object[] = [];
+    const json = JSON.stringify(data, function (this: unknown, _key: string, value: unknown) {
       if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
       if (typeof value === "symbol") return value.toString();
       if (typeof value === "bigint") return `${value.toString()}n`;
       if (typeof value === "number" && !Number.isFinite(value)) return String(value);
       if (typeof value === "object" && value !== null) {
-        if (seen.has(value)) return "[circular]";
-        seen.add(value);
+        // Only a true ancestor of the current holder is a cycle; a shared (diamond) reference is copied.
+        while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) ancestors.pop();
+        if (ancestors.includes(value)) return "[circular]";
+        ancestors.push(value);
       }
       return value;
     });

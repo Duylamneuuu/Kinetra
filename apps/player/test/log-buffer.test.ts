@@ -76,6 +76,32 @@ test("data holding a cycle plus a function is sanitised instead of throwing", ()
   assert.equal(copy.self, "[circular]");
 });
 
+test("an object shared by two branches is copied twice, not reported as circular", () => {
+  const shared = { x: 1, y: 2 };
+  const data = { a: shared, b: shared, list: [shared, shared], fn: () => 0 };
+  const copy = cloneLogData(data);
+  assert.equal(copy.logDataSanitized, true);
+  assert.deepEqual(copy.a, { x: 1, y: 2 });
+  assert.deepEqual(copy.b, { x: 1, y: 2 });
+  assert.deepEqual(copy.list, [
+    { x: 1, y: 2 },
+    { x: 1, y: 2 },
+  ]);
+});
+
+test("a cycle through a nested object is still marked, while its sibling branch is kept", () => {
+  const parent: Record<string, unknown> = { name: "p" };
+  const child: Record<string, unknown> = { parent };
+  parent.child = child;
+  const shared = { v: 1 };
+  const copy = cloneLogData({ parent, shared, again: shared, fn: () => 0 });
+  const copiedParent = copy.parent as { name: string; child: { parent: unknown } };
+  assert.equal(copiedParent.name, "p");
+  assert.equal(copiedParent.child.parent, "[circular]");
+  assert.deepEqual(copy.shared, { v: 1 });
+  assert.deepEqual(copy.again, { v: 1 });
+});
+
 test("data that cannot be serialised at all is reported by a marker", () => {
   const data = {
     fn: () => 0,
