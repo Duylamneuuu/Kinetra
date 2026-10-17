@@ -51,7 +51,7 @@ import {
 import { createSupersessionGuard } from "./supersession-guard.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
-import { resolveStartScene } from "./start-scene.js";
+import { resolveSceneThenTearDown } from "./start-scene.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
   InputRouter,
@@ -627,8 +627,7 @@ export class PlayerRuntimeController {
     }
     assertValidProject(project);
     // Reject an unknown scene before touching the running game or the asset registry.
-    const scene = resolveStartScene(project, sceneId);
-    await this.#doStop();
+    const scene = await resolveSceneThenTearDown(project, sceneId, () => this.#doStop());
     this.#stepped = options?.stepped ?? false;
 
     if (options?.assets) {

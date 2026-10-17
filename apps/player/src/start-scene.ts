@@ -20,3 +20,18 @@ export function resolveStartScene<TScene extends { readonly id: string }>(
   }
   return scene;
 }
+
+/**
+ * Validates the requested scene and only then runs `teardown` (stop the running game, replace its
+ * assets). The runtime controller starts every game through this, so the ordering "reject an
+ * unknown scene first, tear down second" is a single enforced rule instead of a convention.
+ */
+export async function resolveSceneThenTearDown<TScene extends { readonly id: string }>(
+  project: StartSceneProject<TScene>,
+  sceneId: string,
+  teardown: () => Promise<void>,
+): Promise<TScene> {
+  const scene = resolveStartScene(project, sceneId);
+  await teardown();
+  return scene;
+}
