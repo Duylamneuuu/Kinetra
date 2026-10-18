@@ -60,7 +60,9 @@ test("set removes the legacy exact-case file so only the lower-cased file remain
     const storage = new FileKeyValueStorage(dir);
     await storage.set("saves:Slot1", "fresh");
     await storage.set("saves:Slot9", "fresh9");
-    assert.deepEqual((await readdir(dir)).sort(), ["slot1.json", "slot9.json"]);
+    // On case-insensitive file systems the legacy and lower-cased names are one file: it must survive.
+    const names = (await readdir(dir)).map((n) => n.toLowerCase()).sort();
+    assert.deepEqual(names, ["slot1.json", "slot9.json"]);
     assert.equal(await storage.get("saves:Slot1"), "fresh");
     assert.equal(await storage.get("saves:Slot9"), "fresh9");
   } finally {
