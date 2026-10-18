@@ -6,6 +6,13 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-18
+
+### Fixed
+
+- **player**: log-buffer không đánh dấu [circular] cho tham chiếu dùng chung (Fixes #568) ([#590](https://github.com/Duylamneuuu/Kinetra/pull/590))
+- **save-state**: set() xoá file legacy chữ hoa (Refs #558) ([#591](https://github.com/Duylamneuuu/Kinetra/pull/591))
+
 ## 2026-10-17
 
 ### Fixed
