@@ -123,6 +123,14 @@ export class FileKeyValueStorage implements KeyValueStorage {
     return legacy === filePath ? undefined : legacy;
   }
 
+  /** After a successful write the lower-cased file is authoritative; drop the shadowed legacy file (best effort). */
+  async #removeLegacy(key: string, filePath: string): Promise<void> {
+    const legacyPath = this.#legacyFilePath(key, filePath);
+    if (legacyPath) {
+      await unlink(legacyPath).catch(() => {});
+    }
+  }
+
   async set(key: string, value: string): Promise<void> {
     if (typeof value !== "string") {
       throw new TypeError("Storage value must be a string");
@@ -159,6 +167,7 @@ export class FileKeyValueStorage implements KeyValueStorage {
       }
       try {
         await this.#renameFile(tempPath, filePath);
+        await this.#removeLegacy(key, filePath);
         return;
       } catch (err) {
         lastError = err;
