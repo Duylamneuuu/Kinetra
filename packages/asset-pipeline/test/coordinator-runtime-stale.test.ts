@@ -156,3 +156,32 @@ test("retryRuntimePublish keeps the asset stale and reports an error while the r
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a stale asset whose imported artifact can no longer be read emits asset.runtimeReloadFailed (Refs #498)", async () => {
+  const { dir, sourcePath, database } = await setup();
+  try {
+    const { target } = makeTarget({ count: 1 });
+    const events: ReimportEvent[] = [];
+    const coordinator = new AssetHotReloadCoordinator({
+      database,
+      reimportService: new AssetReimportService({ database }),
+      watcher: new SourceAssetWatcher({ debounceMs: 10 }),
+      runtimeTarget: target,
+      onEvent: (event) => events.push(event),
+    });
+    await writeFile(sourcePath, await createSyntheticGlb({ size: [4, 2, 1], meshName: "BoxMesh" }));
+    await coordinator.processAssetChange("asset_box");
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), ["asset_box"]);
+    events.length = 0;
+
+    await rm(database.get("asset_box")!.importedPath, { force: true });
+    await coordinator.retryRuntimePublish();
+
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), ["asset_box"], "still stale");
+    const failed = events.filter((event) => event.type === "asset.runtimeReloadFailed");
+    assert.equal(failed.length, 1, "the unreadable artifact must be reported, not swallowed");
+    assert.equal(failed[0]?.assetId, "asset_box");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
