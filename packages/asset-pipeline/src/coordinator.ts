@@ -401,8 +401,13 @@ export class AssetHotReloadCoordinator {
       let artifactBytes: Uint8Array;
       try {
         artifactBytes = await this.#fs.readFile(updatedRecord.importedPath);
-      } catch {
+      } catch (err) {
         this.#runtimeStale.add(rebuiltId);
+        this.#emit({
+          type: "asset.runtimeReloadFailed",
+          assetId: rebuiltId,
+          error: `cannot read imported artifact "${updatedRecord.importedPath}": ${err instanceof Error ? err.message : String(err)}`,
+        });
         continue;
       }
 
