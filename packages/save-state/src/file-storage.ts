@@ -1,11 +1,12 @@
 import {
   mkdir,
   open,
+  readdir,
   readFile,
   rename,
   unlink,
 } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import type { KeyValueStorage } from "./index.js";
 
 const SAFE_KEY_PATTERN = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)*$/;
@@ -123,6 +124,20 @@ export class FileKeyValueStorage implements KeyValueStorage {
     return legacy === filePath ? undefined : legacy;
   }
 
+  /** After a successful write the lower-cased file is authoritative; drop the shadowed legacy file (best effort). */
+  async #removeLegacy(key: string, filePath: string): Promise<void> {
+    const legacyPath = this.#legacyFilePath(key, filePath);
+    if (!legacyPath) {
+      return;
+    }
+    // On a case-insensitive file system (NTFS/macOS) the legacy name opens the file just written, so only
+    // unlink when the directory really lists the exact-case entry as a separate file.
+    const entries = await readdir(this.rootDir).catch(() => [] as string[]);
+    if (entries.includes(basename(legacyPath))) {
+      await unlink(legacyPath).catch(() => {});
+    }
+  }
+
   async set(key: string, value: string): Promise<void> {
     if (typeof value !== "string") {
       throw new TypeError("Storage value must be a string");
@@ -159,6 +174,7 @@ export class FileKeyValueStorage implements KeyValueStorage {
       }
       try {
         await this.#renameFile(tempPath, filePath);
+        await this.#removeLegacy(key, filePath);
         return;
       } catch (err) {
         lastError = err;

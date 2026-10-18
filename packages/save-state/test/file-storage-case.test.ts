@@ -49,3 +49,23 @@ test("a legacy exact-case save file is still readable and deletable", async () =
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// #558: set() must not leave the legacy exact-case file behind, also when both files already exist.
+test("set removes the legacy exact-case file so only the lower-cased file remains", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kinetra-save-case-both-"));
+  try {
+    await writeFile(join(dir, "Slot1.json"), "old-upper", "utf8");
+    await writeFile(join(dir, "slot1.json"), "old-lower", "utf8");
+    await writeFile(join(dir, "Slot9.json"), "legacy", "utf8");
+    const storage = new FileKeyValueStorage(dir);
+    await storage.set("saves:Slot1", "fresh");
+    await storage.set("saves:Slot9", "fresh9");
+    // On case-insensitive file systems the legacy and lower-cased names are one file: it must survive.
+    const names = (await readdir(dir)).map((n) => n.toLowerCase()).sort();
+    assert.deepEqual(names, ["slot1.json", "slot9.json"]);
+    assert.equal(await storage.get("saves:Slot1"), "fresh");
+    assert.equal(await storage.get("saves:Slot9"), "fresh9");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
