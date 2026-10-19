@@ -248,7 +248,8 @@ const schemas: Record<string, ComponentSchema> = {
   },
   RigidBody: {
     fields: {
-      type: oneOfIgnoringCase(RIGID_BODY_TYPES),
+      // "" counts as missing: the physics factory's `stringValue` falls back to "fixed" for it.
+      type: (value, ...rest) => (value === "" ? undefined : oneOfIgnoringCase(RIGID_BODY_TYPES)(value, ...rest)),
       // `mass` must be positive only for dynamic bodies (see `relations`); fixed and kinematic
       // bodies ignore it at runtime, so only its type is checked here.
       mass: finiteNumber(),
