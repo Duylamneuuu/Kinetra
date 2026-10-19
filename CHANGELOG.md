@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **animation**: root motion chỉ từ chối quaternion CUBICSPLINE ở extract-xz-yaw, thông điệp phân biệt cờ loader và bố cục 3x (Refs #574) ([#580](https://github.com/Duylamneuuu/Kinetra/pull/580))
 - **asset-pipeline**: readFile lỗi của asset stale phát runtimeReloadFailed (Refs #498) ([#593](https://github.com/Duylamneuuu/Kinetra/pull/593))
 
 ## 2026-10-18
