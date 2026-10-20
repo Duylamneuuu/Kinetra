@@ -27,7 +27,8 @@ import type {
 import {
   ScriptHost,
   ScriptRegistry,
-  PlayerControllerScript,
+  type GameModule,
+  type GameModuleScriptState,
   type GameScript,
   type GameScriptContext,
   type ScriptLifecycleState,
@@ -51,7 +52,6 @@ import {
 import { createSupersessionGuard } from "./supersession-guard.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
-import { resolveSceneThenTearDown } from "./start-scene.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
   InputRouter,
@@ -60,11 +60,8 @@ import {
   BrowserGamepadSnapshotProvider,
   type PhysicalInputSnapshot,
 } from "@kinetra/input";
-import {
-  ArenaPlayerController,
-  ArenaEnemyController,
-  ArenaGameManager,
-} from "@kinetra/reference-game";
+import { createPlayerGameModules } from "./game-modules.js";
+import { startGameModule } from "./game-module-start.js";
 import {
   JsonDocumentStore,
   MemoryStorage,
@@ -325,6 +322,7 @@ export interface PlayerRuntimeQueryResult {
   navigation?: PlayerRuntimeNavigationState;
   audio?: AudioRuntimeState;
   gameplay?: Record<string, unknown>;
+  gameId?: string;
   game?: Record<string, unknown>;
   shell?: { mode: GameShellMode; isPaused: boolean };
   metrics?: Record<string, number>;
@@ -357,6 +355,9 @@ export class PlayerRuntimeController {
   #assetRevisions = new Map<string, number>();
   #scripts: ScriptHost = new ScriptHost();
   #scriptRegistry: ScriptRegistry = new ScriptRegistry();
+  readonly #gameModules = createPlayerGameModules();
+  #activeGame: GameModule | undefined;
+  #testScriptPreset: "save-load-atomicity" | undefined;
   #inputRouter: InputRouter = new InputRouter(DEFAULT_PLAYER_INPUT_MAP);
   #unresolvedScripts = new Map<string, { scriptId: string; error: string }>();
   #stepped = false;
@@ -407,11 +408,6 @@ export class PlayerRuntimeController {
       storage,
       "saves",
     );
-
-    this.#scriptRegistry.register("PlayerController", () => new PlayerControllerScript());
-    this.#scriptRegistry.register("ArenaPlayerController", () => new ArenaPlayerController());
-    this.#scriptRegistry.register("ArenaEnemyController", () => new ArenaEnemyController());
-    this.#scriptRegistry.register("ArenaGameManager", () => new ArenaGameManager());
 
     this.#assetResolver = {
       resolve: (assetId: string) => {
@@ -521,6 +517,7 @@ export class PlayerRuntimeController {
 
   enableTestScriptFixtures(preset: "save-load-atomicity"): void {
     if (preset === "save-load-atomicity") {
+      this.#testScriptPreset = preset;
       registerSaveLoadTestFixtures(this.#scriptRegistry);
       this.#log("info", "testHarness.fixturesEnabled", { preset });
     }
@@ -580,6 +577,7 @@ export class PlayerRuntimeController {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
+      game?: string;
     },
   ): Promise<PlayerRuntimeQueryResult> {
     const queue = this.#lifecycleQueue;
@@ -620,14 +618,29 @@ export class PlayerRuntimeController {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
       testScriptPreset?: string;
+      game?: string;
     },
   ): Promise<PlayerRuntimeQueryResult> {
     if (options?.testScriptPreset === "save-load-atomicity") {
-      this.enableTestScriptFixtures("save-load-atomicity");
+      this.#testScriptPreset = "save-load-atomicity";
     }
     assertValidProject(project);
-    // Reject an unknown scene before touching the running game or the asset registry.
-    const scene = await resolveSceneThenTearDown(project, sceneId, () => this.#doStop());
+    // Unknown scene, unknown game, and a module that cannot register scripts all reject
+    // before the running game is stopped.
+    const prepared = await startGameModule({
+      project,
+      sceneId,
+      gameId: options?.game,
+      modules: this.#gameModules,
+      teardown: () => this.#doStop(),
+    });
+    const scene = prepared.scene;
+    this.#scriptRegistry = new ScriptRegistry();
+    prepared.module.registerScripts(this.#scriptRegistry, { sceneId });
+    if (this.#testScriptPreset === "save-load-atomicity") {
+      registerSaveLoadTestFixtures(this.#scriptRegistry);
+    }
+    this.#activeGame = prepared.module;
     this.#stepped = options?.stepped ?? false;
 
     if (options?.assets) {
@@ -870,13 +883,18 @@ export class PlayerRuntimeController {
     this.#audio.init(this.#assetResolver);
     this.#shellMode = "playing";
     this.#paused = false;
-    this.#log("info", "runtime.started", { sceneId, projectRevision });
+    this.#log("info", "runtime.started", {
+      sceneId,
+      projectRevision,
+      gameId: prepared.module.id,
+    });
 
     return this.query();
   }
 
   async #doStop(): Promise<void> {
     this.#audio.reset();
+    this.#activeGame = undefined;
     await this.#scripts.destroyAll();
     this.#scripts = new ScriptHost();
     this.#unresolvedScripts.clear();
@@ -2189,18 +2207,41 @@ export class PlayerRuntimeController {
       }
     }
 
+    const scriptStates: GameModuleScriptState[] = [];
+    for (const [entityId] of this.#runtime.objects()) {
+      const execution = this.#scripts.getExecutionState(entityId);
+      if (!execution) continue;
+      scriptStates.push({
+        entityId: execution.entityId,
+        ...(execution.scriptId ? { scriptId: execution.scriptId } : {}),
+        ...(execution.state !== undefined ? { state: execution.state } : {}),
+      });
+    }
+    let moduleGame: Record<string, unknown> | undefined;
+    if (this.#activeGame?.readGameState) {
+      try {
+        moduleGame = this.#activeGame.readGameState(scriptStates);
+      } catch (error) {
+        this.#log("warning", "game.stateFailed", {
+          gameId: this.#activeGame.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const game = moduleGame ?? activeSession;
+
     return {
       running: true,
       sceneId: this.#runtime.sceneId,
+      ...(this.#activeGame ? { gameId: this.#activeGame.id } : {}),
       ...(this.#projectRevision !== undefined
         ? { projectRevision: this.#projectRevision }
         : {}),
       entities,
       navigation: structuredClone(this.#navigationState),
       audio: this.#audio.getState(),
-      ...(activeSession
-        ? { gameplay: { session: activeSession }, game: activeSession }
-        : {}),
+      ...(activeSession ? { gameplay: { session: activeSession } } : {}),
+      ...(game ? { game } : {}),
       shell: { mode: this.#shellMode, isPaused: this.#paused },
       metrics: {
         assetTemplateParseCount: this.#runtime?.assetTemplateParseCount ?? 0,
