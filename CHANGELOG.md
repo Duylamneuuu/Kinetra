@@ -10,6 +10,7 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ### Fixed
 
+- **asset-pipeline**: giao dịch liệt kê asset stale được chữa kèm; retry bỏ asset đã xoá (Refs #498) ([#598](https://github.com/Duylamneuuu/Kinetra/pull/598))
 - **project-model**: RigidBody type rỗng coi như thiếu như factory (Fixes #529) ([#596](https://github.com/Duylamneuuu/Kinetra/pull/596))
 
 ### Documentation
