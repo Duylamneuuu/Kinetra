@@ -140,6 +140,8 @@ export interface RuntimeQueryResult {
   running: boolean;
   sceneId?: string;
   projectRevision?: number;
+  gameId?: string;
+  game?: Record<string, unknown>;
   entities: RuntimeEntityState[];
   state?: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
@@ -380,6 +382,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     options?: {
       assetMetadata?: Record<string, { fingerprint?: string; sourceHash?: string }>;
       stepped?: boolean;
+      game?: string;
     },
   ): Promise<void> {
     await this.#ensureProcess();
@@ -390,6 +393,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
       ...(assets !== undefined ? { assets } : {}),
       ...(options?.assetMetadata !== undefined ? { assetMetadata: options.assetMetadata } : {}),
       ...(options?.stepped !== undefined ? { stepped: options.stepped } : {}),
+      ...(options?.game !== undefined ? { game: options.game } : {}),
     });
   }
 

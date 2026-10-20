@@ -1,0 +1,24 @@
+{
+  "name": "@kinetra/example-marker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Minimal second game module the Electron player loads beside Kinetra Arena.",
+  "exports": {
+    "./game-module": {
+      "types": "./dist/src/game-module.d.ts",
+      "default": "./dist/src/game-module.js"
+    }
+  },
+  "types": "./dist/src/game-module.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "@kinetra/asset-pipeline": "workspace:*",
+    "@kinetra/core": "workspace:*"
+  }
+}

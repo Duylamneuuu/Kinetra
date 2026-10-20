@@ -86,6 +86,7 @@ async function handleRuntimeCommand(request: {
         typeof params.testScriptPreset === "string"
           ? params.testScriptPreset
           : undefined;
+      const game = typeof params.game === "string" ? params.game : undefined;
       const assetMetadata = isRecord(params.assetMetadata)
         ? (params.assetMetadata as Record<string, { fingerprint?: string; sourceHash?: string }>)
         : undefined;
@@ -94,6 +95,7 @@ async function handleRuntimeCommand(request: {
         ...(assetMetadata !== undefined ? { assetMetadata } : {}),
         stepped,
         ...(testScriptPreset !== undefined ? { testScriptPreset } : {}),
+        ...(game !== undefined ? { game } : {}),
       });
       shell.setMode("playing");
       shell.updateFromRuntime();
