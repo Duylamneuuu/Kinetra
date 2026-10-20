@@ -8,4 +8,5 @@ export * from "./compression.js";
 export * from "./synthetic.js";
 export * from "./watcher.js";
 export * from "./reimport.js";
+export * from "./wav.js";
 export * from "./coordinator.js";

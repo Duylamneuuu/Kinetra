@@ -5,6 +5,7 @@ import type { AssetDatabase } from "./database.js";
 import { glbDeclaresMeshes, measureGlbBoundsFromJson } from "./glb-bounds.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
+import { WavImporter } from "./wav.js";
 import type {
   AssetDiagnostic,
   AssetMetadata,
@@ -232,6 +233,9 @@ export class AssetReimportService {
     this.#importers.set("glb", new GlbDirectImporter());
     this.#importers.set("direct-glb", new GlbDirectImporter());
     this.#importers.set("passthrough", new PassthroughImporter());
+    const wav = new WavImporter();
+    this.#importers.set("wav", wav);
+    this.#importers.set("audio", wav);
 
     if (options.importers) {
       for (const [k, v] of options.importers) {

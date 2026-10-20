@@ -84,8 +84,10 @@ test("first import writes every artifact and the whole database validates clean"
   assert.deepEqual(pad.metadata.dimensions, [2, 0.1, 2]);
 
   const win = built.database.get(ORB_RUN_AUDIO_ASSET.win)!;
-  assert.equal(win.metadata.sampleRateHz, 22050);
+  assert.equal(win.metadata.sampleRate, 22050);
+  assert.equal(win.metadata.channels, 1);
   assert.equal(win.metadata.durationSeconds, 0.6);
+  assert.equal(win.metadata.provenance?.provider, "kinetra-synthetic");
   assert.deepEqual(win.diagnostics, [], "sample rate matches the recipe");
 
   const imported = await normalizeGlb(built.fileSystem.files.get(orb.importedPath)!);
@@ -188,7 +190,7 @@ test("a WAV at an unexpected sample rate imports with a warning, not silently", 
   pipeline.database.upsert({ ...record, recipe: { ...record.recipe, settings: { sampleRateHz: 44100 } } });
   const result = await pipeline.service.reimport(id);
   assert.equal(result.status, "reimported");
-  assert.deepEqual(result.diagnostics?.map((d) => [d.severity, d.code]), [["warning", "orbrun.audio.sampleRate"]]);
+  assert.deepEqual(result.diagnostics?.map((d) => [d.severity, d.code]), [["warning", "asset.wav.sampleRate"]]);
 });
 
 test("provenance is policed: synthetic content cannot claim an external AI provider or cost", async () => {
@@ -279,7 +281,7 @@ test("the WAV importer finds fmt after an extra LIST chunk instead of reading a 
   const result = await pipeline.service.reimport(id);
   assert.equal(result.status, "reimported", result.error);
   assert.deepEqual(result.diagnostics ?? [], [], "22050 Hz as authored, no bogus sample-rate warning");
-  assert.equal(pipeline.database.get(id)!.metadata["sampleRateHz"], 22050);
+  assert.equal(pipeline.database.get(id)!.metadata.sampleRate, 22050);
 });
 
 test("the WAV importer rejects non-PCM, empty-format and data-less files with a named reason", async () => {

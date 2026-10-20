@@ -96,8 +96,9 @@ test("the WAV importer accepts WAVE_FORMAT_EXTENSIBLE whose sub-format is intege
   const wav = riff(fmtChunk({ tag: 0xfffe, channels: 6, rate: 48000, bits: 24, extensible: PCM_GUID }), chunk("data", samples(36)));
   const { id, result } = await importWav(pipeline, wav);
   assert.equal(result.status, "reimported", result.error);
-  assert.equal(pipeline.database.get(id)!.metadata["sampleRateHz"], 48000);
-  assert.deepEqual((result.diagnostics ?? []).map((d) => d.code), ["orbrun.audio.sampleRate"], "48 kHz is flagged against the authored 22.05 kHz");
+  assert.equal(pipeline.database.get(id)!.metadata.sampleRate, 48000);
+  assert.equal(pipeline.database.get(id)!.metadata.channels, 6);
+  assert.deepEqual((result.diagnostics ?? []).map((d) => d.code), ["asset.wav.sampleRate"], "48 kHz is flagged against the authored 22.05 kHz");
 });
 
 test("the WAV importer rejects WAVE_FORMAT_EXTENSIBLE with a non-PCM sub-format or a truncated fmt chunk", async () => {
@@ -135,7 +136,7 @@ test("the WAV importer reads a data chunk with an odd size (pad byte) that comes
   const { id, result } = await importWav(pipeline, wav);
   assert.equal(result.status, "reimported", result.error);
   assert.deepEqual(result.diagnostics ?? [], []);
-  assert.equal(pipeline.database.get(id)!.metadata["sampleRateHz"], 22050);
+  assert.equal(pipeline.database.get(id)!.metadata.sampleRate, 22050);
 });
 
 async function reimportModel(settings: Record<string, unknown>, assetId: string = ORB_RUN_MODEL_ASSET.orb) {
