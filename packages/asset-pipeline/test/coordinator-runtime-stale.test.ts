@@ -185,3 +185,144 @@ test("a stale asset whose imported artifact can no longer be read emits asset.ru
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+async function setupTwo() {
+  const base = await setup();
+  const sourceB = join(base.dir, "ball.glb");
+  const artifactB = join(base.dir, "imported_ball.glb");
+  const v1 = await createSyntheticGlb({ size: [2, 2, 2], meshName: "BallMesh" });
+  await writeFile(sourceB, v1);
+  await writeFile(artifactB, v1);
+  const hash = hashBytes(v1);
+  base.database.upsert({
+    id: "asset_ball",
+    kind: "model",
+    source: { path: sourceB, kind: "source", contentHash: hash },
+    importedPath: artifactB,
+    recipe: { importer: "glb", importerVersion: "1.0", settings: {} },
+    fingerprint: importFingerprint({ sourceHash: hash, importer: "glb", importerVersion: "1.0", settings: {} }),
+    dependencies: [],
+    diagnostics: [],
+    metadata: {},
+  });
+  return { ...base, sourceB };
+}
+
+function makeCoordinator(database: AssetDatabase, target: RuntimeReloadTarget) {
+  return new AssetHotReloadCoordinator({
+    database,
+    reimportService: new AssetReimportService({ database }),
+    watcher: new SourceAssetWatcher({ debounceMs: 10 }),
+    runtimeTarget: target,
+  });
+}
+
+test("a stale asset healed by another asset's transaction is listed in that transaction (Refs #498)", async () => {
+  const { dir, sourcePath, sourceB, database } = await setupTwo();
+  try {
+    const { target, reloads } = makeTarget({ count: 1 });
+    const coordinator = makeCoordinator(database, target);
+    await writeFile(sourcePath, await createSyntheticGlb({ size: [4, 2, 1], meshName: "BoxMesh" }));
+    await coordinator.processAssetChange("asset_box");
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), ["asset_box"]);
+
+    await writeFile(sourceB, await createSyntheticGlb({ size: [3, 3, 3], meshName: "BallMesh" }));
+    const tx = await coordinator.processAssetChange("asset_ball");
+    assert.ok(tx);
+    assert.deepEqual(reloads.sort(), ["asset_ball", "asset_box"]);
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), []);
+    // The healed asset's entities are in runtimeReloadedEntityIds, so the asset must be in the tx too.
+    assert.ok(tx.rebuiltAssetIds.includes("asset_box"), `rebuiltAssetIds=${JSON.stringify(tx.rebuiltAssetIds)}`);
+    assert.ok(tx.rebuildOrder.includes("asset_box"), `rebuildOrder=${JSON.stringify(tx.rebuildOrder)}`);
+    assert.equal(tx.rootAssetId, "asset_ball");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("waitForAssetReload resolves for a stale asset that is not the first one when retryRuntimePublish heals it (Refs #498)", async () => {
+  const { dir, sourcePath, sourceB, database } = await setupTwo();
+  try {
+    // box fails once; ball's transaction retries box as a ride-along and both fail again.
+    const { target } = makeTarget({ count: 3 });
+    const coordinator = makeCoordinator(database, target);
+    await writeFile(sourcePath, await createSyntheticGlb({ size: [4, 2, 1], meshName: "BoxMesh" }));
+    await writeFile(sourceB, await createSyntheticGlb({ size: [3, 3, 3], meshName: "BallMesh" }));
+    await coordinator.processAssetChange("asset_box");
+    await coordinator.processAssetChange("asset_ball");
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), ["asset_box", "asset_ball"]);
+
+    const waiting = coordinator.waitForAssetReload("asset_ball", 2000);
+    const retry = await coordinator.retryRuntimePublish();
+    const tx = await waiting;
+    assert.equal(tx, retry);
+    assert.deepEqual(tx.rebuiltAssetIds, ["asset_box", "asset_ball"]);
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a stale asset removed from the database is dropped by retryRuntimePublish without a publish (Refs #498)", async () => {
+  const { dir, sourcePath, database } = await setup();
+  try {
+    const { target, updates } = makeTarget({ count: 1 });
+    const coordinator = makeCoordinator(database, target);
+    await writeFile(sourcePath, await createSyntheticGlb({ size: [4, 2, 1], meshName: "BoxMesh" }));
+    await coordinator.processAssetChange("asset_box");
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), ["asset_box"]);
+
+    // AssetDatabase has no delete API yet; model a record that disappeared while the asset was stale.
+    const originalGet = database.get.bind(database);
+    database.get = (id: string) => (id === "asset_box" ? undefined : originalGet(id));
+    const retry = await coordinator.retryRuntimePublish();
+    assert.ok(retry);
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), []);
+    assert.equal(updates.length, 0);
+    assert.deepEqual(retry.rebuiltAssetIds, [], "a removed asset was not published");
+    assert.equal(retry.error, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("retryRuntimePublish waits for an in-flight processAssetChange instead of overlapping it (Refs #498)", async () => {
+  const { dir, sourcePath, database } = await setup();
+  try {
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const target: RuntimeReloadTarget = {
+      async updateAsset(assetId) {
+        calls += 1;
+        order.push(`update-start:${calls}`);
+        if (calls === 1) {
+          await gate;
+          throw new Error("resolver is disposed");
+        }
+        order.push(`update-ok:${assetId}`);
+      },
+      async reloadAsset() {
+        return { success: true, affectedEntities: ["ent_box"] };
+      },
+    };
+    const coordinator = makeCoordinator(database, target);
+    await writeFile(sourcePath, await createSyntheticGlb({ size: [4, 2, 1], meshName: "BoxMesh" }));
+    const first = coordinator.processAssetChange("asset_box");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const retry = coordinator.retryRuntimePublish();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(order, ["update-start:1"], "the retry must not publish while the transaction is in flight");
+    release();
+    await first;
+    const tx = await retry;
+    assert.ok(tx);
+    assert.deepEqual(order, ["update-start:1", "update-start:2", "update-ok:asset_box"]);
+    assert.deepEqual(coordinator.getRuntimeStaleAssetIds(), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -308,6 +308,7 @@ export class AssetHotReloadCoordinator {
     const droppedRootMotion = new Map<string, string>();
     const droppedIkChains = new Map<string, string[]>();
     const droppedMorphOverrides = new Map<string, string[]>();
+    const healedRideAlong: string[] = [];
 
     // Query entities before reload to know unaffected / unchanged entities if supported
     let allEntityIds: string[] = [];
@@ -345,10 +346,19 @@ export class AssetHotReloadCoordinator {
     // failed publish ride along, so one successful transaction heals them.
     if (this.#runtimeTarget) {
       const publishIds = [...rebuildResult.rebuiltAssetIds];
+      const rideAlongIds: string[] = [];
       for (const staleId of this.#runtimeStale) {
-        if (!publishIds.includes(staleId)) publishIds.push(staleId);
+        if (!publishIds.includes(staleId)) {
+          publishIds.push(staleId);
+          rideAlongIds.push(staleId);
+        }
       }
       await this.#publishToRuntime(publishIds, runtimeReloadedEntityIds, { droppedRootMotion, droppedIkChains, droppedMorphOverrides });
+      // Healed ride-along assets reloaded their entities in this transaction, so the transaction (history,
+      // waitForAssetReload) must list them as well, otherwise their entities look like they came from nowhere.
+      for (const healedId of rideAlongIds) {
+        if (!this.#runtimeStale.has(healedId) && this.#database.get(healedId)) healedRideAlong.push(healedId);
+      }
     }
 
     // Determine unchanged entities
@@ -363,8 +373,8 @@ export class AssetHotReloadCoordinator {
       oldSourceHash: rebuildResult.oldSourceHash,
       newSourceHash: rebuildResult.newSourceHash ?? "",
       importer: record.recipe.importer,
-      rebuildOrder: rebuildResult.rebuildOrder,
-      rebuiltAssetIds: rebuildResult.rebuiltAssetIds,
+      rebuildOrder: [...rebuildResult.rebuildOrder, ...healedRideAlong],
+      rebuiltAssetIds: [...rebuildResult.rebuiltAssetIds, ...healedRideAlong],
       failedAssetId: rebuildResult.failedAssetId,
       blockedAssetIds: rebuildResult.blockedAssetIds,
       unaffectedAssetIds: rebuildResult.unaffectedAssetIds,
@@ -532,7 +542,8 @@ export class AssetHotReloadCoordinator {
       newSourceHash: record?.source.contentHash ?? "",
       importer: record?.recipe.importer ?? "",
       rebuildOrder: ids,
-      rebuiltAssetIds: ids.filter((id) => !this.#runtimeStale.has(id)),
+      // A stale asset that vanished from the database was dropped, not published.
+      rebuiltAssetIds: ids.filter((id) => !this.#runtimeStale.has(id) && this.#database.get(id) !== undefined),
       blockedAssetIds: [],
       unaffectedAssetIds: [],
       oldFingerprint: record?.fingerprint,
