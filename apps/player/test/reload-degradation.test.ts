@@ -52,6 +52,34 @@ test("a failed reload never reports dropped features", () => {
 test("entity ids that look like prototype keys stay own keys", () => {
   const dropped = JSON.parse('{"__proto__": "gone"}') as Record<string, string>;
   const fields = reloadDegradationFields({ success: true, droppedRootMotion: dropped });
-  assert.equal(fields.droppedRootMotion, dropped, "the same record object is forwarded unmodified");
+  assert.notEqual(fields.droppedRootMotion, dropped, "the reply must not alias the runtime record");
   assert.deepEqual(Object.keys(fields.droppedRootMotion ?? {}), ["__proto__"]);
+  assert.equal(Object.getOwnPropertyDescriptor(fields.droppedRootMotion, "__proto__")?.value, "gone");
+});
+
+test("editing the reply or the log does not change the runtime record", () => {
+  const dropped = { hero: "root bone gone" };
+  const chains = { hero: ["leftArm"] };
+  const result = { success: true as const, droppedRootMotion: dropped, droppedIkChains: chains };
+  const fields = reloadDegradationFields(result);
+  const logs = reloadDegradationLogs("asset_hero", result);
+
+  const replyRoot = fields.droppedRootMotion;
+  const replyChains = fields.droppedIkChains;
+  assert.ok(replyRoot && replyChains);
+  replyRoot.hero = "mutated";
+  const replyNames = replyChains.hero;
+  assert.ok(replyNames);
+  replyNames.push("rightArm");
+
+  const loggedChains = logs.find((entry) => entry.message === "animation.ikChainsDropped");
+  const loggedRoot = logs.find((entry) => entry.message === "animation.rootMotionDropped");
+  assert.ok(loggedChains && loggedRoot);
+  const loggedNames = (loggedChains.data.entities as Record<string, string[]>).hero;
+  assert.ok(loggedNames);
+  loggedNames.push("spine");
+
+  assert.equal(dropped.hero, "root bone gone");
+  assert.deepEqual(chains.hero, ["leftArm"]);
+  assert.equal((loggedRoot.data.entities as Record<string, string>).hero, "root bone gone");
 });

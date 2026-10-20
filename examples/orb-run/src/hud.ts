@@ -147,36 +147,63 @@ function pickMarker(input: OrbRunHudInput): OrbRunHudMarker | null {
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const isCount = (value: unknown): value is number => isFiniteNumber(value) && Number.isInteger(value) && value >= 0;
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Every problem that would make the HUD render garbage (NaN clock, 0/0 fraction, impossible counts). */
+/**
+ * Every problem that would make the HUD render garbage (NaN clock, 0/0 fraction, impossible counts)
+ * or throw while reading it (a missing summary, a null marker). Corrupt probe/IPC state fails here
+ * as `OrbRunHudError` instead of a raw TypeError.
+ */
 export function validateOrbRunHudInput(input: OrbRunHudInput): OrbRunHudIssue[] {
   const issues: OrbRunHudIssue[] = [];
-  const { summary, rules, targets } = input;
-  if (summary.status !== "playing" && summary.status !== "won" && summary.status !== "lost") {
-    issues.push({ field: "summary.status", message: 'must be "playing", "won" or "lost"' });
+  if (!isObject(input)) {
+    return [{ field: "input", message: "must be an object" }];
   }
-  if (!isCount(summary.collectedCount)) issues.push({ field: "summary.collectedCount", message: "must be an integer >= 0" });
-  if (!isCount(summary.totalOrbs)) issues.push({ field: "summary.totalOrbs", message: "must be an integer >= 0" });
-  if (isCount(summary.collectedCount) && isCount(summary.totalOrbs) && summary.collectedCount > summary.totalOrbs) {
-    issues.push({ field: "summary.collectedCount", message: "must not exceed totalOrbs" });
+  const summary = input.summary as unknown;
+  const rules = input.rules as unknown;
+  const targets = input.targets as unknown;
+  if (!isObject(summary)) {
+    issues.push({ field: "summary", message: "must be an object" });
+  } else {
+    if (summary.status !== "playing" && summary.status !== "won" && summary.status !== "lost") {
+      issues.push({ field: "summary.status", message: 'must be "playing", "won" or "lost"' });
+    }
+    if (!isCount(summary.collectedCount)) issues.push({ field: "summary.collectedCount", message: "must be an integer >= 0" });
+    if (!isCount(summary.totalOrbs)) issues.push({ field: "summary.totalOrbs", message: "must be an integer >= 0" });
+    if (isCount(summary.collectedCount) && isCount(summary.totalOrbs) && summary.collectedCount > summary.totalOrbs) {
+      issues.push({ field: "summary.collectedCount", message: "must not exceed totalOrbs" });
+    }
+    if (!isFiniteNumber(summary.remainingSeconds)) {
+      issues.push({ field: "summary.remainingSeconds", message: "must be a finite number" });
+    }
+    if (!isFiniteNumber(summary.elapsedSeconds)) {
+      issues.push({ field: "summary.elapsedSeconds", message: "must be a finite number" });
+    }
+    if (!Array.isArray(summary.player) || summary.player.length !== 3 || !summary.player.every(isFiniteNumber)) {
+      issues.push({ field: "summary.player", message: "must be three finite numbers" });
+    }
   }
-  if (!isFiniteNumber(summary.remainingSeconds)) {
-    issues.push({ field: "summary.remainingSeconds", message: "must be a finite number" });
-  }
-  if (!isFiniteNumber(summary.elapsedSeconds)) {
-    issues.push({ field: "summary.elapsedSeconds", message: "must be a finite number" });
-  }
-  if (!Array.isArray(summary.player) || summary.player.length !== 3 || !summary.player.every(isFiniteNumber)) {
-    issues.push({ field: "summary.player", message: "must be three finite numbers" });
-  }
-  if (!isFiniteNumber(rules.timeLimitSeconds) || rules.timeLimitSeconds <= 0) {
+  if (!isObject(rules)) {
+    issues.push({ field: "rules", message: "must be an object" });
+  } else if (!isFiniteNumber(rules.timeLimitSeconds) || rules.timeLimitSeconds <= 0) {
     issues.push({ field: "rules.timeLimitSeconds", message: "must be a finite number > 0" });
   }
-  targets?.forEach((target, index) => {
-    if (!Array.isArray(target.position) || target.position.length !== 2 || !target.position.every(isFiniteNumber)) {
-      issues.push({ field: `targets[${index}].position`, message: "must be two finite numbers" });
+  if (targets !== undefined) {
+    if (!Array.isArray(targets)) {
+      issues.push({ field: "targets", message: "must be an array" });
+    } else {
+      targets.forEach((target, index) => {
+        if (!isObject(target)) {
+          issues.push({ field: `targets[${index}]`, message: "must be an object" });
+          return;
+        }
+        if (!Array.isArray(target.position) || target.position.length !== 2 || !target.position.every(isFiniteNumber)) {
+          issues.push({ field: `targets[${index}].position`, message: "must be two finite numbers" });
+        }
+      });
     }
-  });
+  }
   return issues;
 }
 

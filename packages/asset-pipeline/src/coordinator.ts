@@ -92,6 +92,36 @@ function entityMapToRecord<T>(map: Map<string, T>): Record<string, T> | undefine
   return map.size > 0 ? (Object.fromEntries(map) as Record<string, T>) : undefined;
 }
 
+/**
+ * One entity can lose root motion to more than one asset in the same transaction. The per-asset
+ * event keeps that asset's own reason; the transaction record keeps every distinct reason.
+ */
+function rememberReason(into: Map<string, string>, from: Map<string, string>): void {
+  for (const [entityId, reason] of from) {
+    const previous = into.get(entityId);
+    if (previous === undefined) {
+      into.set(entityId, reason);
+      continue;
+    }
+    const parts = previous.split("; ");
+    if (!parts.includes(reason)) into.set(entityId, `${previous}; ${reason}`);
+  }
+}
+
+/** Union of dropped chain/morph names for one entity, first-seen order, no duplicates. */
+function rememberNames(into: Map<string, string[]>, from: Map<string, string[]>): void {
+  for (const [entityId, names] of from) {
+    const previous = into.get(entityId);
+    if (previous === undefined) {
+      into.set(entityId, [...names]);
+      continue;
+    }
+    for (const name of names) {
+      if (!previous.includes(name)) previous.push(name);
+    }
+  }
+}
+
 /** Per-entity degradation reports collected while publishing one batch of assets to the runtime. */
 interface ReloadDegradationAccumulator {
   droppedRootMotion: Map<string, string>;
@@ -469,9 +499,9 @@ export class AssetHotReloadCoordinator {
           mergeEntityMaps(degradedIk, reloadRes.droppedIkChains, acceptNames);
           mergeEntityMaps(degradedMorph, reloadRes.droppedMorphOverrides, acceptNames);
           if (degradedRoot.size + degradedIk.size + degradedMorph.size > 0) {
-            for (const [k, v] of degradedRoot) dropped.droppedRootMotion.set(k, v);
-            for (const [k, v] of degradedIk) dropped.droppedIkChains.set(k, v);
-            for (const [k, v] of degradedMorph) dropped.droppedMorphOverrides.set(k, v);
+            rememberReason(dropped.droppedRootMotion, degradedRoot);
+            rememberNames(dropped.droppedIkChains, degradedIk);
+            rememberNames(dropped.droppedMorphOverrides, degradedMorph);
             const diagnostics: AssetDiagnostic[] = [];
             for (const [entityId, reason] of degradedRoot) {
               diagnostics.push({

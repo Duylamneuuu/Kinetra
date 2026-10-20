@@ -222,3 +222,138 @@ test("a report that is entirely garbage is treated as a clean reload", async () 
     await cleanup();
   }
 });
+
+/**
+ * Root asset plus one dependent, so one source change republishes both. `onReload` is what the
+ * runtime reports for each asset id.
+ */
+async function setupChain(onReload: (assetId: string) => RuntimeReloadResult) {
+  const dir = await mkdtemp(join(tmpdir(), "kinetra-coordinator-degraded-chain-"));
+  const sourceA = join(dir, "a.glb");
+  const sourceB = join(dir, "b.glb");
+  const artifactA = join(dir, "imported_a.glb");
+  const artifactB = join(dir, "imported_b.glb");
+  const bytesA = await createSyntheticGlb({ size: [1, 1, 1], meshName: "Body" });
+  const bytesB = await createSyntheticGlb({ size: [1, 1, 1], meshName: "Cloth" });
+  await writeFile(sourceA, bytesA);
+  await writeFile(sourceB, bytesB);
+  await writeFile(artifactA, bytesA);
+  await writeFile(artifactB, bytesB);
+  const hashA = hashBytes(bytesA);
+  const hashB = hashBytes(bytesB);
+  const fingerprintA = importFingerprint({
+    sourceHash: hashA,
+    importer: "glb",
+    importerVersion: "1.0",
+    settings: {},
+  });
+  const fingerprintB = importFingerprint({
+    sourceHash: hashB,
+    importer: "glb",
+    importerVersion: "1.0",
+    settings: {},
+    dependencyFingerprints: [fingerprintA],
+  });
+  const database = new AssetDatabase();
+  const recipe = { importer: "glb", importerVersion: "1.0", settings: {} };
+  database.upsert({
+    id: "asset_a",
+    kind: "model",
+    source: { path: sourceA, kind: "source", contentHash: hashA },
+    importedPath: artifactA,
+    recipe,
+    fingerprint: fingerprintA,
+    dependencies: [],
+    diagnostics: [],
+    metadata: {},
+  });
+  database.upsert({
+    id: "asset_b",
+    kind: "model",
+    source: { path: sourceB, kind: "source", contentHash: hashB },
+    importedPath: artifactB,
+    recipe,
+    fingerprint: fingerprintB,
+    dependencies: ["asset_a"],
+    diagnostics: [],
+    metadata: {},
+  });
+  const reloaded: string[] = [];
+  const runtimeTarget: RuntimeReloadTarget = {
+    async updateAsset() {},
+    async reloadAsset(assetId: string) {
+      reloaded.push(assetId);
+      return onReload(assetId);
+    },
+  };
+  const events: ReimportEvent[] = [];
+  const coordinator = new AssetHotReloadCoordinator({
+    database,
+    reimportService: new AssetReimportService({ database }),
+    watcher: new SourceAssetWatcher({ debounceMs: 10 }),
+    runtimeTarget,
+    onEvent: (event) => events.push(event),
+  });
+  const reload = async (): Promise<AssetHotReloadTransaction> => {
+    await writeFile(sourceA, await createSyntheticGlb({ size: [3, 1, 1], meshName: "Body" }));
+    const tx = await coordinator.processAssetChange("asset_a");
+    assert.ok(tx, "no transaction for a changed source");
+    return tx;
+  };
+  return { events, reloaded, reload, cleanup: () => rm(dir, { recursive: true, force: true }) };
+}
+
+test("two assets dropping features on one entity keep every reason (Refs #558)", async () => {
+  const { events, reloaded, reload, cleanup } = await setupChain((assetId) =>
+    assetId === "asset_a"
+      ? {
+          success: true,
+          affectedEntities: ["hero"],
+          droppedRootMotion: { hero: "root bone gone" },
+          droppedIkChains: { hero: ["leftArm"] },
+        }
+      : {
+          success: true,
+          affectedEntities: ["hero"],
+          droppedRootMotion: { hero: "clip missing" },
+          droppedIkChains: { hero: ["leftArm", "rightArm"] },
+          droppedMorphOverrides: { hero: ["smile"] },
+        },
+  );
+  try {
+    const tx = await reload();
+    assert.deepEqual(reloaded, ["asset_a", "asset_b"]);
+    assert.deepEqual(tx.rebuiltAssetIds, ["asset_a", "asset_b"]);
+    assert.equal(tx.droppedRootMotion?.hero, "root bone gone; clip missing");
+    assert.deepEqual(tx.droppedIkChains?.hero, ["leftArm", "rightArm"]);
+    assert.deepEqual(tx.droppedMorphOverrides?.hero, ["smile"]);
+
+    const warnings = degraded(events);
+    assert.deepEqual(
+      warnings.map((event) => event.assetId),
+      ["asset_a", "asset_b"],
+    );
+    assert.deepEqual(warnings[0]?.droppedRootMotion, { hero: "root bone gone" });
+    assert.equal(warnings[0]?.droppedIkChains?.hero?.length, 1);
+    assert.deepEqual(warnings[1]?.droppedRootMotion, { hero: "clip missing" });
+    assert.deepEqual(warnings[1]?.droppedMorphOverrides, { hero: ["smile"] });
+  } finally {
+    await cleanup();
+  }
+});
+
+test("the same drop reason from two assets is recorded once (Refs #558)", async () => {
+  const { reload, cleanup } = await setupChain(() => ({
+    success: true,
+    affectedEntities: ["hero"],
+    droppedRootMotion: { hero: "root bone gone" },
+    droppedIkChains: { hero: ["leftArm"] },
+  }));
+  try {
+    const tx = await reload();
+    assert.equal(tx.droppedRootMotion?.hero, "root bone gone");
+    assert.deepEqual(tx.droppedIkChains?.hero, ["leftArm"]);
+  } finally {
+    await cleanup();
+  }
+});

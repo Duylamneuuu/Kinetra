@@ -389,6 +389,35 @@ test("a corrupt summary or rule set is a structured OrbRunHudError, never NaN or
   assert.deepEqual(validateOrbRunHudInput({ summary: summary(), rules }), []);
 });
 
+test("corrupt HUD input is a structured error, not a TypeError (Refs #205)", () => {
+  const rules = ORB_RUN_DEFAULT_RULES;
+  const failure = (fn: () => void): string[] => {
+    try {
+      fn();
+    } catch (error) {
+      assert.ok(error instanceof OrbRunHudError, `expected OrbRunHudError, got ${String(error)}`);
+      assert.equal(error.code, "ORB_RUN_HUD_INVALID");
+      return error.issues.map((issue) => issue.field);
+    }
+    assert.fail("expected computeOrbRunHud to throw");
+  };
+  assert.deepEqual(failure(() => computeOrbRunHud(null as never)), ["input"]);
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: null, rules } as never)), ["summary"]);
+  assert.deepEqual(failure(() => computeOrbRunHud({ summary: summary(), rules: null } as never)), ["rules"]);
+  assert.deepEqual(
+    failure(() => computeOrbRunHud({ summary: summary(), rules, targets: [null] } as never)),
+    ["targets[0]"],
+  );
+  assert.deepEqual(
+    failure(() => computeOrbRunHud({ summary: summary(), rules, targets: null } as never)),
+    ["targets"],
+  );
+  assert.deepEqual(validateOrbRunHudInput({ summary: undefined, rules: undefined } as never).map((issue) => issue.field), [
+    "summary",
+    "rules",
+  ]);
+});
+
 test("buildOrbRunHud rejects a manager state whose collectedOrbIds is not an array of ids", async () => {
   const simulation = await startOrbRunSimulation();
   try {

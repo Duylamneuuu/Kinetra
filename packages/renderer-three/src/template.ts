@@ -353,7 +353,9 @@ export class ModelTemplateCache {
             fingerprint,
             revision,
           });
-          // A reload (invalidate) that started after this load must keep its own result.
+          // A reload (invalidate) that started after this load must keep the cache slot. This
+          // template is still returned: a caller that instantiates it owns the refcount, and a
+          // caller that does not must dispose it (the cache will not).
           if ((this.#generations.get(assetId) ?? 0) === generation) {
             this.#templates.set(assetId, template);
           }

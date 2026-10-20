@@ -425,6 +425,19 @@ export class ThreeSceneRuntime {
     return !this.#disposed && this.#modelLoadTokens.get(entityId) === token;
   }
 
+  /**
+   * A load that lost the race (detach, dispose, or a newer attach) and also lost the cache slot
+   * (a reload invalidated it mid-parse) has nobody left to dispose its GPU resources. Deferred one
+   * turn so another entity sharing the same in-flight parse can take a reference first.
+   */
+  #releaseUncachedTemplate(assetId: string, template: ModelAssetTemplate): void {
+    queueMicrotask(() => {
+      if (this.#templateCache.get(assetId) === template) return;
+      if (template.refCount > 0 || template.isDisposed) return;
+      template.dispose();
+    });
+  }
+
   async loadModels(resolver: AssetResolver): Promise<Map<string, ModelMetadata>> {
     if (this.#disposed) {
       throw new Error("Cannot load models into a disposed ThreeSceneRuntime");
@@ -446,7 +459,10 @@ export class ThreeSceneRuntime {
           const template = await this.#templateCache.resolveTemplate(metadata.assetId, resolver);
           // Disposed, detached or re-attached while the asset resolved: do not
           // install an instance nobody owns any more.
-          if (!this.#isModelLoadCurrent(entityId, token)) return;
+          if (!this.#isModelLoadCurrent(entityId, token)) {
+            this.#releaseUncachedTemplate(metadata.assetId, template);
+            return;
+          }
           const instance = template.createInstance(entityId);
           this.#instances.set(entityId, instance);
           this.#attachInstance(entityId, object, instance, metadata);
@@ -494,9 +510,11 @@ export class ThreeSceneRuntime {
     }
 
     const token = this.#beginModelLoad(entityId);
+    let template: ModelAssetTemplate | undefined;
     try {
-      const template = await this.#templateCache.resolveTemplate(assetId, resolver);
+      template = await this.#templateCache.resolveTemplate(assetId, resolver);
       if (!this.#isModelLoadCurrent(entityId, token)) {
+        this.#releaseUncachedTemplate(assetId, template);
         return { success: false, error: this.#supersededLoadMessage(entityId, assetId) };
       }
       const instance = template.createInstance(entityId);
@@ -505,6 +523,7 @@ export class ThreeSceneRuntime {
       this.#updateResourceSharingMetadata();
       return { success: true, metadata };
     } catch (error) {
+      if (template && template.refCount === 0) this.#releaseUncachedTemplate(assetId, template);
       if (!this.#isModelLoadCurrent(entityId, token)) {
         return { success: false, error: this.#supersededLoadMessage(entityId, assetId) };
       }

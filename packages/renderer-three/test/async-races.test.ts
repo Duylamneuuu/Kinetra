@@ -77,8 +77,11 @@ test("template cache: a stale load finishing after resolveNewTemplate does not o
   resolver.pending[1]!.release(glbNew);
   const newTemplate = await newLoad;
   resolver.pending[0]!.release(glbOld);
-  await oldLoad;
+  const stale = await oldLoad;
 
+  assert.equal(stale.isDisposed, false, "an uncached template stays alive until its caller releases it");
+  assert.notEqual(cache.get("model_x"), stale);
+  stale.dispose();
   assert.equal(cache.get("model_x"), newTemplate, "the cache must keep serving the newest load");
   assert.equal(await cache.resolveTemplate("model_x", resolver), newTemplate);
   assert.equal(resolver.pending.length, 2, "no further resolve call is needed");
@@ -95,7 +98,9 @@ test("template cache: a finished stale load does not drop the newer in-flight lo
   await resolver.until(2);
 
   resolver.pending[0]!.release(glb);
-  await oldLoad;
+  const stale = await oldLoad;
+  assert.notEqual(cache.get("model_x"), stale);
+  stale.dispose();
 
   // A third caller must join the still-running newer load instead of starting its own.
   const joined = cache.resolveTemplate("model_x", resolver);
@@ -229,6 +234,44 @@ test("reloadAsset: a loadModels still resolving when the reload installs its ins
     1,
     "the reload's instance must still be the one the template counts",
   );
+});
+
+test("loadModels: a parse invalidated by a newer reload is released when that load loses (Refs #187)", async () => {
+  const loadResolver = new GatedResolver();
+  const reloadResolver = new GatedResolver();
+  const runtime = ThreeSceneRuntime.instantiate(projectWithModel("model_a"), sceneId);
+  const cache = runtime.getTemplateCache();
+  const original = cache.resolveTemplate.bind(cache);
+  const seen: Array<Awaited<ReturnType<typeof original>>> = [];
+  cache.resolveTemplate = async (...args) => {
+    const template = await original(...args);
+    seen.push(template);
+    return template;
+  };
+
+  const loading = runtime.loadModels(loadResolver);
+  await loadResolver.until(1);
+  const reloading = runtime.reloadAsset("model_a", reloadResolver);
+  await reloadResolver.until(1);
+
+  // The reimport wins, then the initial parse finishes. Nothing installs that parse, and the
+  // cache is already serving the reimport, so the runtime has to release it itself.
+  reloadResolver.pending[0]!.release(await createSyntheticGlb({ size: [2, 2, 2] }));
+  const reloaded = await reloading;
+  loadResolver.pending[0]!.release(await createSyntheticGlb({ size: [1, 1, 1] }));
+  await loading;
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const fresh = cache.get("model_a");
+  const stale = seen.find((template) => template !== fresh);
+  assert.equal(reloaded.success, true);
+  assert.equal(seen.length, 2);
+  assert.ok(stale, "the initial parse must have produced a template");
+  assert.equal(stale.isDisposed, true, "an uncached parse that was not installed must be released");
+  assert.equal(fresh?.isDisposed, false);
+  assert.equal(runtime.getInstance(entityId)?.template, fresh);
+  assert.equal(runtime.instanceCount, 1);
+  assert.deepEqual(runtime.getModelMetadata(entityId)?.bounds?.size, [2, 2, 2]);
 });
 
 test("reloadAsset: detachModel while the new bytes resolve is not resurrected by the reload", async () => {
