@@ -6,6 +6,16 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-10-20
+
+### Fixed
+
+- **project-model**: RigidBody type rỗng coi như thiếu như factory (Fixes #529) ([#596](https://github.com/Duylamneuuu/Kinetra/pull/596))
+
+### Documentation
+
+- **changelog**: thêm #580 (19/10) ([#595](https://github.com/Duylamneuuu/Kinetra/pull/595))
+
 ## 2026-10-19
 
 ### Fixed
