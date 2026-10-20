@@ -3,11 +3,12 @@ import test from "node:test";
 import { ArenaEnemyController, ArenaGameManager } from "../scripts.js";
 
 /**
- * damageDealt must count only hits the enemy actually took. The player emits
- * `gameplay.enemyDamage` for every swing that connects, including swings at an
- * enemy that is already defeated, and script events are delivered synchronously
- * and nested, so the manager can see the kill (`enemy.defeated`) either before
- * or after the hit that caused it depending on script order.
+ * damageDealt sums `enemy.hurt` amounts. The enemy emits that only for a hit it
+ * applied, and the amount is the swing (an overkill hit of 99 counts as 99, not
+ * the health that remained). Hits on an already-defeated enemy do not emit
+ * `enemy.hurt`. Script events are delivered synchronously and nested, so the
+ * manager can see the kill (`enemy.defeated`) either before or after the hit
+ * that caused it depending on script order.
  */
 
 interface Entry {
