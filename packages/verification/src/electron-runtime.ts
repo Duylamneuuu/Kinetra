@@ -172,6 +172,14 @@ export interface RuntimeInputEvent {
   durationMs?: number;
 }
 
+export interface RuntimePhysicsHit {
+  entityId: string;
+  point: { x: number; y: number; z: number };
+  normal: { x: number; y: number; z: number };
+  distance: number;
+  startedInside: boolean;
+}
+
 export interface RuntimeFrameCapture {
   available: boolean;
   mimeType?: string;
@@ -694,6 +702,35 @@ export class ElectronRuntimeHost implements RuntimeHost {
   }): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("navigation.load", params);
+  }
+
+  async raycast(query: {
+    origin: { x: number; y: number; z: number };
+    direction: { x: number; y: number; z: number };
+    layers?: readonly number[];
+    excludeEntityIds?: readonly string[];
+    maxDistance?: number;
+  }): Promise<RuntimePhysicsHit | null> {
+    await this.#ensureProcess();
+    const result = await this.#request<{ hit?: RuntimePhysicsHit | null }>("physics.raycast", query);
+    return result.hit ?? null;
+  }
+
+  async shapeCast(query: {
+    shape:
+      | { type: "sphere"; radius: number }
+      | { type: "box"; halfExtents: { x: number; y: number; z: number } }
+      | { type: "capsule"; halfHeight: number; radius: number };
+    origin: { x: number; y: number; z: number };
+    direction: { x: number; y: number; z: number };
+    rotation?: { x: number; y: number; z: number; w: number };
+    layers?: readonly number[];
+    excludeEntityIds?: readonly string[];
+    maxDistance?: number;
+  }): Promise<RuntimePhysicsHit | null> {
+    await this.#ensureProcess();
+    const result = await this.#request<{ hit?: RuntimePhysicsHit | null }>("physics.shapeCast", query);
+    return result.hit ?? null;
   }
 
   async closestPointNavigation(params: {

@@ -58,6 +58,42 @@ export interface GameScriptAnimationGraphService {
   readonly blendProgress?: number | undefined;
 }
 
+export interface GameScriptVec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface GameScriptPhysicsHit {
+  entityId: string;
+  point: GameScriptVec3;
+  normal: GameScriptVec3;
+  distance: number;
+  startedInside: boolean;
+}
+
+/** Read-only spatial query. Layers filter the query only; they do not change simulation contacts. */
+export interface GameScriptPhysicsQuery {
+  origin: GameScriptVec3;
+  direction: GameScriptVec3;
+  layers?: readonly number[];
+  excludeEntityIds?: readonly string[];
+  maxDistance?: number;
+}
+
+export interface GameScriptShapeCastQuery extends GameScriptPhysicsQuery {
+  shape:
+    | { type: "sphere"; radius: number }
+    | { type: "box"; halfExtents: GameScriptVec3 }
+    | { type: "capsule"; halfHeight: number; radius: number };
+  rotation?: { x: number; y: number; z: number; w: number };
+}
+
+export interface GameScriptPhysicsService {
+  raycast(query: GameScriptPhysicsQuery): GameScriptPhysicsHit | null;
+  shapeCast(query: GameScriptShapeCastQuery): GameScriptPhysicsHit | null;
+}
+
 export interface GameScriptAnimationService {
   play(clipName: string, options?: { loop?: boolean }): boolean;
   stop(): void;
@@ -79,6 +115,7 @@ export interface GameScriptContext {
   readonly navigation?: GameScriptNavigationService;
   readonly audio?: GameScriptAudioService;
   readonly animation?: GameScriptAnimationService;
+  readonly physics?: GameScriptPhysicsService;
   emit?(event: string, payload?: unknown): void;
   log?(level: "debug" | "info" | "warning" | "error", category: string, data?: Record<string, unknown>): void;
 }

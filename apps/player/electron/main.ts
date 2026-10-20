@@ -342,6 +342,8 @@ async function handleBridgeRequest(
     case "audio.stop":
     case "audio.setBusGain":
     case "audio.setBusMuted":
+    case "physics.raycast":
+    case "physics.shapeCast":
     case "navigation.bake":
     case "navigation.load":
     case "navigation.closestPoint":

@@ -5,7 +5,7 @@ import {
 // Rapier (~2.8 MB of inlined WASM source) and Recast are loaded on demand
 // with dynamic import() so the first-paint chunk stays small (see
 // .kinetra/bundle-budget.json). Only types are imported statically.
-import type { RapierPhysicsWorld } from "@kinetra/physics-rapier";
+import type { PhysicsHit, RapierPhysicsWorld, RaycastQuery, ShapeCastQuery } from "@kinetra/physics-rapier";
 import type { RecastNavMesh } from "@kinetra/navigation-recast";
 import {
   ThreeSceneRuntime,
@@ -52,6 +52,7 @@ import { createSupersessionGuard } from "./supersession-guard.js";
 import { applyPhysicsStateToObject } from "./physics-sync.js";
 import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
 import { resolveSceneThenTearDown } from "./start-scene.js";
+import { createScriptPhysicsService, PHYSICS_WORLD_UNAVAILABLE } from "./script-physics.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
   InputRouter,
@@ -843,6 +844,7 @@ export class PlayerRuntimeController {
               emit: (event, payload) => {
                 this.#scripts.emit(event, payload);
               },
+              physics: createScriptPhysicsService(() => self.#physics),
               log: (level, category, data) => {
                 this.#log(level, category, data);
               },
@@ -2065,6 +2067,22 @@ export class PlayerRuntimeController {
       slotId,
       schemaVersion: migratedEnvelope.schemaVersion,
     };
+  }
+
+  raycast(query: RaycastQuery): PhysicsHit | null {
+    const world = this.#physics;
+    if (!world) {
+      throw new Error(PHYSICS_WORLD_UNAVAILABLE);
+    }
+    return world.raycast(query);
+  }
+
+  shapeCast(query: ShapeCastQuery): PhysicsHit | null {
+    const world = this.#physics;
+    if (!world) {
+      throw new Error(PHYSICS_WORLD_UNAVAILABLE);
+    }
+    return world.shapeCast(query);
   }
 
   query(query: PlayerRuntimeQuery = {}): PlayerRuntimeQueryResult {

@@ -630,3 +630,53 @@ test("a ray that starts exactly on a surface counts as touching in any direction
     physics.dispose();
   }
 });
+
+test("shapeCast box and capsule resting flush keep a contact point on the surface", async () => {
+  const physics = await arenaWorld();
+  try {
+    // #159: Rapier's TOI witness used to sit ~1e-2 off a flush box/capsule. The published
+    // point is the closest point on the hit collider to the cast centre.
+    const box = physics.shapeCast({
+      shape: { type: "box", halfExtents: { x: 0.4, y: 0.5, z: 0.3 } },
+      origin: { x: 3.25, y: 0.5, z: -1.5 },
+      direction: { x: 0, y: -1, z: 0 },
+    });
+    assert.ok(box);
+    assert.equal(box.entityId, "floor");
+    approx(box.distance, 0, "box flush distance", 1e-3);
+    approx(box.point.x, 3.25, "box flush point.x", 1e-3);
+    approx(box.point.y, 0, "box flush point.y", 1e-3);
+    approx(box.point.z, -1.5, "box flush point.z", 1e-3);
+    approx(box.normal.y, 1, "box flush normal.y", 1e-3);
+
+    const capsule = physics.shapeCast({
+      shape: { type: "capsule", halfHeight: 0.4, radius: 0.25 },
+      origin: { x: -2, y: 0.65, z: 1.25 },
+      direction: { x: 0, y: -1, z: 0 },
+    });
+    assert.ok(capsule);
+    assert.equal(capsule.entityId, "floor");
+    approx(capsule.distance, 0, "capsule flush distance", 1e-3);
+    approx(capsule.point.x, -2, "capsule flush point.x", 1e-3);
+    approx(capsule.point.y, 0, "capsule flush point.y", 1e-3);
+    approx(capsule.point.z, 1.25, "capsule flush point.z", 1e-3);
+    approx(capsule.normal.y, 1, "capsule flush normal.y", 1e-3);
+
+    // 45° about Z (quaternion is half-angle). A square's bottom corner is 0.5 * sqrt(2) below the centre.
+    const halfAngle = Math.PI / 8;
+    const rotated = physics.shapeCast({
+      shape: { type: "box", halfExtents: { x: 0.5, y: 0.5, z: 0.5 } },
+      rotation: { x: 0, y: 0, z: Math.sin(halfAngle), w: Math.cos(halfAngle) },
+      origin: { x: 1, y: 0.5 * Math.SQRT2, z: -4 },
+      direction: { x: 0, y: -1, z: 0 },
+    });
+    assert.ok(rotated);
+    assert.equal(rotated.entityId, "floor");
+    approx(rotated.distance, 0, "rotated flush distance", 1e-3);
+    approx(rotated.point.y, 0, "rotated flush point.y", 1e-3);
+    approx(rotated.point.x, 1, "rotated flush point.x", 1e-3);
+    approx(rotated.point.z, -4, "rotated flush point.z", 1e-3);
+  } finally {
+    physics.dispose();
+  }
+});
