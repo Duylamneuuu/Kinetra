@@ -234,6 +234,13 @@ export interface ElectronRuntimeHostOptions {
    */
   electronArgs?: string[];
   /**
+   * Sets `KINETRA_RUNTIME_TEST_HOOKS=1` on the player process. That unlocks
+   * `testHarness.circularResult`, which exists so a test can prove a circular
+   * main-process result becomes `BRIDGE_UNSERIALIZABLE_RESPONSE` (#286).
+   * Left unset, the player rejects that method as unsupported.
+   */
+  enableTestHooks?: boolean;
+  /**
    * Renderer capture mode.
    * - `"performance"` (default): normal shipping renderer configuration (`preserveDrawingBuffer: false`).
    * - `"visual"`: verification capture configuration (`preserveDrawingBuffer: true`).
@@ -303,6 +310,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
   readonly transport: ElectronRuntimeTransport;
   readonly electronArgs: readonly string[];
   readonly captureMode: "performance" | "visual";
+  readonly #enableTestHooks: boolean;
 
   #child: ChildProcessWithoutNullStreams | undefined;
   #server: Server | undefined;
@@ -336,6 +344,24 @@ export class ElectronRuntimeHost implements RuntimeHost {
     this.transport = options.transport ?? "pipe";
     this.electronArgs = Object.freeze([...(options.electronArgs ?? [])]);
     this.captureMode = options.captureMode === "visual" ? "visual" : "performance";
+    this.#enableTestHooks = options.enableTestHooks === true;
+  }
+
+  /** Applies the test-hook env after `process.env` is copied, so a parent shell cannot leave it on. */
+  #applyTestHookEnv(electronEnv: NodeJS.ProcessEnv): void {
+    if (this.#enableTestHooks) {
+      electronEnv.KINETRA_RUNTIME_TEST_HOOKS = "1";
+    } else {
+      delete electronEnv.KINETRA_RUNTIME_TEST_HOOKS;
+    }
+  }
+
+  /**
+   * Asks the player main process for a circular object. The bridge must reject with
+   * `BRIDGE_UNSERIALIZABLE_RESPONSE` well inside `requestTimeoutMs`. Requires `enableTestHooks`.
+   */
+  requestCircularResult(): Promise<unknown> {
+    return this.#request("testHarness.circularResult", {});
   }
 
   async start(
@@ -1068,6 +1094,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
     };
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
+    this.#applyTestHookEnv(electronEnv);
 
     if (process.platform === "linux") {
       electronEnv.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";
@@ -1124,6 +1151,7 @@ export class ElectronRuntimeHost implements RuntimeHost {
 
     delete electronEnv["ELECTRON_RUN_AS_NODE"];
     delete electronEnv["KINETRA_RUNTIME_BRIDGE_PIPE"];
+    this.#applyTestHookEnv(electronEnv);
 
     if (process.platform === "linux") {
       electronEnv.KINETRA_RUNTIME_BRIDGE_SHOW_WINDOW = "1";

@@ -10,6 +10,7 @@ import {
   normalizeRendererResponse,
   parseBridgeLine,
   recoverRendererResponseId,
+  createCircularHarnessResult,
   serializeBridgeMessage,
   type BridgeRequest,
 } from "./bridge-protocol.js";
@@ -351,6 +352,11 @@ async function handleBridgeRequest(
     case "save.load":
     case "testHarness.enableTestFixtures":
       return callRenderer(request.method, request.params ?? {});
+
+    case "testHarness.circularResult":
+      // Main-process result, not a renderer reply: Electron IPC cannot carry a cycle, and the
+      // failure the client must see is bridgeWrite refusing to JSON-serialize this object (#286).
+      return createCircularHarnessResult(process.env.KINETRA_RUNTIME_TEST_HOOKS === "1");
 
     case "runtime.captureFrame": {
       try {
