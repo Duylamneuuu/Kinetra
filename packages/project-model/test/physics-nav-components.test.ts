@@ -67,6 +67,9 @@ test("RigidBody type is checked case-insensitively like the runtime does", () =>
   assert.deepEqual(codes("RigidBody", { type: "dynamic", mass: 2, gravityScale: 0, linearDamping: 0.1, angularDamping: 0 }), []);
   // No `type` means a fixed body (the physics scene factory's default), which ignores mass.
   assert.deepEqual(codes("RigidBody", { mass: 0 }), []);
+  // The physics factory treats an empty type string as missing (fixed), so the schema must too (#529).
+  assert.deepEqual(codes("RigidBody", { type: "" }), []);
+  assert.deepEqual(codes("RigidBody", { type: "", mass: 0 }), []);
   assert.deepEqual(codes("RigidBody", { mass: -3 }), []);
   assert.deepEqual(codes("RigidBody", { type: "dynamic", mass: -3 }), ["component.RigidBody.mass.invalid"]);
   assert.deepEqual(codes("RigidBody", { type: "Dynamic", mass: 0 }), ["component.RigidBody.mass.invalid"]);
