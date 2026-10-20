@@ -11,6 +11,7 @@ import { PlayerRuntimeController } from "./runtime-controller.js";
 import { createFrameLoop } from "./frame-loop.js";
 import { GameShellController } from "./shell.js";
 import { parseRuntimeStepParams } from "./step-params.js";
+import { parseRaycastParams, parseShapeCastParams } from "./physics-query.js";
 import "./style.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game");
@@ -371,6 +372,14 @@ async function handleRuntimeCommand(request: {
       }
       runtime.setAudioBusMuted(busId, params.muted);
       return runtime.query();
+    }
+
+    case "physics.raycast": {
+      return { hit: runtime.raycast(parseRaycastParams(params)) };
+    }
+
+    case "physics.shapeCast": {
+      return { hit: runtime.shapeCast(parseShapeCastParams(params)) };
     }
 
     case "navigation.bake": {

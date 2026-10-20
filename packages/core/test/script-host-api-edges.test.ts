@@ -329,3 +329,49 @@ test("prefab overrides merge into existing data, add new components and reject b
     /reserved/,
   );
 });
+
+test("a script shapeCast goes through context.physics and returns the hit", async () => {
+  const seen: string[] = [];
+  const script: GameScript = {
+    onUpdate(context) {
+      const hit = context.physics?.shapeCast({
+        shape: { type: "box", halfExtents: { x: 0.5, y: 0.5, z: 0.5 } },
+        origin: { x: 0, y: 1, z: 0 },
+        direction: { x: 0, y: -1, z: 0 },
+      });
+      const ray = context.physics?.raycast({
+        origin: { x: 0, y: 1, z: 0 },
+        direction: { x: 0, y: -1, z: 0 },
+      });
+      seen.push(`${hit?.entityId ?? "miss"}:${ray?.entityId ?? "miss"}:${hit?.point.y}`);
+    },
+  };
+  const host = new ScriptHost();
+  host.register({
+    id: "caster",
+    context: {
+      entityId: "caster",
+      sceneId: "scene",
+      physics: {
+        raycast: () => ({
+          entityId: "floor",
+          point: { x: 0, y: 0, z: 0 },
+          normal: { x: 0, y: 1, z: 0 },
+          distance: 1,
+          startedInside: false,
+        }),
+        shapeCast: () => ({
+          entityId: "floor",
+          point: { x: 0, y: 0, z: 0 },
+          normal: { x: 0, y: 1, z: 0 },
+          distance: 0.5,
+          startedInside: false,
+        }),
+      },
+    },
+    script,
+  });
+  await host.startAll();
+  host.update(1 / 60);
+  assert.deepEqual(seen, ["floor:floor:0"]);
+});

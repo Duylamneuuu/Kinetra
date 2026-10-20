@@ -49,8 +49,8 @@ Rules:
   or rotation) throws `RangeError`.
 - `startedInside` is true when the origin already touches or overlaps a collider (a ray starting exactly on a surface reports it whatever its direction); `distance` is then 0 and
   `normal` is the reverse of the cast direction.
-- Sphere-cast contact points are exact; box/capsule contact points come from Rapier's iterative solver (~1e-2). `distance` is accurate to ~1e-4.
-- Not proven yet: script/bridge exposure and a real-Electron test.
+- `point` is the closest point on the hit collider to the cast shape's centre at impact, for a sphere, box or capsule, including a shape that starts flush against the surface. `distance` is accurate to ~1e-4.
+- Game scripts read the same queries through `context.physics.raycast` / `context.physics.shapeCast`. The runtime bridge exposes `physics.raycast` and `physics.shapeCast` (`{ hit }` or a structured error). A live Electron test covers the bridge (`packages/verification/test/real-physics-query.test.ts`).
 
 ## Scene diagnostics
 
