@@ -42,7 +42,8 @@ export const ORB_RUN_MODEL_ASSET_IDS: readonly string[] = Object.values(ORB_RUN_
 export const ORB_RUN_ASSET_IDS: readonly string[] = [...ORB_RUN_MODEL_ASSET_IDS, ...ORB_RUN_AUDIO_ASSET_IDS];
 
 export const ORB_RUN_GLB_IMPORTER = "orbrun-glb";
-export const ORB_RUN_WAV_IMPORTER = "orbrun-wav";
+/** Pipeline `WavImporter`. Audio metadata is `sampleRate`, `channels`, `durationSeconds`. */
+export const ORB_RUN_WAV_IMPORTER = "wav";
 export const ORB_RUN_IMPORTER_VERSION = "1";
 
 interface ModelSpec {
@@ -94,6 +95,15 @@ export function orbRunImportedPath(assetId: string): string {
   return `assets/imported/${assetId}.${assetId in MODEL_SPECS ? "glb" : "wav"}`;
 }
 
+function audioMetadata(id: string): AssetRecord["metadata"] {
+  const durationSeconds = orbRunClipDuration(id);
+  if (durationSeconds === undefined) throw new Error(`Orb Run audio asset "${id}" has no clip duration`);
+  return {
+    durationSeconds,
+    provenance: { provider: "kinetra-synthetic", generator: "createSyntheticWav", license: "CC0-1.0" },
+  };
+}
+
 function modelMetadata(spec: ModelSpec): AssetRecord["metadata"] {
   const [x, y, z] = spec.size;
   return {
@@ -128,12 +138,7 @@ export function createOrbRunAssetRecords(sources: OrbRunAssetSources): AssetReco
       }),
       dependencies: [],
       diagnostics: [],
-      metadata: spec
-        ? modelMetadata(spec)
-        : {
-            durationSeconds: orbRunClipDuration(id),
-            provenance: { provider: "kinetra-synthetic", generator: "createSyntheticWav", license: "CC0-1.0" },
-          },
+      metadata: spec ? modelMetadata(spec) : audioMetadata(id),
     });
   }
   return records;
@@ -209,99 +214,6 @@ function describeSetting(value: unknown): string {
   return typeof value === "string" ? JSON.stringify(value) : String(value);
 }
 
-/** KSDATAFORMAT_SUBTYPE_PCM: the sub-format GUID (little-endian bytes) of integer PCM inside a WAVE_FORMAT_EXTENSIBLE `fmt `. */
-const WAV_SUBFORMAT_PCM_GUID = [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71];
-const WAVE_FORMAT_PCM = 1;
-const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
-
-/** What `parseWav` reads from the RIFF chunk list. */
-interface WavFormat {
-  sampleRateHz: number;
-  channels: number;
-  bitsPerSample: number;
-  dataBytes: number;
-}
-
-/**
- * Walks the RIFF chunk list (chunks may appear in any order and carry padding,
- * e.g. a `LIST` chunk before `fmt `) and requires an integer-PCM `fmt ` chunk
- * (plain, or WAVE_FORMAT_EXTENSIBLE whose sub-format is PCM, as DAWs write
- * multi-channel and 24-bit files) and a non-empty `data` chunk that fits
- * inside the file. Throws a plain Error naming the
- * problem; the reimport service turns it into a structured failed import.
- */
-function parseWav(bytes: Uint8Array, assetId: string): WavFormat {
-  const tag = (offset: number): string => String.fromCharCode(...bytes.subarray(offset, offset + 4));
-  if (bytes.byteLength < 44 || tag(0) !== "RIFF" || tag(8) !== "WAVE") {
-    throw new Error(`Audio asset "${assetId}" is not a RIFF/WAVE file`);
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let format: Pick<WavFormat, "sampleRateHz" | "channels" | "bitsPerSample"> | undefined;
-  let dataBytes: number | undefined;
-  let offset = 12;
-  while (offset + 8 <= bytes.byteLength) {
-    const id = tag(offset);
-    const size = view.getUint32(offset + 4, true);
-    const body = offset + 8;
-    if (id === "fmt ") {
-      if (size < 16 || body + 16 > bytes.byteLength) {
-        throw new Error(`Audio asset "${assetId}" has a truncated fmt chunk`);
-      }
-      const formatTag = view.getUint16(body, true);
-      if (formatTag === WAVE_FORMAT_EXTENSIBLE) {
-        // fmt is 40 bytes: 16 base + cbSize(2) + validBits(2) + channelMask(4) + SubFormat GUID(16).
-        if (size < 40 || body + 40 > bytes.byteLength) {
-          throw new Error(`Audio asset "${assetId}" has a truncated WAVE_FORMAT_EXTENSIBLE fmt chunk`);
-        }
-        const subFormat = bytes.subarray(body + 24, body + 40);
-        if (!WAV_SUBFORMAT_PCM_GUID.every((value, index) => subFormat[index] === value)) {
-          throw new Error(`Audio asset "${assetId}" is not PCM WAV (extensible sub-format tag ${view.getUint16(body + 24, true)})`);
-        }
-      } else if (formatTag !== WAVE_FORMAT_PCM) {
-        throw new Error(`Audio asset "${assetId}" is not PCM WAV (format tag ${formatTag})`);
-      }
-      const channels = view.getUint16(body + 2, true);
-      const sampleRateHz = view.getUint32(body + 4, true);
-      const bitsPerSample = view.getUint16(body + 14, true);
-      if (channels < 1 || sampleRateHz < 1 || bitsPerSample < 8 || bitsPerSample % 8 !== 0) {
-        throw new Error(
-          `Audio asset "${assetId}" has an invalid fmt chunk (channels ${channels}, ${sampleRateHz} Hz, ${bitsPerSample} bits)`,
-        );
-      }
-      format = { sampleRateHz, channels, bitsPerSample };
-    } else if (id === "data") {
-      if (body + size > bytes.byteLength) {
-        throw new Error(`Audio asset "${assetId}" has a truncated data chunk`);
-      }
-      if (size === 0) throw new Error(`Audio asset "${assetId}" has an empty data chunk`);
-      dataBytes = size;
-    }
-    if (format && dataBytes !== undefined) break;
-    offset = body + size + (size % 2);
-  }
-  if (!format) throw new Error(`Audio asset "${assetId}" has no fmt chunk`);
-  if (dataBytes === undefined) throw new Error(`Audio asset "${assetId}" has no data chunk`);
-  return { ...format, dataBytes };
-}
-
-/** PCM WAV importer: parses the RIFF chunks and reads the sample rate from the `fmt ` chunk. */
-export class OrbRunWavImporter implements AssetImporter {
-  async import(context: AssetImporterContext): Promise<AssetImporterResult> {
-    const bytes = context.sourceBytes;
-    const { sampleRateHz } = parseWav(bytes, context.assetId);
-    const diagnostics: AssetDiagnostic[] = [];
-    const expected = context.recipe.settings.sampleRateHz;
-    if (typeof expected === "number" && expected !== sampleRateHz) {
-      diagnostics.push({
-        severity: "warning",
-        code: "orbrun.audio.sampleRate",
-        message: `Expected ${expected} Hz, file is ${sampleRateHz} Hz`,
-      });
-    }
-    return { artifactBytes: bytes, metadata: { sampleRateHz }, diagnostics };
-  }
-}
-
 /** In-memory `FileSystemAdapter` that counts writes, for deterministic pipeline tests. */
 export class MemoryFileSystem implements FileSystemAdapter {
   readonly files = new Map<string, Uint8Array>();
@@ -352,10 +264,7 @@ export async function createOrbRunAssetPipeline(): Promise<OrbRunAssetPipeline> 
   const service = new AssetReimportService({
     database,
     fileSystem,
-    importers: new Map<string, AssetImporter>([
-      [ORB_RUN_GLB_IMPORTER, new OrbRunGlbImporter()],
-      [ORB_RUN_WAV_IMPORTER, new OrbRunWavImporter()],
-    ]),
+    importers: new Map<string, AssetImporter>([[ORB_RUN_GLB_IMPORTER, new OrbRunGlbImporter()]]),
     onEvent: (event) => events.push(event),
   });
   return { database, fileSystem, service, events, sources };
@@ -531,7 +440,8 @@ export class OrbRunAssetCatalog {
       }
       if (!artifact) errorCount += 1;
       const { dimensions, polycount } = record.metadata;
-      const sampleRateHz = record.metadata["sampleRateHz"];
+      const sampleRateField = record.metadata.sampleRate ?? record.metadata["sampleRateHz"];
+      const sampleRateHz = typeof sampleRateField === "number" ? sampleRateField : undefined;
       const durationSeconds = record.metadata["durationSeconds"];
       byId[record.id] = {
         kind: record.kind,

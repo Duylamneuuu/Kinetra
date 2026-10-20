@@ -36,6 +36,12 @@ export interface AssetMetadata extends Record<string, unknown> {
   dimensions?: [number, number, number];
   boundsRadius?: number;
   provenance?: AssetProvenance;
+  /** PCM sample rate in Hz, written by `WavImporter`. */
+  sampleRate?: number;
+  /** PCM channel count, written by `WavImporter`. */
+  channels?: number;
+  /** Complete PCM frames divided by `sampleRate`, written by `WavImporter`. */
+  durationSeconds?: number;
 }
 
 export interface AssetRecord {
