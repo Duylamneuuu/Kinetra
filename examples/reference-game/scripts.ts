@@ -1141,12 +1141,12 @@ export class ArenaGameManager implements GameScript {
     } else if (event === "gameplay.damage") {
       this.stats.damageTaken += readArenaDamageAmount(payload);
     } else if (event === "enemy.hurt") {
-      // Count damage the enemy actually took, not damage that was merely attempted:
-      // `gameplay.enemyDamage` is also delivered for hits on an already-defeated
-      // enemy (which ignores them) and, because emits are synchronous and nested,
-      // may reach this script before or after the enemy's own reaction, so no
-      // "is the enemy dead yet" guard on it can be order independent. The enemy
-      // only emits `enemy.hurt` for a hit it applied.
+      // Sum the amount on `enemy.hurt`. The enemy emits that only for a hit it
+      // applied, and the amount is the swing: an overkill hit of 99 counts as 99,
+      // not the health that remained. Hits on an already-defeated enemy do not
+      // emit `enemy.hurt`. `gameplay.enemyDamage` is also delivered for those
+      // ignored hits and, because emits are synchronous and nested, may arrive
+      // before or after the enemy's own reaction, so this script does not count it.
       this.stats.damageDealt += readArenaDamageAmount(
         typeof payload === "object" && payload !== null && "damage" in payload
           ? { amount: (payload as { damage: unknown }).damage }
