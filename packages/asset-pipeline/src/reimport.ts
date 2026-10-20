@@ -1,10 +1,9 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, extname } from "node:path";
-import { NodeIO, getBounds } from "@gltf-transform/core";
+import { WebIO, getBounds } from "./gltf-web.js";
 import type { AssetDatabase } from "./database.js";
 import { glbDeclaresMeshes, measureGlbBoundsFromJson } from "./glb-bounds.js";
 import { inspectGlb } from "./glb.js";
 import { hashBytes, importFingerprint } from "./hash.js";
+import { requireDefaultFileSystem } from "./platform.js";
 import type {
   AssetDiagnostic,
   AssetMetadata,
@@ -112,37 +111,20 @@ export interface FileSystemAdapter {
   mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
 }
 
-const nodeFileSystem: FileSystemAdapter = {
-  async readFile(p: string) {
-    const buf = await readFile(p);
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-  },
-  async writeFile(p: string, data: Uint8Array) {
-    await writeFile(p, data);
-  },
-  async rename(oldPath: string, newPath: string) {
-    // Windows rename resilience: if destination exists or is locked briefly, retry
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        await rename(oldPath, newPath);
-        return;
-      } catch (err: any) {
-        retries--;
-        if (retries === 0 || (err?.code !== "EPERM" && err?.code !== "EBUSY")) {
-          throw err;
-        }
-        await new Promise((r) => setTimeout(r, 20));
-      }
-    }
-  },
-  async unlink(p: string) {
-    await unlink(p).catch(() => {});
-  },
-  async mkdir(p: string, options?: { recursive?: boolean }) {
-    return await mkdir(p, options);
-  },
-};
+function parentDirectory(filePath: string): string {
+  const end = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  if (end < 0) return ".";
+  if (end === 0) return filePath[0]!;
+  return filePath.slice(0, end);
+}
+
+function fileExtension(filePath: string): string {
+  const baseStart = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\")) + 1;
+  const base = filePath.slice(baseStart);
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return "";
+  return base.slice(dot);
+}
 
 /**
  * World-space bounding-box size of every scene in a GLB, or undefined when it cannot be measured
@@ -152,7 +134,7 @@ const nodeFileSystem: FileSystemAdapter = {
  */
 export async function measureGlbDimensions(bytes: Uint8Array): Promise<[number, number, number] | undefined> {
   try {
-    const document = await new NodeIO().readBinary(bytes);
+    const document = await new WebIO().readBinary(bytes);
     const min = [Infinity, Infinity, Infinity];
     const max = [-Infinity, -Infinity, -Infinity];
     for (const scene of document.getRoot().listScenes()) {
@@ -226,7 +208,7 @@ export class AssetReimportService {
 
   constructor(options: AssetReimportServiceOptions) {
     this.#database = options.database;
-    this.#fs = options.fileSystem ?? nodeFileSystem;
+    this.#fs = options.fileSystem ?? requireDefaultFileSystem();
 
     // Register built-in default importers
     this.#importers.set("glb", new GlbDirectImporter());
@@ -393,7 +375,7 @@ export class AssetReimportService {
 
     // 7. Execute importer to generate temp artifact
     const targetPath = record.importedPath;
-    const ext = extname(targetPath);
+    const ext = fileExtension(targetPath);
     const baseWithoutExt = ext ? targetPath.slice(0, -ext.length) : targetPath;
     const tempPath = `${baseWithoutExt}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}${ext}`;
     let importResult: AssetImporterResult;
@@ -435,7 +417,7 @@ export class AssetReimportService {
 
     // 9. Atomic replacement of final artifact
     try {
-      await this.#fs.mkdir(dirname(targetPath), { recursive: true });
+      await this.#fs.mkdir(parentDirectory(targetPath), { recursive: true });
       await this.#fs.writeFile(tempPath, importResult.artifactBytes);
       await this.#fs.rename(tempPath, targetPath);
     } catch (err) {

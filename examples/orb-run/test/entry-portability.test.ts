@@ -4,6 +4,8 @@ import { dirname, posix, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { build } from "esbuild";
+
 /**
  * The package entry (`src/index.ts`) is what a renderer / the Electron player bundle will import
  * (slice 20 prepares for the pluggable game module of #79 / #185). It must stay loadable in a
@@ -177,6 +179,105 @@ test("the scanner fires on sabotaged sources (builtin, Node-only module, forbidd
     "node_only_module:navigation.ts:loads Recast WASM (Node-only by design)",
     "unresolved:gone.ts:source file could not be read",
   ]);
+});
+
+/**
+ * #420: the renderer-facing entries of the three packages that used to import `node:*` from their
+ * barrels. The walk is the same as the game entry's, with each package's own external allow-list.
+ */
+const ENGINE_PURE_ENTRIES: ReadonlyArray<{ name: string; entry: string; allowed: readonly string[] }> = [
+  {
+    name: "@kinetra/asset-pipeline/pure",
+    entry: toPosixPath(resolve(packageRoot, "..", "..", "packages", "asset-pipeline", "src", "pure.ts")),
+    allowed: ["@gltf-transform/core"],
+  },
+  {
+    name: "@kinetra/animation/contracts",
+    entry: toPosixPath(resolve(packageRoot, "..", "..", "packages", "animation", "src", "contracts.ts")),
+    allowed: ["@gltf-transform/core", "three"],
+  },
+  {
+    name: "@kinetra/verification/browser",
+    entry: toPosixPath(resolve(packageRoot, "..", "..", "packages", "verification", "src", "browser.ts")),
+    allowed: ["@kinetra/project-model", "pngjs", "zod"],
+  },
+];
+
+async function scanEngineEntry(
+  entry: string,
+  allowed: ReadonlySet<string>,
+): Promise<PortabilityFinding[]> {
+  const seen = new Set<string>();
+  const findings: PortabilityFinding[] = [];
+  const queue = [entry];
+  while (queue.length > 0) {
+    const file = queue.shift() as string;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    let source: string;
+    try {
+      source = await readDisk(file);
+    } catch {
+      findings.push({ file, code: "unresolved", detail: "source file could not be read" });
+      continue;
+    }
+    const globalUse = NODE_GLOBAL_RE.exec(stripComments(source));
+    if (globalUse) {
+      findings.push({ file, code: "node_global", detail: `uses a Node-only global: ${globalUse[0]}` });
+    }
+    for (const spec of importSpecifiers(source)) {
+      if (spec.startsWith(".")) {
+        queue.push(posix.normalize(posix.join(posix.dirname(file), spec.replace(/\.js$/, ".ts"))));
+      } else if (spec.startsWith("node:") || NODE_BUILTINS.has(spec.split("/")[0] ?? "")) {
+        findings.push({ file, code: "node_builtin", detail: spec });
+      } else {
+        const pkg = spec.startsWith("@") ? spec.split("/").slice(0, 2).join("/") : (spec.split("/")[0] ?? spec);
+        if (!allowed.has(pkg)) findings.push({ file, code: "external_not_allowed", detail: spec });
+      }
+    }
+  }
+  return findings;
+}
+
+test("engine browser entries have no node: import in their static graph (Refs #420)", async () => {
+  const failures: string[] = [];
+  for (const item of ENGINE_PURE_ENTRIES) {
+    const findings = await scanEngineEntry(item.entry, new Set(item.allowed));
+    if (findings.length > 0) failures.push(`${item.name}:\n${JSON.stringify(findings, null, 2)}`);
+  }
+  assert.deepEqual(failures, [], failures.join("\n"));
+});
+
+test("engine browser entries bundle for platform browser with no Node builtin (Refs #420)", async () => {
+  // The source walk above does not enter node_modules. This does: a second game's esbuild
+  // `platform: "browser"` build of each published entry must resolve, and the output must not
+  // keep a Node builtin (NodeIO's dynamic node:fs import is the case the walk cannot see).
+  for (const spec of ["@kinetra/asset-pipeline/pure", "@kinetra/animation/contracts", "@kinetra/verification/browser"]) {
+    const result = await build({
+      stdin: {
+        contents: `import * as entry from ${JSON.stringify(spec)};\nexport const names = Object.keys(entry);\n`,
+        resolveDir: packageRoot,
+        sourcefile: "second-game.mjs",
+        loader: "js",
+      },
+      bundle: true,
+      write: false,
+      metafile: true,
+      format: "esm",
+      platform: "browser",
+      target: "es2022",
+      logLevel: "silent",
+    });
+    assert.equal(result.errors.length, 0, `${spec}: ${JSON.stringify(result.errors)}`);
+    const [outputPath] = Object.keys(result.metafile?.outputs ?? {});
+    assert.ok(outputPath, `${spec} produced no output`);
+    const imports = result.metafile!.outputs[outputPath]!.imports.map((entryImport) => entryImport.path);
+    assert.deepEqual(imports, [], `${spec} still imports ${imports.join(", ")}`);
+    const text = result.outputFiles?.[0]?.text ?? "";
+    assert.equal(text.includes("node:fs"), false, `${spec} output still mentions node:fs`);
+    assert.equal(text.includes("node:path"), false, `${spec} output still mentions node:path`);
+    assert.ok(text.includes("names"), `${spec} bundle is empty`);
+  }
 });
 
 test("a commented-out Node import does not trip the scanner, a real one in a nested module does", async () => {

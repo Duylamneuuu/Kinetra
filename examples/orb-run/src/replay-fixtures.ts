@@ -1,4 +1,4 @@
-import type { AcceptanceManifest } from "@kinetra/verification";
+import type { AcceptanceManifest } from "@kinetra/verification/browser";
 
 import { ORB_RUN_MAX_STEPS_PER_CALL } from "./acceptance-probe.js";
 import { ORB_RUN_WINNING_ROUTE, summarizeOrbRun, walkTo } from "./game.js";

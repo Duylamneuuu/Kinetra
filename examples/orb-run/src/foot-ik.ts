@@ -1,4 +1,4 @@
-import {solveTwoBoneIk,type IkVec3} from "@kinetra/animation";
+import {solveTwoBoneIk,type IkVec3} from "@kinetra/animation/ik";
 
 /** Orb Run's runner leg rig, in metres. The pelvis sits `pelvisHeight` above the standing ground. */
 export const RUNNER_LEG_RIG={

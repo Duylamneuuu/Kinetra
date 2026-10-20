@@ -1,3 +1,5 @@
+import "./node-artifact-writer.js";
+
 export * from "./process-smoke.js";
 export * from "./runner.js";
 export * from "./runtime-probe.js";
@@ -9,4 +11,5 @@ export * from "./visual-baseline.js";
 export * from "./visual-baseline-cli.js";
 export * from "./critique.js";
 export * from "./performance.js";
+export { writePerformanceReport } from "./performance-report-file.js";
 

@@ -17,7 +17,7 @@ import {
   type FileSystemAdapter,
   type ReimportEvent,
   type ReimportResult,
-} from "@kinetra/asset-pipeline";
+} from "@kinetra/asset-pipeline/pure";
 import { createOrbRunAudioBytes, ORB_RUN_AUDIO_ASSET_IDS, orbRunClipDuration } from "./audio.js";
 
 /**

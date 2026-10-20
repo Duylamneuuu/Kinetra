@@ -27,10 +27,8 @@ const importSpecifiers = (source: string): string[] => {
  *
  * Two rules are enforced:
  *  1. Packages that are clean today (`CLEAN_PACKAGES`) must stay clean, transitively.
- *  2. The Node-builtin "debt" of every other package may only shrink: `NODE_DEBT` is an upper
- *     bound per package (module set). New packages or new builtins reaching the entry fail, so a
- *     portability regression in the engine is caught by the game that dogfoods it. Paying a
- *     debt down needs no ledger edit (the bound just gets loose); tighten `NODE_DEBT` then.
+ *  2. Any other package the entry reaches must stay inside `NODE_DEBT`. That ledger is empty:
+ *     the game imports browser-safe subpaths (#420), so a Node builtin anywhere on this graph fails.
  */
 
 const toPosix = (path: string): string => path.replace(/\\/g, "/");
@@ -49,17 +47,12 @@ const CLEAN_PACKAGES: readonly string[] = [
 ];
 
 /**
- * Upper bound of Node builtins each engine package may reach through its barrel. Filled from a
- * real scan (see README slice 25). Tracked as engine debt in LOG.md "YÊU CẦU ENGINE" / #420.
+ * Upper bound of Node builtins each engine package may reach through the entry the game actually
+ * imports. The renderer-facing subpaths (`asset-pipeline/pure`, `animation/blend-space` and
+ * `animation/ik`, `verification/browser`) pay #420 down to nothing. A new builtin fails the test;
+ * the Node barrels (`src/index.ts`) are no longer on this graph.
  */
-const NODE_DEBT: Readonly<Record<string, readonly string[]>> = {
-  "@kinetra/animation": ["node:crypto", "node:fs", "node:fs/promises", "node:path"],
-  "@kinetra/asset-pipeline": ["node:crypto", "node:fs", "node:fs/promises", "node:path"],
-  "@kinetra/verification": [
-    "node:child_process", "node:crypto", "node:fs", "node:fs/promises", "node:module", "node:net",
-    "node:os", "node:path", "node:readline", "node:url",
-  ],
-};
+const NODE_DEBT: Readonly<Record<string, readonly string[]>> = {};
 
 const NODE_BUILTIN_BASES = new Set([
   "assert", "buffer", "child_process", "crypto", "events", "fs", "http", "https", "net", "os", "path",
@@ -125,7 +118,10 @@ export const walkPackages = async (
       const dir = packageDirs.get(name);
       if (dir === undefined) continue; // third-party package: out of scope here (entry-portability allow-lists)
       packages.add(name);
-      queue.push({ file: posix.join(dir, "src", "index.ts"), owner: name });
+      // `@kinetra/pkg/subpath` continues at that file, not the Node barrel (`src/index.ts`).
+      const subpath = spec.startsWith(`${name}/`) ? spec.slice(name.length + 1).replace(/\.js$/, "") : "";
+      const entryFile = subpath === "" ? "src/index.ts" : `src/${subpath}.ts`;
+      queue.push({ file: posix.join(dir, entryFile), owner: name });
     }
   }
   return { packages, builtins, unresolved: unresolved.sort(), files: seen.size };

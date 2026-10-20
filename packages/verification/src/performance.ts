@@ -1,6 +1,4 @@
-import { writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { mkdir } from "node:fs/promises";
+import { currentPlatform } from "./host-platform.js";
 
 export interface TimingPercentiles {
   p50Ms: number;
@@ -150,7 +148,7 @@ export function getPerformanceMetricValue(
 
 export function resolveBudgetForPlatform(
   budgetSpec: unknown,
-  platform: string = process.platform,
+  platform: string = currentPlatform(),
 ): {
   profile?: string;
   thresholds: Record<string, { max?: number; min?: number }>;
@@ -269,7 +267,7 @@ export function evaluatePerformanceBudget(
   budgetSpec: unknown,
   options: { platform?: string } = {},
 ): PerformanceBudgetEvaluation {
-  const platform = options.platform ?? process.platform;
+  const platform = options.platform ?? currentPlatform();
   const { profile, thresholds, invalid } = resolveBudgetForPlatform(budgetSpec, platform);
   const violations: PerformanceBudgetViolation[] = [];
   const thresholdCount = Object.keys(thresholds).length;
@@ -326,10 +324,3 @@ export function evaluatePerformanceBudget(
   };
 }
 
-export async function writePerformanceReport(
-  filePath: string,
-  report: PerformanceReport,
-): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(report, null, 2), "utf8");
-}

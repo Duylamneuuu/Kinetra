@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { sha256Hex } from "./sha256.js";
 
 export type CanonicalJsonErrorCode =
   | "hash.nonFiniteNumber"
@@ -81,15 +80,11 @@ function stable(value: unknown, path: string, ancestors: Set<object>): unknown {
 }
 
 export function hashBytes(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-export async function hashFile(path: string): Promise<string> {
-  return hashBytes(await readFile(path));
+  return sha256Hex(bytes);
 }
 
 export function hashJson(value: unknown): string {
-  return hashBytes(Buffer.from(JSON.stringify(stable(value, "$", new Set()))));
+  return hashBytes(new TextEncoder().encode(JSON.stringify(stable(value, "$", new Set()))));
 }
 
 export function importFingerprint(input: {

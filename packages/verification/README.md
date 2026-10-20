@@ -38,6 +38,12 @@ flowchart LR
 | Visual | `assert.visualNotBlank`, `assert.visualSimilarity`, `assert.visualDifference` (compare two `capture.frame` ids by changed-pixel ratio, perceptual dHash distance and mean absolute difference), `critique.visual` (AI critique through a `VisualCritiqueProvider`; `FakeVisualCritiqueProvider` for tests) |
 | Performance | `performance.sample`, `assert.performanceBudget` (per-platform budgets, p50/p95/p99 frame times) |
 
+## Browser entry
+
+`@kinetra/verification/browser` is the import for a game module bundled into the renderer. It exports manifest types, `KinetraRuntimeProbe`, critique contracts, performance-budget math and `setPngArtifactWriter`. Its own source does not import `node:*`, and `esbuild --platform=browser` bundles it without a Node builtin.
+
+`AcceptanceRunner`, `decodePng` and the other PNG helpers stay on `@kinetra/verification`. Screenshot bytes go through `pngjs`, which `require`s Node's `zlib`, `stream` and `util`, so a browser bundle of those modules does not resolve. The Node entry also registers the PNG artifact writer and exports `ElectronRuntimeHost`, process smoke, packaged-executable resolution and visual baselines. `writePerformanceReport` stays on the Node entry.
+
 ## Entry points
 
 | Export | Kind | What it does |

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { bytesToBase64 } from "./base64.js";
 import type { AssetDatabase } from "./database.js";
 import type {
   AssetReimportService,
@@ -6,6 +6,7 @@ import type {
   ReimportEvent,
 } from "./reimport.js";
 import type { SourceAssetWatcher } from "./watcher.js";
+import { requireDefaultFileSystem } from "./platform.js";
 import type { AssetDiagnostic } from "./types.js";
 
 /**
@@ -117,19 +118,6 @@ export interface AssetHotReloadCoordinatorOptions {
 /** Default size of the coordinator's transaction history. */
 export const DEFAULT_MAX_TRANSACTION_HISTORY = 100;
 
-const defaultNodeFs: FileSystemAdapter = {
-  async readFile(p: string) {
-    const buf = await readFile(p);
-    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-  },
-  async writeFile() {},
-  async rename() {},
-  async unlink() {},
-  async mkdir() {
-    return undefined;
-  },
-};
-
 export class AssetHotReloadCoordinator {
   readonly #database: AssetDatabase;
   readonly #reimportService: AssetReimportService;
@@ -163,7 +151,7 @@ export class AssetHotReloadCoordinator {
     this.#reimportService = options.reimportService;
     this.#watcher = options.watcher;
     this.#runtimeTarget = options.runtimeTarget;
-    this.#fs = options.fileSystem ?? defaultNodeFs;
+    this.#fs = options.fileSystem ?? requireDefaultFileSystem();
 
     if (options.onEvent) {
       this.#listeners.add(options.onEvent);
@@ -421,7 +409,7 @@ export class AssetHotReloadCoordinator {
         continue;
       }
 
-      const base64 = Buffer.from(artifactBytes).toString("base64");
+      const base64 = bytesToBase64(artifactBytes);
 
       // Publish to runtime resolver. A runtime that rejects the new bytes must not abort the whole
       // transaction (it would be lost from the history and waitForAssetReload would time out), and

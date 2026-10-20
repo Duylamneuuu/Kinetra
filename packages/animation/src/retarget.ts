@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { NodeIO } from "@gltf-transform/core";
+import { WebIO } from "./gltf-web.js";
 import * as THREE from "three";
+import { sha256Utf8 } from "./sha256.js";
 import {
   type HumanoidBone,
   type SkeletonProfile,
@@ -120,9 +120,7 @@ export function computeRetargetCacheKey(input: RetargetCacheKeyOptions): string 
   if (sourceRest) payload.sourceRestPoses = sourceRest;
   if (targetRest) payload.targetRestPoses = targetRest;
 
-  return createHash("sha256")
-    .update(JSON.stringify(stable(payload)))
-    .digest("hex");
+  return sha256Utf8(JSON.stringify(stable(payload)));
 }
 
 /**
@@ -135,7 +133,7 @@ export async function inspectSkeletonFromGlb(
   const diagnostics: RetargetDiagnostic[] = [];
   const bytes = glbBytes instanceof Uint8Array ? glbBytes : new Uint8Array(glbBytes);
 
-  const io = new NodeIO();
+  const io = new WebIO();
   const doc = await io.readBinary(bytes);
   const root = doc.getRoot();
 

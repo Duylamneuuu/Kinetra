@@ -1,4 +1,4 @@
-import { Logger, NodeIO } from "@gltf-transform/core";
+import { Logger, WebIO } from "./gltf-web.js";
 
 export interface NormalizeGlbResult {
   bytes: Uint8Array;
@@ -46,7 +46,7 @@ function readExtensionsUsed(bytes: Uint8Array): string[] {
 export async function normalizeGlb(bytes: Uint8Array): Promise<NormalizeGlbResult> {
   // The library logs "Missing optional extension" to the console for every
   // dropped extension; the result reports them in `droppedExtensions` instead.
-  const io = new NodeIO().setLogger(new Logger(Logger.Verbosity.SILENT));
+  const io = new WebIO().setLogger(new Logger(Logger.Verbosity.SILENT));
   const document = await io.readBinary(bytes);
   const root = document.getRoot();
   const output = await io.writeBinary(document);

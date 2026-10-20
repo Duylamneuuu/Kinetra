@@ -23,9 +23,9 @@ import { buildBrowserSandbox, nodeBuiltinStubs, type BrowserSandbox } from "./br
  *  - the game is then played through that bundle.
  *
  * It proves the *play path* of the game needs no Node API: replays record, play and verify to the same
- * bytes and digests as the Node build, and no stubbed builtin is ever called. The builtins are still
- * imported (the asset pipeline and animation loaders): the bundle only works because they are not
- * called while playing, which is exactly what this test pins.
+ * bytes and digests as the Node build, and the bundle imports no Node builtin (#420). The stub
+ * plugin stays so a regression that reintroduces `node:fs` fails this test instead of being
+ * polyfilled.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,11 +57,9 @@ test("the sandbox is browser-shaped: none of Node's globals exist in it", () => 
 });
 
 test("the entry bundles for the browser platform with Node builtins stubbed, without bundler warnings", () => {
-  // The builtins the graph still imports are the measured debt of slices 24 and 41; stubbing them is
-  // what makes the browser bundle buildable at all. A new one fails here.
-  const allowed = new Set(["crypto", "fs", "fs/promises", "path"]);
-  const extra = sandbox.stubbed.filter((name) => !allowed.has(name));
-  assert.deepEqual(extra, [], `new Node builtins reachable from the entry: ${extra.join(", ")}`);
+  // #420: the renderer entry reaches browser-safe package subpaths, so the bundle imports no Node
+  // builtin at all. A new one fails here.
+  assert.deepEqual(sandbox.stubbed, [], `Node builtins still reachable from the entry: ${sandbox.stubbed.join(", ")}`);
   assert.deepEqual(sandbox.warnings, [], "esbuild reports nothing suspicious (no import.meta / eval / require it could not follow)");
   assert.equal(typeof sandbox.bundle.createOrbRunReplays, "function");
 });

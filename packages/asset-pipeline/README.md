@@ -6,6 +6,10 @@ This package intentionally does **not** require Blender to run its unit tests. B
 
 ## Entry points
 
+Import `@kinetra/asset-pipeline/pure` from a game module that will be bundled into the Electron renderer. That entry has no `node:*` import. `hashFile` and the disk defaults for `AssetReimportService`, `AssetHotReloadCoordinator` and `SourceAssetWatcher` stay on `@kinetra/asset-pipeline` (the Node entry registers them). A renderer caller passes `fileSystem` / `watchAdapter` itself. In-memory GLB read and write goes through `src/gltf-web.ts`. The package build replaces `dist/src/gltf-web.js` with an inlined `@gltf-transform/core` bundle that drops `NodeIO`, so a `platform: "browser"` bundler does not try to resolve that class's `node:fs` / `node:path` import.
+
+## What the Node entry exports
+
 | Export | Kind | What it does |
 | --- | --- | --- |
 | `AssetDatabase` | class | In-memory, cycle-checked store of `AssetRecord`s. `upsert`, `get`, `list` (copies, sorted by id), `dependentsOf` and `invalidationSet` (the asset plus its transitive dependents, dependents sorted by id), `dependentsInRebuildOrder` (topological order). A rejected `upsert` leaves the database unchanged. |

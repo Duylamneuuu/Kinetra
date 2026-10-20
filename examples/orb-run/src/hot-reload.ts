@@ -6,7 +6,7 @@ import {
   type AssetHotReloadTransaction,
   type ReimportEvent,
   type RuntimeReloadTarget,
-} from "@kinetra/asset-pipeline";
+} from "@kinetra/asset-pipeline/pure";
 
 import {
   ORB_RUN_MODEL_ASSET,

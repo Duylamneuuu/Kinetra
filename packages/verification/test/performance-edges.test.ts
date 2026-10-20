@@ -9,10 +9,10 @@ import {
   evaluatePerformanceBudget,
   getPerformanceMetricValue,
   resolveBudgetForPlatform,
-  writePerformanceReport,
   type PerformanceReport,
   type RuntimePerformanceEvidence,
 } from "../src/performance.js";
+import { writePerformanceReport } from "../src/performance-report-file.js";
 
 const timing = (p50Ms: number, p95Ms: number, p99Ms: number, maxMs: number) => ({
   p50Ms,

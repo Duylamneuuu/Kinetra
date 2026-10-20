@@ -1,4 +1,4 @@
-import {evaluateBlendSpace1D,validateBlendSpace,type BlendSpace1DDefinition,type BlendSpaceWeight} from "@kinetra/animation";
+import {evaluateBlendSpace1D,validateBlendSpace,type BlendSpace1DDefinition,type BlendSpaceWeight} from "@kinetra/animation/blend-space";
 
 /** Orb Run's runner locomotion: a pure 1D blend space driven by horizontal speed (m/s). */
 export const ORB_RUN_LOCOMOTION:BlendSpace1DDefinition={

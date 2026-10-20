@@ -1,6 +1,36 @@
-import { watch, type FSWatcher } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { hashBytes } from "./hash.js";
+
+/** Handle returned by a {@link SourceWatchAdapter}. Node's `FSWatcher` satisfies this. */
+export interface SourceFileWatch {
+  close(): void;
+  on(event: "error", listener: (error: unknown) => void): void;
+  unref?(): void;
+}
+
+/**
+ * How {@link SourceAssetWatcher} sees the disk. The Node package entry installs a `node:fs`
+ * adapter. A browser bundle does not, and only needs one when a source is actually watched.
+ */
+export interface SourceWatchAdapter {
+  watch(path: string, listener: (eventType: string) => void): SourceFileWatch;
+  readFile(path: string): Promise<Uint8Array>;
+}
+
+let defaultWatchAdapter: SourceWatchAdapter | undefined;
+
+export function setDefaultSourceWatchAdapter(adapter: SourceWatchAdapter): void {
+  defaultWatchAdapter = adapter;
+}
+
+function resolveWatchAdapter(override: SourceWatchAdapter | undefined): SourceWatchAdapter {
+  const adapter = override ?? defaultWatchAdapter;
+  if (!adapter) {
+    throw new Error(
+      "[asset-pipeline.platform.missingWatchAdapter] Pass options.watchAdapter, or import @kinetra/asset-pipeline so the Node entry can watch files.",
+    );
+  }
+  return adapter;
+}
 
 export interface SourceChangeEvent {
   type: "asset.changeDetected";
@@ -17,6 +47,8 @@ export interface SourceAssetWatcherOptions {
   /** How often to look for a watched source that is currently missing (default 200 ms). */
   rearmIntervalMs?: number;
   onEvent?: (event: SourceChangeEvent) => void;
+  /** Disk watcher. Defaults to the adapter registered by the Node package entry. */
+  watchAdapter?: SourceWatchAdapter;
 }
 
 export class SourceAssetWatcher {
@@ -28,11 +60,12 @@ export class SourceAssetWatcher {
   #assets = new Map<string, string>(); // assetId -> sourcePath
   #pathToAssetId = new Map<string, string>(); // sourcePath -> assetId
   #knownHashes = new Map<string, string>(); // assetId -> contentHash
-  #watchers = new Map<string, FSWatcher>(); // sourcePath -> FSWatcher
-  #debounceTimers = new Map<string, NodeJS.Timeout>();
+  #watchers = new Map<string, SourceFileWatch>(); // sourcePath -> watcher
+  #debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** sourcePath -> pending retry of watching a file that did not exist. */
-  #rearmTimers = new Map<string, NodeJS.Timeout>();
+  #rearmTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #rearmMs: number;
+  readonly #watchAdapter: SourceWatchAdapter | undefined;
   #running = false;
   /** Bumped by every stop(); a start() that outlives its generation must not create watchers. */
   #generation = 0;
@@ -42,6 +75,7 @@ export class SourceAssetWatcher {
     this.#maxRetries = options.maxRetries ?? 3;
     this.#retryDelayMs = options.retryDelayMs ?? 20;
     this.#rearmMs = options.rearmIntervalMs ?? 200;
+    this.#watchAdapter = options.watchAdapter;
     if (options.onEvent) {
       this.#listeners.add(options.onEvent);
     }
@@ -154,9 +188,10 @@ export class SourceAssetWatcher {
 
   #watchFile(sourcePath: string): void {
     if (this.#watchers.has(sourcePath)) return;
+    const adapter = resolveWatchAdapter(this.#watchAdapter);
 
     try {
-      const watcher = watch(sourcePath, (eventType) => {
+      const watcher = adapter.watch(sourcePath, (eventType) => {
         if (eventType === "rename") {
           // On Linux (inotify), an atomic replace / rename detaches the watcher from the old inode.
           // Re-establish watcher on the destination path so subsequent modifications are caught.
@@ -307,8 +342,7 @@ export class SourceAssetWatcher {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.#maxRetries; attempt++) {
       try {
-        const buffer = await readFile(filePath);
-        return new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+        return await resolveWatchAdapter(this.#watchAdapter).readFile(filePath);
       } catch (err: any) {
         lastError = err;
         if (attempt < this.#maxRetries && (err?.code === "EBUSY" || err?.code === "ENOENT" || err?.code === "EPERM")) {
