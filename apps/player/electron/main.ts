@@ -346,6 +346,8 @@ async function handleBridgeRequest(
     case "navigation.load":
     case "navigation.closestPoint":
     case "navigation.computePath":
+    case "navigation.addObstacle":
+    case "navigation.removeObstacle":
     case "save.capture":
     case "save.get":
     case "save.load":

@@ -3,15 +3,21 @@ import {
   exportNavMesh,
   importNavMesh,
   init,
+  type BoxObstacle,
+  type CylinderObstacle,
   type NavMesh,
+  type TileCache,
 } from "@recast-navigation/core";
-import { generateSoloNavMesh } from "@recast-navigation/generators";
+import { generateSoloNavMesh, generateTileCache } from "@recast-navigation/generators";
 
-import type {
-  NavMeshBakeInput,
-  NavMeshQueryParams,
-  PathResult,
-  Vec3,
+import {
+  NavigationError,
+  type NavMeshBakeInput,
+  type NavMeshQueryParams,
+  type NavObstacle,
+  type NavObstacleInput,
+  type PathResult,
+  type Vec3,
 } from "./types.js";
 
 let readyPromise: Promise<void> | undefined;
@@ -37,6 +43,46 @@ function assertPositiveFinite(name: string, value: number | undefined): void {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new RangeError(`NavMesh bake parameter "${name}" must be a finite number > 0, got ${String(value)}`);
   }
+}
+
+function assertPositiveInteger(name: string, value: number | undefined, max: number): void {
+  if (value === undefined) return;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > max) {
+    throw new RangeError(`NavMesh bake parameter "${name}" must be an integer in [1, ${max}], got ${String(value)}`);
+  }
+}
+
+function agentBakeConfig(input: NavMeshBakeInput): {
+  cs?: number;
+  ch?: number;
+  walkableHeight?: number;
+  walkableRadius?: number;
+  walkableClimb?: number;
+  walkableSlopeAngle?: number;
+  tileSize?: number;
+  maxObstacles?: number;
+} {
+  const config: {
+    cs?: number;
+    ch?: number;
+    walkableHeight?: number;
+    walkableRadius?: number;
+    walkableClimb?: number;
+    walkableSlopeAngle?: number;
+    tileSize?: number;
+    maxObstacles?: number;
+  } = {};
+  if (input.cellSize !== undefined) config.cs = input.cellSize;
+  if (input.cellHeight !== undefined) config.ch = input.cellHeight;
+  if (input.agentHeight !== undefined)
+    config.walkableHeight = toCells(input.agentHeight, input.cellHeight ?? 0.2, Math.ceil);
+  if (input.agentRadius !== undefined)
+    config.walkableRadius = toCells(input.agentRadius, input.cellSize ?? 0.2, Math.ceil);
+  if (input.agentMaxClimb !== undefined)
+    config.walkableClimb = toCells(input.agentMaxClimb, input.cellHeight ?? 0.2, Math.floor);
+  if (input.agentMaxSlope !== undefined)
+    config.walkableSlopeAngle = input.agentMaxSlope;
+  return config;
 }
 
 function assertNonNegativeFinite(name: string, value: number | undefined): void {
@@ -161,14 +207,132 @@ export function toCells(length: number, cell: number, round: (value: number) => 
 
 export const DEFAULT_QUERY_HALF_EXTENTS: Vec3 = { x: 2, y: 4, z: 2 };
 
+const TILE_CACHE_UPDATE_LIMIT = 64;
+
+type ObstacleHandle = CylinderObstacle | BoxObstacle;
+
+function copyVec3(value: Vec3): Vec3 {
+  return { x: value.x, y: value.y, z: value.z };
+}
+
+function assertObstacleVec3(name: string, value: Vec3): Vec3 {
+  if (
+    typeof value !== "object" || value === null ||
+    typeof value.x !== "number" || typeof value.y !== "number" || typeof value.z !== "number" ||
+    !Number.isFinite(value.x) || !Number.isFinite(value.y) || !Number.isFinite(value.z)
+  ) {
+    obstacleError(
+      "nav.obstacle.invalid",
+      `Obstacle "${name}" must be a Vec3 of finite numbers.`,
+      "Pass { x, y, z } with finite numbers.",
+    );
+  }
+  return copyVec3(value);
+}
+
+function assertObstaclePositive(name: string, value: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    obstacleError(
+      "nav.obstacle.invalid",
+      `Obstacle "${name}" must be a finite number > 0, got ${String(value)}.`,
+      "Use a positive radius, height, or half-extent.",
+    );
+  }
+  return value;
+}
+
+function normalizeObstacle(input: NavObstacleInput): NavObstacleInput {
+  if (typeof input !== "object" || input === null) {
+    obstacleError(
+      "nav.obstacle.invalid",
+      "Obstacle must be an object.",
+      'Use { type: "cylinder", position, radius, height } or { type: "box", position, halfExtents, angle }.',
+    );
+  }
+  if (input.type === "cylinder") {
+    return {
+      type: "cylinder",
+      position: assertObstacleVec3("position", input.position),
+      radius: assertObstaclePositive("radius", input.radius),
+      height: assertObstaclePositive("height", input.height),
+    };
+  }
+  if (input.type === "box") {
+    const halfExtents = assertObstacleVec3("halfExtents", input.halfExtents);
+    if (halfExtents.x <= 0 || halfExtents.y <= 0 || halfExtents.z <= 0) {
+      obstacleError(
+        "nav.obstacle.invalid",
+        `Obstacle "halfExtents" components must be > 0, got ${JSON.stringify(halfExtents)}.`,
+        "Use positive half extents.",
+      );
+    }
+    if (typeof input.angle !== "number" || !Number.isFinite(input.angle)) {
+      obstacleError(
+        "nav.obstacle.invalid",
+        `Obstacle "angle" must be a finite yaw in radians, got ${String(input.angle)}.`,
+        "Pass a finite number of radians.",
+      );
+    }
+    return {
+      type: "box",
+      position: assertObstacleVec3("position", input.position),
+      halfExtents,
+      angle: input.angle,
+    };
+  }
+  obstacleError(
+    "nav.obstacle.invalid",
+    `Obstacle type "${String((input as { type?: unknown }).type)}" is not supported.`,
+    'Use "cylinder" or "box".',
+  );
+}
+
+function cloneObstacle(obstacle: NavObstacle): NavObstacle {
+  if (obstacle.type === "cylinder") {
+    return {
+      id: obstacle.id,
+      type: "cylinder",
+      position: copyVec3(obstacle.position),
+      radius: obstacle.radius,
+      height: obstacle.height,
+    };
+  }
+  return {
+    id: obstacle.id,
+    type: "box",
+    position: copyVec3(obstacle.position),
+    halfExtents: copyVec3(obstacle.halfExtents),
+    angle: obstacle.angle,
+  };
+}
+
+function obstacleError(code: "nav.obstacle.invalid" | "nav.obstacle.unknown" | "nav.obstacle.failed" | "nav.obstaclesUnsupported", message: string, remediation: string): never {
+  throw new NavigationError(code, message, remediation);
+}
+
 export class RecastNavMesh {
   #query: NavMeshQuery;
   #navMesh: NavMesh;
+  #tileCache: TileCache | undefined;
+  #obstacles: NavObstacle[] = [];
+  #handles = new Map<string, ObstacleHandle>();
+  #nextObstacleId = 1;
   #disposed = false;
 
-  private constructor(navMesh: NavMesh) {
+  private constructor(navMesh: NavMesh, tileCache?: TileCache) {
     this.#navMesh = navMesh;
+    this.#tileCache = tileCache;
     this.#query = new NavMeshQuery(navMesh);
+  }
+
+  /** True when this mesh was baked with `tileCache: true` and can still add or remove obstacles. */
+  get supportsObstacles(): boolean {
+    return this.#tileCache !== undefined;
+  }
+
+  obstacles(): readonly NavObstacle[] {
+    this.#assertNotDisposed();
+    return this.#obstacles.map((obstacle) => cloneObstacle(obstacle));
   }
 
   static async bake(input: NavMeshBakeInput): Promise<RecastNavMesh> {
@@ -181,17 +345,25 @@ export class RecastNavMesh {
     const indices = toNumberArray("indices", input.indices);
     validateBakeInput(input, positions, indices);
 
-    const config: Record<string, unknown> = {};
-    if (input.cellSize !== undefined) config.cs = input.cellSize;
-    if (input.cellHeight !== undefined) config.ch = input.cellHeight;
-    if (input.agentHeight !== undefined)
-      config.walkableHeight = toCells(input.agentHeight, input.cellHeight ?? 0.2, Math.ceil);
-    if (input.agentRadius !== undefined)
-      config.walkableRadius = toCells(input.agentRadius, input.cellSize ?? 0.2, Math.ceil);
-    if (input.agentMaxClimb !== undefined)
-      config.walkableClimb = toCells(input.agentMaxClimb, input.cellHeight ?? 0.2, Math.floor);
-    if (input.agentMaxSlope !== undefined)
-      config.walkableSlopeAngle = input.agentMaxSlope;
+    if (input.tileCache !== undefined && typeof input.tileCache !== "boolean") {
+      throw new RangeError(`NavMesh bake parameter "tileCache" must be a boolean, got ${typeof input.tileCache}`);
+    }
+    assertPositiveInteger("tileSize", input.tileSize, 512);
+    assertPositiveInteger("maxObstacles", input.maxObstacles, 4096);
+    if (input.tileCache !== true && (input.tileSize !== undefined || input.maxObstacles !== undefined)) {
+      throw new RangeError('NavMesh bake parameters "tileSize" and "maxObstacles" require tileCache: true');
+    }
+
+    const config = agentBakeConfig(input);
+    if (input.tileCache === true) {
+      if (input.tileSize !== undefined) config.tileSize = input.tileSize;
+      if (input.maxObstacles !== undefined) config.maxObstacles = input.maxObstacles;
+      const result = generateTileCache(positions, indices, config);
+      if (!result.success) {
+        throw new Error(`NavMesh bake failed: ${result.error}`);
+      }
+      return new RecastNavMesh(result.navMesh, result.tileCache);
+    }
 
     const result = generateSoloNavMesh(positions, indices, config);
     if (!result.success) {
@@ -278,6 +450,71 @@ export class RecastNavMesh {
     };
   }
 
+  /**
+   * Adds a cylinder or yaw-rotated box and rebuilds the tiles it touches before returning.
+   * The id is assigned in call order, starting at `"1"`, and is not reused.
+   */
+  addObstacle(input: NavObstacleInput): NavObstacle {
+    this.#assertNotDisposed();
+    const cache = this.#requireTileCache();
+    const obstacle = normalizeObstacle(input);
+    const added = obstacle.type === "cylinder"
+      ? cache.addCylinderObstacle(obstacle.position, obstacle.radius, obstacle.height)
+      : cache.addBoxObstacle(obstacle.position, obstacle.halfExtents, obstacle.angle);
+    if (!added.success || !added.obstacle) {
+      obstacleError(
+        "nav.obstacle.failed",
+        `Tile cache rejected the obstacle (status ${added.status}).`,
+        "Use a smaller obstacle, or bake again with a higher maxObstacles.",
+      );
+    }
+    const handle = added.obstacle;
+    try {
+      this.#flushTileCache();
+    } catch (error) {
+      cache.removeObstacle(handle);
+      try {
+        this.#flushTileCache();
+      } catch {
+        // The original flush error is the one the caller can act on.
+      }
+      throw error;
+    }
+    const id = String(this.#nextObstacleId);
+    this.#nextObstacleId += 1;
+    const stored: NavObstacle = obstacle.type === "cylinder"
+      ? { id, type: "cylinder", position: obstacle.position, radius: obstacle.radius, height: obstacle.height }
+      : { id, type: "box", position: obstacle.position, halfExtents: obstacle.halfExtents, angle: obstacle.angle };
+    this.#obstacles.push(stored);
+    this.#handles.set(id, handle);
+    return this.obstacles().find((entry) => entry.id === id)!;
+  }
+
+  /** Removes an obstacle by the id `addObstacle` returned and rebuilds the tiles it touched. */
+  removeObstacle(id: string): void {
+    this.#assertNotDisposed();
+    const cache = this.#requireTileCache();
+    if (typeof id !== "string" || id.length === 0) {
+      obstacleError("nav.obstacle.invalid", "Obstacle id must be a non-empty string.", 'Pass the id returned by addObstacle, for example "1".');
+    }
+    const handle = this.#handles.get(id);
+    if (!handle) {
+      const known = this.#obstacles.map((obstacle) => obstacle.id).join(", ") || "(none)";
+      obstacleError("nav.obstacle.unknown", `Unknown navigation obstacle "${id}".`, `Use one of: ${known}.`);
+    }
+    const removed = cache.removeObstacle(handle);
+    if (!removed.success) {
+      obstacleError(
+        "nav.obstacle.failed",
+        `Tile cache could not remove obstacle "${id}" (status ${removed.status}).`,
+        "Bake the navmesh again if the tile cache is out of date.",
+      );
+    }
+    this.#flushTileCache();
+    this.#handles.delete(id);
+    this.#obstacles = this.#obstacles.filter((obstacle) => obstacle.id !== id);
+  }
+
   get disposed(): boolean {
     return this.#disposed;
   }
@@ -288,7 +525,43 @@ export class RecastNavMesh {
     }
     this.#disposed = true;
     this.#query.destroy();
+    this.#tileCache?.destroy();
     this.#navMesh.destroy();
+    this.#tileCache = undefined;
+    this.#handles.clear();
+    this.#obstacles = [];
+  }
+
+  #requireTileCache(): TileCache {
+    if (!this.#tileCache) {
+      obstacleError(
+        "nav.obstaclesUnsupported",
+        "This navmesh has no tile cache, so obstacles cannot be added or removed.",
+        "Bake with tileCache: true. A mesh loaded from bytes is a static snapshot.",
+      );
+    }
+    return this.#tileCache;
+  }
+
+  #flushTileCache(): void {
+    const cache = this.#tileCache;
+    if (!cache) return;
+    for (let attempt = 0; attempt < TILE_CACHE_UPDATE_LIMIT; attempt += 1) {
+      const updated = cache.update(this.#navMesh);
+      if (!updated.success) {
+        obstacleError(
+          "nav.obstacle.failed",
+          `Tile cache update failed (status ${updated.status}).`,
+          "Bake the navmesh again. The last good tiles may be only partly rebuilt.",
+        );
+      }
+      if (updated.upToDate) return;
+    }
+    obstacleError(
+      "nav.obstacle.failed",
+      `Tile cache was still rebuilding after ${TILE_CACHE_UPDATE_LIMIT} updates.`,
+      "Use fewer obstacles or a larger tileSize, then bake again.",
+    );
   }
 
   #assertNotDisposed(): void {

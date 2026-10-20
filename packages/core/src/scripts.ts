@@ -20,6 +20,20 @@ export interface GameScriptSceneQuery {
   findEntityByName?(name: string): { entityId: string; name: string } | undefined;
 }
 
+export type GameScriptNavObstacle =
+  | {
+      type: "cylinder";
+      position: [number, number, number];
+      radius: number;
+      height: number;
+    }
+  | {
+      type: "box";
+      position: [number, number, number];
+      halfExtents: [number, number, number];
+      angle: number;
+    };
+
 export interface GameScriptNavigationService {
   computePath(
     start: [number, number, number],
@@ -35,6 +49,9 @@ export interface GameScriptNavigationService {
     position: [number, number, number],
     halfExtents?: [number, number, number],
   ): [number, number, number];
+  /** Adds a tile-cache obstacle and returns the id to pass to `removeObstacle`. */
+  addObstacle?(obstacle: GameScriptNavObstacle): { id: string };
+  removeObstacle?(id: string): void;
 }
 
 export interface GameScriptAudioService {

@@ -141,6 +141,33 @@ export interface RuntimeQueryResult {
   sceneId?: string;
   projectRevision?: number;
   entities: RuntimeEntityState[];
+  navigation?: {
+    hasNavMesh: boolean;
+    tileCache?: boolean;
+    obstacles?: Array<
+      | {
+          id: string;
+          type: "cylinder";
+          position: [number, number, number];
+          radius: number;
+          height: number;
+        }
+      | {
+          id: string;
+          type: "box";
+          position: [number, number, number];
+          halfExtents: [number, number, number];
+          angle: number;
+        }
+    >;
+    lastPath?: {
+      success: boolean;
+      status: "complete" | "failed" | "partial";
+      pointCount: number;
+      points: Array<[number, number, number]>;
+    };
+    lastClosestPoint?: { point: [number, number, number] };
+  };
   state?: Record<string, unknown>;
   shell?: { mode: string; isPaused: boolean };
   metrics?: Record<string, number>;
@@ -711,6 +738,26 @@ export class ElectronRuntimeHost implements RuntimeHost {
   }): Promise<RuntimeQueryResult> {
     await this.#ensureProcess();
     return this.#request<RuntimeQueryResult>("navigation.computePath", params);
+  }
+
+  async addNavigationObstacle(params: {
+    type: "cylinder";
+    position: [number, number, number];
+    radius: number;
+    height: number;
+  } | {
+    type: "box";
+    position: [number, number, number];
+    halfExtents: [number, number, number];
+    angle: number;
+  }): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.addObstacle", params);
+  }
+
+  async removeNavigationObstacle(id: string): Promise<RuntimeQueryResult> {
+    await this.#ensureProcess();
+    return this.#request<RuntimeQueryResult>("navigation.removeObstacle", { id });
   }
 
   async captureFrame(): Promise<RuntimeFrameCapture> {

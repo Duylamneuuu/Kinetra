@@ -10,6 +10,7 @@ import type { BlendSpaceDefinition } from "@kinetra/animation/blend-space.js";
 import { PlayerRuntimeController } from "./runtime-controller.js";
 import { createFrameLoop } from "./frame-loop.js";
 import { GameShellController } from "./shell.js";
+import { parseNavObstacle, parseObstacleId } from "./nav-obstacle.js";
 import { parseRuntimeStepParams } from "./step-params.js";
 import "./style.css";
 
@@ -422,6 +423,16 @@ async function handleRuntimeCommand(request: {
           ? (params.halfExtents as [number, number, number])
           : undefined;
       runtime.computePath(start, end, halfExtents);
+      return runtime.query();
+    }
+
+    case "navigation.addObstacle": {
+      runtime.addNavigationObstacle(parseNavObstacle(params));
+      return runtime.query();
+    }
+
+    case "navigation.removeObstacle": {
+      runtime.removeNavigationObstacle(parseObstacleId(params.id));
       return runtime.query();
     }
 

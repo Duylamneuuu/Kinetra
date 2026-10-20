@@ -8,7 +8,8 @@ Bake a navigation mesh from plain triangle data, query paths and closest points,
 
 | Export | Kind | What it does |
 | --- | --- | --- |
-| `RecastNavMesh.bake(input)` | static, async | Bakes a solo navmesh from `NavMeshBakeInput` (`positions`, `indices`, optional `cellSize`, `cellHeight`, `agentHeight`, `agentRadius`, `agentMaxClimb`, `agentMaxSlope` in degrees). Malformed geometry or non-finite/non-positive parameters throw `RangeError` before reaching WASM. |
+| `RecastNavMesh.bake(input)` | static, async | Bakes a solo navmesh from `NavMeshBakeInput` (`positions`, `indices`, optional `cellSize`, `cellHeight`, `agentHeight`, `agentRadius`, `agentMaxClimb`, `agentMaxSlope` in degrees). `tileCache: true` bakes a tile cache instead, with optional `tileSize` and `maxObstacles`. Malformed geometry or non-finite/non-positive parameters throw `RangeError` before reaching WASM. |
+| `nav.addObstacle(input)` / `nav.removeObstacle(id)` / `nav.obstacles()` | methods | On a tile-cache mesh, add a `cylinder` (bottom centre, radius, height) or `box` (centre, half extents, yaw in radians) and rebuild the touched tiles before returning. Ids start at `"1"` and are not reused. Removing an id restores the unobstructed mesh. A solo bake or `fromBytes` mesh throws `NavigationError` `nav.obstaclesUnsupported`. |
 | `RecastNavMesh.fromBytes(bytes)` / `nav.toBytes()` | static / method | Import / export the baked mesh (offline bake, runtime load). |
 | `nav.computePath(start, end, params?)` | method | Returns a `PathResult`: `points`, `success`, and `status` of `"complete"`, `"partial"` (walkable waypoints that stop at the closest reachable point because the goal is on a disconnected region) or `"failed"`. Only `"complete"` has `success: true`. |
 | `nav.closestPoint(position, params?)` | method | Nearest point on the navmesh; throws when none lies within `halfExtents`. |
@@ -56,4 +57,4 @@ assert.throws(() => nav.toBytes(), /disposed/);
 
 ## Proof level
 
-`test/navigation.test.ts` (package `test` script) covers bake, path, serialization round trip, idempotent disposal, partial paths to unreachable islands, and bake-input validation. Scripts reach navigation through the `context.navigation` service (`GameScriptNavigationService` in `@kinetra/core`); see [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table.
+`test/navigation.test.ts` (package `test` script) covers bake, path, serialization round trip, idempotent disposal, partial paths to unreachable islands, and bake-input validation. `test/tile-cache-obstacles.test.ts` covers a blocked path, the restored path, a second bake with the same waypoints, and the refusal on a solo mesh or a byte snapshot. Scripts reach navigation through the `context.navigation` service (`GameScriptNavigationService` in `@kinetra/core`); see [`docs/STATUS.md`](../../docs/STATUS.md) for the project-wide proof table. The bytes from `toBytes()` after an obstacle are a static snapshot: they keep the cut, and the loaded mesh cannot remove it.
