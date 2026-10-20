@@ -320,7 +320,9 @@ async function handleRuntimeCommand(request: {
     case "model.reloadAsset": {
       const assetId = requireString(params.assetId, "assetId");
       const result = await runtime.reloadAsset(assetId);
-      return { ...result, ...runtime.query() };
+      // Query state fills the reply; the reload result is applied last so droppedRootMotion and
+      // the other degradation maps cannot be overwritten by a query field of the same name.
+      return { ...runtime.query(), ...result };
     }
 
     case "audio.play": {
