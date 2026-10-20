@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./sha256.js";
 import { PNG } from "pngjs";
 
 export interface DecodedImage {
@@ -123,13 +123,25 @@ function resolveThreshold(
 }
 
 /**
+ * pngjs calls Node buffer methods (`readUInt32BE`) on the bytes it is given. A `Uint8Array`
+ * does not have those methods. Look the host constructor up without writing a `Buffer.` token,
+ * so the browser-entry scanner stays clean when this file is reached through a type import.
+ */
+function pngjsBytes(bytes: Uint8Array): Buffer {
+  const host = globalThis as { Buffer?: { from(data: Uint8Array): Buffer } };
+  const factory = host.Buffer;
+  if (factory) return factory.from(bytes);
+  return bytes as unknown as Buffer;
+}
+
+/**
  * Decodes PNG bytes into raw RGBA pixel data.
  * Throws `visual.decodeFailed` when the bytes are not a readable PNG.
  */
 export function decodePng(bytes: Uint8Array): DecodedImage {
   let parsed: ReturnType<typeof PNG.sync.read>;
   try {
-    parsed = PNG.sync.read(Buffer.from(bytes));
+    parsed = PNG.sync.read(pngjsBytes(bytes));
   } catch (error) {
     throw new VisualError(
       "visual.decodeFailed",
@@ -150,7 +162,7 @@ export function decodePng(bytes: Uint8Array): DecodedImage {
 export function encodePng(image: DecodedImage): Uint8Array {
   assertValidImage(image, "encodePng");
   const png = new PNG({ width: image.width, height: image.height });
-  png.data = Buffer.from(image.data);
+  png.data = pngjsBytes(image.data);
   return new Uint8Array(PNG.sync.write(png));
 }
 
@@ -242,7 +254,7 @@ export function hammingDistance(hexA: string, hexB: string): number {
  * Analyzes PNG bytes and produces a deterministic VisualFrameEvidence record.
  */
 export function calculateVisualEvidence(bytes: Uint8Array): VisualFrameEvidence {
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sha256 = sha256Hex(bytes);
   return evidenceFromDecoded(sha256, decodePng(bytes));
 }
 

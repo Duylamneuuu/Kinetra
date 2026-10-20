@@ -1,3 +1,5 @@
+import "./node-platform.js";
+
 export * from "./database.js";
 export * from "./glb.js";
 export * from "./hash.js";
@@ -9,3 +11,4 @@ export * from "./synthetic.js";
 export * from "./watcher.js";
 export * from "./reimport.js";
 export * from "./coordinator.js";
+export { hashFile } from "./hash-file.js";

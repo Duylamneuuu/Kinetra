@@ -11,6 +11,13 @@ import type {
 } from "./types.js";
 import type { RuntimePerformanceEvidence } from "./performance.js";
 
+function decodeBase64(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
 /** Largest delay setTimeout honours (2^31-1 ms); larger values fire after 1 ms. */
 const MAX_WAIT_MS = 2_147_483_647;
 
@@ -405,7 +412,7 @@ export class KinetraRuntimeProbe implements RuntimeProbe {
         capture.reason ?? "Runtime frame capture is unavailable",
       );
     }
-    return Uint8Array.from(Buffer.from(capture.base64, "base64"));
+    return decodeBase64(capture.base64);
   }
 
   async metrics(): Promise<RuntimeMetrics> {

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256Utf8 } from "./sha256.js";
 
 export type HumanoidBone =
   | "root" | "hips" | "spine" | "chest" | "neck" | "head"
@@ -101,7 +101,7 @@ export function skeletonSignature(profile:SkeletonProfile):string{
   const canonical=needsJsonCanonical(entries)
     ?`${JSON_CANONICAL_MARKER}${JSON.stringify(entries)}`
     :entries.map(([semantic,name])=>`${semantic}=${name}`).join("\n");
-  return createHash("sha256").update(canonical).digest("hex");
+  return sha256Utf8(canonical);
 }
 
 export interface RetargetBonePair {
@@ -174,10 +174,10 @@ export function retargetCacheKey(input:{
   settings?:Record<string,unknown>;
 }):string{
   const stable=canonicalizeForCacheKey;
-  return createHash("sha256").update(JSON.stringify(stable({
+  return sha256Utf8(JSON.stringify(stable({
     sourceClipId:input.sourceClipId,
     source:skeletonSignature(input.source),
     target:skeletonSignature(input.target),
     settings:input.settings??{},
-  }))).digest("hex");
+  })));
 }

@@ -5,7 +5,7 @@ import type {
   RuntimeMetrics,
   RuntimeProbe,
   RuntimeSnapshot,
-} from "@kinetra/verification";
+} from "@kinetra/verification/browser";
 
 import { createOrbRunProject } from "./authoring.js";
 import type { OrbRunAnimatorOptions } from "./animator.js";

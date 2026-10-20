@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { writePngArtifact } from "./artifact-writer.js";
+import { currentPlatform } from "./host-platform.js";
+import { sha256Hex } from "./sha256.js";
 import type {
   AcceptanceManifest,
   AcceptanceReport,
@@ -401,7 +401,7 @@ async function executeStep(
       return;
     }
     case "assert.screenshotSha256": {
-      const actual = createHash("sha256").update(await probe.captureFrame()).digest("hex");
+      const actual = sha256Hex(await probe.captureFrame());
       if (actual !== step.sha256) {
         throw new StepAssertionError(
           `Screenshot hash mismatch: expected ${step.sha256}, got ${actual}`,
@@ -442,8 +442,7 @@ async function executeStep(
 
       if (step.saveArtifact && options.artifactDir) {
         const sanitized = step.id.replace(/[^a-zA-Z0-9_-]/g, "_");
-        await mkdir(options.artifactDir, { recursive: true });
-        await writeFile(join(options.artifactDir, `${sanitized}.png`), bytes);
+        await writePngArtifact(options.artifactDir, `${sanitized}.png`, bytes);
       }
 
       return {
@@ -709,7 +708,7 @@ async function executeStep(
       }
 
       const evaluation = evaluatePerformanceBudget(evidence, step, {
-        platform: process.platform,
+        platform: currentPlatform(),
       });
 
       if (evaluation.error !== undefined && evaluation.violations.length === 0) {
@@ -887,7 +886,7 @@ export class AcceptanceRunner {
         totalSteps: manifest.steps.length,
         executedSteps: steps.length,
         target: manifest.target,
-        platform: process.platform,
+        platform: currentPlatform(),
         ...(Object.keys(visualCaptures).length > 0 ? { visualCaptures } : {}),
         ...(critiqueReports.length > 0 ? { critiqueReports } : {}),
         ...(lastPerformanceEvidence ? { performance: lastPerformanceEvidence } : {}),

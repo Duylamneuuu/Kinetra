@@ -91,12 +91,8 @@ test("the entry and the engine packages behind it bundle into one self-contained
 test("the Node builtins the bundle still needs stay inside the measured allow-list", () => {
   const [outputPath] = Object.keys(metafile.outputs);
   const builtins = [...new Set(metafile.outputs[outputPath!]!.imports.map((entryImport) => entryImport.path))].sort();
-  // Measured on the real bundle, tighter than the slice 24 ledger (which also counts the types-only
-  // `@kinetra/verification`): only the asset pipeline and animation loaders reach the file system.
-  // A new builtin fails here; paying the debt down only loosens the bound.
-  const allowed = new Set(["node:crypto", "node:fs", "node:fs/promises", "node:path"]);
-  const extra = builtins.filter((name) => !allowed.has(name));
-  assert.deepEqual(extra, [], `new Node builtins in the real bundle: ${extra.join(", ")}`);
+  // #420: browser-safe subpaths mean the bundled game imports no Node builtin.
+  assert.deepEqual(builtins, [], `Node builtins still imported by the real bundle: ${builtins.join(", ")}`);
 });
 
 test("the bundled game records byte-identical replays to the unbundled game", async () => {

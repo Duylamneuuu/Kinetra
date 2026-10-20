@@ -1,4 +1,4 @@
-import { Document, NodeIO } from "@gltf-transform/core";
+import { Document, WebIO } from "./gltf-web.js";
 
 export interface SyntheticGlbAnimationOptions {
   clipName?: string;
@@ -170,7 +170,7 @@ export async function createSyntheticGlb(
       .addChannel(channel);
   }
 
-  const io = new NodeIO();
+  const io = new WebIO();
   return io.writeBinary(doc);
 }
 
@@ -262,7 +262,7 @@ export async function createSyntheticPropGlb(
   const coreNode = doc.createNode(`${name}_Core`).setMesh(coreMesh);
   rootNode.addChild(coreNode);
 
-  const io = new NodeIO();
+  const io = new WebIO();
   return io.writeBinary(doc);
 }
 
@@ -594,7 +594,7 @@ export async function createSyntheticCharacterGlb(
     [0, 0, 0, 1,  0.4, 0, 0, 0.916,  0.6, 0, 0, 0.8],
   );
 
-  const io = new NodeIO();
+  const io = new WebIO();
   return io.writeBinary(doc);
 }
 
@@ -963,7 +963,7 @@ export async function createSyntheticRootMotionGlb(
     [0, 0, 0, 1,  0.4, 0, 0, 0.916,  0.6, 0, 0, 0.8],
   );
 
-  const io = new NodeIO();
+  const io = new WebIO();
   return io.writeBinary(doc);
 }
 
@@ -1135,5 +1135,5 @@ export async function createSyntheticMorphGlb(
     .setSampler(sampler);
   doc.createAnimation("Blink").addSampler(sampler).addChannel(channel);
 
-  return new NodeIO().writeBinary(doc);
+  return new WebIO().writeBinary(doc);
 }

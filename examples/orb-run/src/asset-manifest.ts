@@ -1,4 +1,4 @@
-import { hashBytes } from "@kinetra/asset-pipeline";
+import { hashBytes } from "@kinetra/asset-pipeline/pure";
 
 import { ORB_RUN_AUDIO_ASSET, ORB_RUN_AUDIO_ASSET_IDS } from "./audio.js";
 import { encodeBase64 } from "./base64.js";

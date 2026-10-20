@@ -13,7 +13,8 @@ over these structures.
 
 | Import | What it holds | Proof level |
 | --- | --- | --- |
-| `@kinetra/animation` | everything below, re-exported | — |
+| `@kinetra/animation` | everything below, re-exported, including the Node retarget disk cache | — |
+| `@kinetra/animation/contracts` | browser-safe bundle of graph, blend space, IK, morphs, root motion, skeleton profiles and in-memory retarget. No `node:*`. Retarget reads GLBs through the inlined `gltf-web.js` bundle (`NodeIO` dropped). The disk cache stays on the package root | unit |
 | `@kinetra/animation/graph` | `AnimationGraphDefinition`, `validateAnimationGraph`, `AnimationGraphMachine` (typed `bool`/`number`/`trigger` parameters, priorities, wildcard `from: "*"`) | unit + real Electron (`real-animation-graph`) |
 | `@kinetra/animation/blend-space` | 1D/2D locomotion blend spaces: `validateBlendSpace`, `evaluateBlendSpace1D/2D`, `evaluateBlendSpace` | unit + runtime + real Electron (`real-blend-space`) |
 | `@kinetra/animation/morph-targets` | morph target (blend shape) catalog and all-or-nothing weight validation | unit + runtime + real Electron (`real-morph-targets`) |
