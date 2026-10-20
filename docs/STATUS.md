@@ -302,11 +302,11 @@ What has meaningful proof:
 - full real Electron player runtime integration (`PlayerRuntimeController` navigation adapter, named pipe bridge, and renderer IPC);
 - structured, Kinetra-owned runtime navigation state queryable without exposing raw Recast/Detour handles;
 - complete AcceptanceRunner verification in live Electron (`real-navigation.test.ts`), covering baking, elevated closest-point, pathfinding, serialization reload equivalence, deliberate out-of-bounds/constrained failure, real PNG capture, and clean teardown leaving zero orphan processes;
-- overlapping `bakeNavigation` and `loadNavigation` share one generation (`PlayerRuntimeController.#navGeneration`), incremented before the Recast import and again in `stop()`. `replaceDisposable` installs the request that started last and disposes a cancelled result; a failed create leaves the mesh that is already installed (#159 item 4, the token from #387; unit proof `apps/player/test/resource-swap.test.ts`).
+- overlapping `bakeNavigation` and `loadNavigation` share one generation (`PlayerRuntimeController.#navGeneration`), incremented before the Recast import and again in `stop()`. `replaceDisposable` installs the request that started last and disposes a cancelled result; a failed create leaves the mesh that is already installed (#159 item 4, the token from #387; unit proof `apps/player/test/resource-swap.test.ts`);
+- dynamic obstacles on a Recast tile cache (#97): `RecastNavMesh.bake({ tileCache: true })` keeps compressed tiles; `addObstacle` / `removeObstacle` rebuild the touched tiles before returning. A cylinder or box detours `computePath`, and removing it restores the unobstructed waypoints. The same sequence on two bakes yields the same waypoints. A solo bake or a mesh loaded from bytes throws `NavigationError` `nav.obstaclesUnsupported` (bytes are a static snapshot of the cut). The player bridge methods are `navigation.addObstacle` and `navigation.removeObstacle`, and a script can call `context.navigation.addObstacle` / `removeObstacle`. Proof: `packages/navigation-recast/test/tile-cache-obstacles.test.ts` and live Electron `packages/verification/test/real-nav-obstacles.test.ts`.
 
 Still missing:
-- crowd agent steering / crowd simulation;
-- dynamic obstacle avoidance / tile cache.
+- crowd agent steering / crowd simulation.
 
 ### Reference game (P10 Slice 1, Slice 2, Slice 3, Slice 4 & Slice 5)
 

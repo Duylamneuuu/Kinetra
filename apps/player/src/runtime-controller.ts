@@ -55,6 +55,12 @@ import { logPhysicsSceneDiagnostic } from "./physics-diagnostics.js";
 import { createScriptPhysicsService, PHYSICS_WORLD_UNAVAILABLE } from "./script-physics.js";
 import { buildNavBakeOptions } from "./nav-bake-input.js";
 import {
+  toNavObstacleInput,
+  toNavObstacleState,
+  type NavObstacleRequest,
+  type NavObstacleState,
+} from "./nav-obstacle.js";
+import {
   InputRouter,
   DEFAULT_PLAYER_INPUT_MAP,
   type GamepadSnapshotProvider,
@@ -226,6 +232,9 @@ export interface PlayerRuntimeEntityState {
 
 export interface PlayerRuntimeNavigationState {
   hasNavMesh: boolean;
+  /** True when the live mesh can add and remove obstacles. A byte snapshot is false. */
+  tileCache?: boolean;
+  obstacles?: NavObstacleState[];
   lastClosestPoint?: {
     point: [number, number, number];
   };
@@ -793,6 +802,10 @@ export class PlayerRuntimeController {
                 closestPoint: (pos, halfExtents) => {
                   return this.closestPoint(pos, halfExtents);
                 },
+                addObstacle: (obstacle) => this.addNavigationObstacle(obstacle),
+                removeObstacle: (id) => {
+                  this.removeNavigationObstacle(id);
+                },
               },
               audio: {
                 play: async (options) => {
@@ -961,6 +974,8 @@ export class PlayerRuntimeController {
         this.#navMesh = next;
         this.#navigationState = {
           hasNavMesh: true,
+          tileCache: next.supportsObstacles,
+          obstacles: [],
           serialized,
         };
       },
@@ -985,6 +1000,8 @@ export class PlayerRuntimeController {
         this.#navMesh = next;
         this.#navigationState = {
           hasNavMesh: true,
+          tileCache: next.supportsObstacles,
+          obstacles: [],
           serialized: dataBase64,
         };
       },
@@ -1068,6 +1085,31 @@ export class PlayerRuntimeController {
     });
 
     return pathState;
+  }
+
+  addNavigationObstacle(request: NavObstacleRequest): { id: string } {
+    if (!this.#navMesh) {
+      throw new Error("Cannot add a navigation obstacle: NavMesh is not baked or loaded");
+    }
+    const added = this.#navMesh.addObstacle(toNavObstacleInput(request));
+    this.#publishNavigationObstacles();
+    this.#log("info", "navigation.obstacleAdded", { id: added.id, type: added.type });
+    return { id: added.id };
+  }
+
+  removeNavigationObstacle(id: string): void {
+    if (!this.#navMesh) {
+      throw new Error("Cannot remove a navigation obstacle: NavMesh is not baked or loaded");
+    }
+    this.#navMesh.removeObstacle(id);
+    this.#publishNavigationObstacles();
+    this.#log("info", "navigation.obstacleRemoved", { id });
+  }
+
+  #publishNavigationObstacles(): void {
+    if (!this.#navMesh) return;
+    this.#navigationState.tileCache = this.#navMesh.supportsObstacles;
+    this.#navigationState.obstacles = this.#navMesh.obstacles().map((obstacle) => toNavObstacleState(obstacle));
   }
 
   registerAnimationClip(
