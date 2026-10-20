@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   BRIDGE_MALFORMED_RENDERER_RESPONSE,
+  createCircularHarnessResult,
   normalizeRendererResponse,
   recoverRendererResponseId,
   serializeBridgeMessage,
@@ -29,6 +30,23 @@ test("an event serialises to one JSON line", () => {
     type: "event",
     event: "ready",
   });
+});
+
+test("the circular harness is unsupported unless test hooks are on, and its result fails serialization", () => {
+  assert.throws(
+    () => createCircularHarnessResult(false),
+    /Unsupported runtime bridge method "testHarness.circularResult"/,
+  );
+  const result = createCircularHarnessResult(true);
+  assert.equal(result.kind, "circular");
+  assert.equal(result.self, result);
+  const parsed = parseLine(
+    serializeBridgeMessage({ type: "response", id: "hook-1", ok: true, result }),
+  );
+  assert.equal(parsed.id, "hook-1");
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.code, "BRIDGE_UNSERIALIZABLE_RESPONSE");
+  assert.match(String(parsed.error), /^BRIDGE_UNSERIALIZABLE_RESPONSE: /);
 });
 
 test("a circular result becomes a structured failure that keeps the request id", () => {

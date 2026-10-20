@@ -58,6 +58,21 @@ function failure(
  * ever written and the client waited for its own timeout. Such a message is replaced by a
  * structured `BRIDGE_UNSERIALIZABLE_RESPONSE` failure that keeps the request id when there is one.
  */
+/**
+ * Payload of `testHarness.circularResult`. The Electron main process calls this only when
+ * `KINETRA_RUNTIME_TEST_HOOKS=1`. The object refers to itself, so `JSON.stringify` throws and
+ * `bridgeWrite` answers `BRIDGE_UNSERIALIZABLE_RESPONSE` instead of leaving the client waiting.
+ * With the hook off, the method is unsupported, the same as any other unknown bridge method.
+ */
+export function createCircularHarnessResult(hooksEnabled: boolean): { kind: string; self: unknown } {
+  if (!hooksEnabled) {
+    throw new Error('Unsupported runtime bridge method "testHarness.circularResult"');
+  }
+  const loop: { kind: string; self?: unknown } = { kind: "circular" };
+  loop.self = loop;
+  return loop as { kind: string; self: unknown };
+}
+
 export function serializeBridgeMessage(value: unknown): string {
   let reason: string;
   try {
