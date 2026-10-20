@@ -9,7 +9,7 @@
   "scripts":{
     "build":"tsc -p tsconfig.json",
     "typecheck":"tsc -p tsconfig.json --noEmit",
-    "test":"node --test dist/test/core.test.js dist/test/prefab-overrides.test.js dist/test/prefab-empty-parent.test.js dist/test/script-host-errors.test.js dist/test/script-host-reentrancy.test.js dist/test/script-host-lifecycle-race.test.js dist/test/script-host-late-register.test.js dist/test/script-host-api-edges.test.js dist/test/script-restore-last-action.test.js"
+    "test":"node --test dist/test/core.test.js dist/test/prefab-overrides.test.js dist/test/prefab-empty-parent.test.js dist/test/script-host-errors.test.js dist/test/script-host-reentrancy.test.js dist/test/script-host-lifecycle-race.test.js dist/test/script-host-late-register.test.js dist/test/script-host-api-edges.test.js dist/test/script-restore-last-action.test.js dist/test/game-module.test.js"
   },
   "dependencies":{"@kinetra/project-model":"workspace:*"}
 }
