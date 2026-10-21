@@ -8,8 +8,27 @@ Maintenance: when a PR merges, add one line under its commit date in the matchin
 
 ## 2026-10-20
 
+### Added
+
+- **navigation**: add and remove tile-cache obstacles
+- **asset-pipeline**: import PCM WAV with rate, channels and duration
+- **player**: load a second game module by id
+- **physics**: publish flush shape-cast contacts and expose queries
+- **engine**: add browser-safe entries a renderer can bundle
+
+### Tests
+
+- **player**: prove a circular bridge result fails the client immediately
+- prove a live `model.reloadAsset` reply carries `droppedRootMotion`
+
+### Documentation
+
+- record host contracts for retry, late authoring, and nav overlap
+- **arena**: `damageDealt` counts the swing, including overkill
+
 ### Fixed
 
+- keep reload degradation, release orphaned parses, and validate HUD shape
 - **asset-pipeline**: giao dịch liệt kê asset stale được chữa kèm; retry bỏ asset đã xoá (Refs #498) ([#598](https://github.com/Duylamneuuu/Kinetra/pull/598))
 - **project-model**: RigidBody type rỗng coi như thiếu như factory (Fixes #529) ([#596](https://github.com/Duylamneuuu/Kinetra/pull/596))
 
