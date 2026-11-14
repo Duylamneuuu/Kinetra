@@ -112,3 +112,42 @@ test("registerScripts on one registry does not leak into the next", () => {
   assert.equal(second.has("arena.pulse"), true);
   assert.equal(second.has("marker.pulse"), false);
 });
+
+test("concurrent loads of a failing loader all reject with game.loadFailed", async () => {
+  const registry = new GameModuleRegistry("flaky");
+  let loads = 0;
+  registry.register("flaky", async () => {
+    loads += 1;
+    throw new Error("chunk 404");
+  });
+  const results = await Promise.allSettled([registry.load("flaky"), registry.load("flaky"), registry.load()]);
+  assert.equal(loads, 1, "concurrent callers share one load attempt");
+  for (const result of results) {
+    assert.equal(result.status, "rejected");
+    const error = (result as PromiseRejectedResult).reason as unknown;
+    assert.ok(error instanceof GameModuleError, `expected GameModuleError, got ${String(error)}`);
+    assert.equal(error.code, "game.loadFailed");
+    assert.match(error.message, /chunk 404/);
+  }
+});
+
+test("a failed load that settles after register() does not evict the new loader's cached module", async () => {
+  const registry = new GameModuleRegistry("swap");
+  let rejectOld: (error: Error) => void = () => {};
+  registry.register("swap", () => new Promise<GameModule>((_, reject) => {
+    rejectOld = reject;
+  }));
+  const oldLoad = registry.load("swap");
+  let newLoads = 0;
+  registry.register("swap", () => {
+    newLoads += 1;
+    return moduleFor("swap");
+  });
+  const first = await registry.load("swap");
+  assert.equal(newLoads, 1);
+  rejectOld(new Error("old loader died"));
+  await assert.rejects(() => oldLoad, (error: unknown) => error instanceof GameModuleError);
+  const second = await registry.load("swap");
+  assert.equal(newLoads, 1, "the new module stays cached");
+  assert.equal(second, first);
+});
