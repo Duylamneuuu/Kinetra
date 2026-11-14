@@ -89,3 +89,22 @@ test("createSyntheticWav output is deterministic and every sample stays inside t
   const silent = createSyntheticWav({ sampleRate: 8000, durationSeconds: 0.01, frequency: 0 });
   assert.ok(new Uint8Array(silent.buffer, silent.byteOffset + 44).every((byte) => byte === 0));
 });
+
+test("setMuted and setGain validate the value before looking up the bus, so a bad value is reported even for an unknown id", () => {
+  const mixer = new AudioMixerModel([{ id: "master", gain: 1 }]);
+  assert.throws(() => mixer.setMuted("missing", "yes" as unknown as boolean), TypeError);
+  assert.throws(() => mixer.setGain("missing", Number.NaN), RangeError);
+  // A valid value on an unknown bus still reports the unknown bus.
+  assert.throws(() => mixer.setMuted("missing", true), /Unknown audio bus/);
+  assert.throws(() => mixer.setGain("missing", 1), /Unknown audio bus/);
+});
+
+test("createSyntheticWav rejects the first sample past the 64 MiB cap without allocating it", () => {
+  const capSamples = MAX_SYNTHETIC_WAV_DATA_BYTES / 2;
+  // One extra sample at 1 second: 2 bytes over the cap, so it must throw before any allocation.
+  assert.throws(
+    () => createSyntheticWav({ sampleRate: capSamples + 1, durationSeconds: 1 }),
+    (error: unknown) =>
+      error instanceof RangeError && error.message.includes(String(MAX_SYNTHETIC_WAV_DATA_BYTES + 2)) && /limit/.test(error.message),
+  );
+});

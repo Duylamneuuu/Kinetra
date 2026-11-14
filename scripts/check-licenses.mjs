@@ -101,8 +101,12 @@ for (const path of packageFiles) {
 const failures = [];
 const notices = [];
 
+// UTF-16 code-unit order: String.prototype.localeCompare follows the host ICU/locale, which would
+// make the report order (and therefore CI log diffs) differ between machines.
+const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 for (const dependency of [...packages.values()].sort((a, b) =>
-  `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`),
+  byCodeUnit(`${a.name}@${a.version}`, `${b.name}@${b.version}`),
 )) {
   if (!dependency.license) {
     failures.push({ ...dependency, reason: "missing-license" });

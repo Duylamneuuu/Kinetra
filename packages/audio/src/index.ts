@@ -101,15 +101,18 @@ export class AudioMixerModel {
   }
 
   setGain(id: string, gain: number): void {
-    const bus = this.#require(id);
+    // Validate the argument before the lookup so the error order matches setMuted: a bad value is
+    // reported as such even when the bus id is also unknown.
     assertValidGain(gain, `Audio bus "${id}"`);
+    const bus = this.#require(id);
     bus.gain = gain;
   }
 
   setMuted(id: string, muted: boolean): void {
-    const bus = this.#require(id);
-    // A truthy string such as "false" would otherwise silence the bus without any error.
+    // A truthy string such as "false" would otherwise silence the bus without any error. The
+    // argument is validated before the lookup so the error order is the same for every bus id.
     if (typeof muted !== "boolean") throw new TypeError(`Audio bus "${id}": muted must be a boolean, got ${String(muted)}`);
+    const bus = this.#require(id);
     bus.muted = muted;
   }
 
