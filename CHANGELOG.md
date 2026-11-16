@@ -6,6 +6,35 @@ What is actually *proven* (and at which level) is tracked in [`docs/STATUS.md`](
 
 Maintenance: when a PR merges, add one line under its commit date in the matching section, using the PR title (`ci`/`build`/`chore` go under Maintenance).
 
+## 2026-11-16
+
+### Fixed
+
+- **navigation-recast**: removeObstacle cập nhật bookkeeping trước khi flush để lỗi flush không để lại handle chết ([#616](https://github.com/Duylamneuuu/Kinetra/pull/616))
+- **audio,scripts**: setMuted/setGain validate trước khi tra bus; check-licenses sắp theo code unit (Refs #205) ([#612](https://github.com/Duylamneuuu/Kinetra/pull/612))
+
+## 2026-11-15
+
+### Added
+
+- **orb-run**: slice 48 - Orb Run as a player GameModule ([#615](https://github.com/Duylamneuuu/Kinetra/pull/615))
+
+### Fixed
+
+- **core**: GameModuleRegistry.load bọc lỗi cho mọi bên chờ chung và không xoá nhầm cache của loader mới ([#613](https://github.com/Duylamneuuu/Kinetra/pull/613))
+
+### Tests
+
+- **renderer-three**: thất bại của resolver sau supersede/dispose không làm hỏng trạng thái mới (Refs #187) ([#610](https://github.com/Duylamneuuu/Kinetra/pull/610))
+
+### Documentation
+
+- sửa hàng P7 trong STATUS.md (câu resolveColliderPlan nằm trong ô mô tả) Fixes #528 mục 1 ([#589](https://github.com/Duylamneuuu/Kinetra/pull/589))
+
+### Maintenance
+
+- **deps**: vite 7.3.8, zod 4.6.7 (đóng advisory); test(project-model): validation-scale bớt flake ([#611](https://github.com/Duylamneuuu/Kinetra/pull/611))
+
 ## 2026-10-20
 
 ### Added
