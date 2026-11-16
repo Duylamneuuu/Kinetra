@@ -37,6 +37,6 @@
     "@kinetra/verification": "workspace:*",
     "@types/three": "0.180.0",
     "electron": "41.10.7",
-    "vite": "^7.1.0"
+    "vite": "^7.3.8"
   }
 }

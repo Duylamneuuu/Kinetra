@@ -48,7 +48,7 @@ function chain(count: number): ProjectDocument {
 }
 
 /** Best of a few runs, so one GC pause or a busy CI machine does not decide the result. */
-function bestMs(document: ProjectDocument, runs = 3): number {
+function bestMs(document: ProjectDocument, runs = 5): number {
   let best = Infinity;
   for (let run = 0; run < runs; run += 1) {
     const started = performance.now();
@@ -59,18 +59,20 @@ function bestMs(document: ProjectDocument, runs = 3): number {
 }
 
 test("validateProject stays near-linear for a long parent chain", () => {
-  // Compare n against 4n instead of a wall-clock budget (which flaked on slow Windows runners):
-  // linear work grows ~4x, the quadratic ancestor walk this guards against grows ~16x.
+  // Compare n against 10n instead of a wall-clock budget (which flaked on slow Windows runners):
+  // linear work grows ~10x, the quadratic ancestor walk this guards against grows ~100x. The 40x
+  // threshold leaves a 4x margin for timer/JIT noise on the small run (a 4x-vs-16x split with a
+  // 10x threshold flaked at 10.0 on a loaded runner) and still sits 2.5x below the quadratic signal.
   const small = 5_000;
-  const large = small * 4;
+  const large = small * 10;
   const smallDoc = chain(small);
   const largeDoc = chain(large);
-  bestMs(smallDoc, 1); // warm up the JIT before measuring
+  bestMs(smallDoc, 2); // warm up the JIT before measuring
   const smallMs = Math.max(bestMs(smallDoc), 1);
   const largeMs = bestMs(largeDoc);
   assert.ok(
-    largeMs / smallMs < 10,
-    `validating ${large} chained entities took ${largeMs.toFixed(1)}ms vs ${smallMs.toFixed(1)}ms for ${small} (ratio ${(largeMs / smallMs).toFixed(1)}, linear ~4, quadratic ~16)`,
+    largeMs / smallMs < 40,
+    `validating ${large} chained entities took ${largeMs.toFixed(1)}ms vs ${smallMs.toFixed(1)}ms for ${small} (ratio ${(largeMs / smallMs).toFixed(1)}, linear ~10, quadratic ~100)`,
   );
 });
 

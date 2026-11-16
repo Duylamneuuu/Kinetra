@@ -118,7 +118,9 @@ export class GameModuleRegistry {
     const cached = this.#cache.get(gameId);
     if (cached) return cached;
 
-    const pending = Promise.resolve()
+    // Wrap inside the cached promise: every caller that shares it (a concurrent load, or one
+    // that arrives before the first caller's catch runs) sees the same GameModuleError.
+    const pending: Promise<GameModule> = Promise.resolve()
       .then(() => loader())
       .then((loaded) => {
         if (!isGameModule(loaded) || loaded.id !== gameId) {
@@ -129,19 +131,23 @@ export class GameModuleRegistry {
           );
         }
         return loaded;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof GameModuleError) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        throw new GameModuleError(
+          "game.loadFailed",
+          `Failed to load game module "${gameId}": ${message}`,
+          "Fix the loader. A failed load is not cached, so the next call tries again.",
+        );
       });
     this.#cache.set(gameId, pending);
     try {
       return await pending;
     } catch (error) {
-      this.#cache.delete(gameId);
-      if (error instanceof GameModuleError) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      throw new GameModuleError(
-        "game.loadFailed",
-        `Failed to load game module "${gameId}": ${message}`,
-        "Fix the loader. A failed load is not cached, so the next call tries again.",
-      );
+      // register() may have replaced the entry while this load was pending; only evict our own.
+      if (this.#cache.get(gameId) === pending) this.#cache.delete(gameId);
+      throw error;
     }
   }
 }
