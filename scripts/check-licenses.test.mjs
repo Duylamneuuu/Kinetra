@@ -182,6 +182,25 @@ test("gate fails with a per-package report for reference-only, unreviewed and mi
   }
 });
 
+test("gate lists failures in UTF-16 code-unit order, independent of the host ICU/locale collation", async () => {
+  const { root } = await makeSandbox([
+    { dir: "alpha@1.0.0", name: "alpha", version: "1.0.0", license: "Unlicense" },
+    { dir: "Zed@1.0.0", name: "Zed", version: "1.0.0", license: "Unlicense" },
+    { dir: "a-b@1.0.0", name: "a-b", version: "1.0.0", license: "Unlicense" },
+    { dir: "a_b@1.0.0", name: "a_b", version: "1.0.0", license: "Unlicense" },
+  ]);
+  try {
+    const result = runGate(root);
+    assert.equal(result.code, 1);
+    const listed = [...result.stderr.matchAll(/^- (\S+?)@1\.0\.0:/gm)].map((match) => match[1]);
+    // Uppercase sorts before lowercase and "-" (0x2d) before "_" (0x5f) before letters by code unit;
+    // localeCompare would put "alpha" ahead of "Zed".
+    assert.deepEqual(listed, ["Zed", "a-b", "a_b", "alpha"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("gate ignores nested package.json files that are not an installed package root", async () => {
   const { root, store } = await makeSandbox([{ dir: "host@1.0.0", name: "host", version: "1.0.0", license: "MIT" }]);
   try {
