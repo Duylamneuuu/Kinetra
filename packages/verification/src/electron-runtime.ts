@@ -97,6 +97,17 @@ export interface RuntimeEntityState {
       targets: Array<{ name: string; weight: number; meshes: string[]; overridden: boolean }>;
       overrides: Record<string, number>;
     };
+    ik?: {
+      chains: string[];
+      targets: Array<{
+        chainId: string;
+        target: [number, number, number];
+        reachable: boolean;
+        converged: boolean;
+        /** null over JSON until the first frame solved the target. */
+        error: number | null;
+      }>;
+    };
     instance?: {
       assetId: string;
       instanceId: string;
