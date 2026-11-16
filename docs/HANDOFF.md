@@ -389,6 +389,12 @@ The engine-owned runtime performance telemetry and acceptance budget gate slice 
 - **Proof**: each PR carries its own Node tests (see `CHANGELOG.md`); these are package-level tests, not new Electron or packaged proofs;
 - **Not done**: no new bridge/MCP command surface was added in this batch.
 
+### 31. Orb Run Game Module And Registry/Navigation/Audio Hardening (P3–P8, PRs #610–#616)
+
+- **Contract**: `createOrbRunGameModule(project)` (`examples/orb-run/src/game-module.ts`, #615) returns a `GameModule` with id `orb-run`; `GameModuleContext` carries only `sceneId`, so the module is built from the project and the player's static registry cannot load it yet; `GameModuleRegistry.load` now wraps a failure for every waiter sharing the load and no longer evicts a newer loader's cache entry (#613); `RecastNavMesh.removeObstacle` updates its bookkeeping before flushing, so a failed flush leaves no dead handle (#616); `AudioMixerModel.setMuted` / `setGain` validate their arguments before looking up the bus (#612); `scripts/check-licenses.mjs` sorts by code unit (#612); renderer-three keeps the new state when an older resolver fails after supersede/dispose (#610);
+- **Proof**: `examples/orb-run/test/game-module.test.ts` (5 tests), `packages/core/test/game-module.test.ts`, `packages/navigation-recast/test/obstacle-remove-flush-failure.test.ts`, `packages/audio/test/validation.test.ts`, `scripts/check-licenses.test.mjs`, `packages/renderer-three/test/async-race-failures.test.ts`; all are package-level Node tests, no new Electron or packaged proof;
+- **Not done**: Orb Run is not registered in the player (`--game orb-run` unknown) until `GameModuleContext` carries the project (engine request in `examples/orb-run/README.md`).
+
 ## Completion definition
 
 Kinetra is not "done" when:
