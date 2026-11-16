@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@modelcontextprotocol/core>zod': 4.6.7
+  '@modelcontextprotocol/server>zod': 4.6.7
+  '@electron/get>undici': 7.30.2
+
 importers:
 
   .:
@@ -80,8 +85,8 @@ importers:
         specifier: 0.180.0
         version: 0.180.0
       electron:
-        specifier: 41.10.7
-        version: 41.10.7
+        specifier: 42.11.18
+        version: 42.11.18
       vite:
         specifier: ^7.3.8
         version: 7.3.8(@types/node@24.19.1)
@@ -226,8 +231,8 @@ importers:
         specifier: workspace:*
         version: link:../../examples/reference-game
       electron:
-        specifier: 41.10.7
-        version: 41.10.7
+        specifier: 42.11.18
+        version: 42.11.18
 
   packages/navigation-recast:
     dependencies:
@@ -322,8 +327,8 @@ importers:
         specifier: 0.180.0
         version: 0.180.0
       electron:
-        specifier: 41.10.7
-        version: 41.10.7
+        specifier: 42.11.18
+        version: 42.11.18
       three:
         specifier: 0.180.0
         version: 0.180.0
@@ -957,8 +962,8 @@ packages:
   dir-compare@4.2.0:
     resolution: {integrity: sha512-2xMCmOoMrdQIPHdsTawECdNPwlVFB9zGcz3kuhmBO6U3oU+UQjsue0i8ayLKpgBcm+hcXPMVSGUN9d+pvJ6+VQ==}
 
-  electron@41.10.7:
-    resolution: {integrity: sha512-AqIiefddlf5i+HYCGatr8VlBuEbWJpad4/yloBFYcMB2r57j7xhW1ogiJ+BfA5kxQyfmSs5yjwy54Me+wJn1jw==}
+  electron@42.11.18:
+    resolution: {integrity: sha512-hbzodG06x/l7uq+oeyob5ugv6qZBmJRWC7Uto5QEE99xSHUARz6d+++Rz+79T/ssTYTQkONW4ciTTcJuAbXKIQ==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -1467,8 +1472,8 @@ packages:
   undici-types@7.24.6:
     resolution: {integrity: sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==}
 
-  undici@7.30.0:
-    resolution: {integrity: sha512-dkrQXeHSaoamnItlYbmzG0wFYrM0ZwDxCIg0A7aKjTyyhh9svRzCNFEzV+Vm05/yehjCzjDZ31KXfGEjYSztDQ==}
+  undici@7.30.2:
+    resolution: {integrity: sha512-mLyPQnHwUxaM/rideoK/+KL8DaAJLRl4aBCfmX444aCSLnIaomqPLtNRe2jdCYcsk5wZzXrDIQC8ZeYNRAYyIA==}
     engines: {node: '>=20.18.1'}
 
   universalify@0.1.2:
@@ -1545,9 +1550,6 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
-
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -1588,7 +1590,7 @@ snapshots:
       semver: 7.8.5
       sumchecker: 3.0.1
     optionalDependencies:
-      undici: 7.30.0
+      undici: 7.30.2
     transitivePeerDependencies:
       - supports-color
 
@@ -1747,12 +1749,12 @@ snapshots:
 
   '@modelcontextprotocol/core@2.3.1':
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@modelcontextprotocol/server@2.3.1':
     dependencies:
       '@modelcontextprotocol/core': 2.3.1
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
@@ -2054,7 +2056,7 @@ snapshots:
       minimatch: 3.1.5
       p-limit: 3.1.0
 
-  electron@41.10.7:
+  electron@42.11.18:
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0
@@ -2618,7 +2620,7 @@ snapshots:
 
   undici-types@7.24.6: {}
 
-  undici@7.30.0:
+  undici@7.30.2:
     optional: true
 
   universalify@0.1.2: {}
@@ -2658,7 +2660,5 @@ snapshots:
       fd-slicer: 1.1.0
 
   yocto-queue@0.1.0: {}
-
-  zod@4.6.5: {}
 
   zod@4.6.7: {}
