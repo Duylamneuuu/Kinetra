@@ -510,9 +510,12 @@ export class RecastNavMesh {
         "Bake the navmesh again if the tile cache is out of date.",
       );
     }
-    this.#flushTileCache();
+    // The cache has already dropped the obstacle, so the bookkeeping must follow before the flush:
+    // if the flush throws, a retry would otherwise hand the cache a stale handle and the obstacle
+    // would stay listed. The next successful flush rebuilds the tiles that are still pending.
     this.#handles.delete(id);
     this.#obstacles = this.#obstacles.filter((obstacle) => obstacle.id !== id);
+    this.#flushTileCache();
   }
 
   get disposed(): boolean {
