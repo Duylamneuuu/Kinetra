@@ -80,7 +80,7 @@ test("metadata.ik is a copy: editing it does not move the stored target", async 
   runtime.setIkTarget(hero, "spine", [0.4, 1.2, 0.2], { pole: [0, 1, 2] });
   runtime.updateAnimation(1 / 60);
   const ik = runtime.getModelMetadata(hero)!.ik!;
-  (ik.targets[0]!.target as number[])[0] = 99;
+  (ik.targets[0]!.target as unknown as number[])[0] = 99;
   assert.deepEqual(runtime.getIkController(hero)!.observe()[0]!.target, [0.4, 1.2, 0.2]);
   runtime.dispose();
 });
