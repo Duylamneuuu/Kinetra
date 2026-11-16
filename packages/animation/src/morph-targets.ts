@@ -73,8 +73,12 @@ function compareCodePoints(a: string, b: string): number {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
+  // Compare against the realm-independent shape of a plain-object prototype instead of this realm's
+  // Object.prototype, so objects that crossed a realm boundary (node:vm, iframe, structuredClone
+  // in a host) are still accepted. A class instance's prototype chain is never rooted this way.
+  const proto = Object.getPrototypeOf(value) as object | null;
+  if (proto === null || proto === Object.prototype) return true;
+  return Object.getPrototypeOf(proto) === null && Object.prototype.hasOwnProperty.call(proto, "hasOwnProperty");
 }
 
 export function buildMorphTargetCatalog(
