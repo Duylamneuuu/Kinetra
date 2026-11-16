@@ -18,7 +18,7 @@ Three.js is a **projection** here, never the source of truth: the authored `Proj
 | `playBlendSpace`, `setBlendSpaceInput`, `getBlendSpaceState`, `BlendSpacePlayback` | methods / class | 1D/2D locomotion blend spaces (see `packages/animation/README.md`). |
 | `configureRootMotion`, `sampleRootMotion`, `recordRootMotionResult` | methods | Root-motion extraction: the runtime reports the per-step delta; the caller applies it. |
 | `setMorphWeights`, `clearMorphWeights`, `MorphTargetController` | methods / class | Named morph-target weights with structured diagnostics for unknown names. |
-| `setIkChains`, `setIkTarget`, `clearIkTarget`, `IkController` | methods / class | Two-bone IK applied after the mixer update; poses are restored when a target is cleared and after a hot reimport. |
+| `setIkChains`, `setIkTarget`, `clearIkTarget`, `IkController` | methods / class | Two-bone IK applied after the mixer update; poses are restored when a target is cleared and after a hot reimport. `getModelMetadata(id).ik` lists the accepted chains and the last solver outcome (reachable/converged/error) per active target. |
 | `setAnimationEvents`, `onAnimationEvent`, `getAnimationEventLog`, `clearAnimationEventLog`, `getAnimationEventStats`, `getAnimationEventDiagnostics`, `AnimationEventDispatcher`, `MAX_ANIMATION_EVENT_LOG` | methods / class | Clip animation events (#90): plain-data events from `@kinetra/animation` are fired from real mixer playback, once per crossing and independent of step size. Reported with the entity id and a monotonic `sequence`; the log is bounded (256) and listener exceptions are isolated. |
 | `WebGL2Backend` (`RenderBackend`) | class | The only canvas-bound piece: `initialize(canvas)`, `render(scene, camera)`, `resize(w, h, dpr)`, `getStats()`, `dispose()`. |
 
@@ -160,7 +160,7 @@ runtime.dispose();
 | Template sharing, ref counts, independent skeletons | `multi-instance.test.ts` |
 | Hot reload / `reloadAsset` | `reload.test.ts`; end to end in the player via `real-hot-reimport` and `real-blender-hot-reimport` (verification package) |
 | Blend space, graph + blend space | `blend-space.test.ts`, `graph-blend-space.test.ts` |
-| Morph targets, IK | `morph.test.ts`, `ik.test.ts` |
+| Morph targets, IK | `morph.test.ts`, `ik.test.ts`, `ik-metadata.test.ts` |
 | Compression: a real Meshopt GLB decodes, and the capability table matches the asset pipeline's | `compressed-gltf.test.ts` (Draco and KTX2 decoding are not implemented) |
 | Animation events from mixer playback (loop, once, crossfade, restart, bounded log) | `animation-events.test.ts` |
 | Step guards (non-finite deltas), async load races | `step-guards.test.ts`, `async-races.test.ts` |

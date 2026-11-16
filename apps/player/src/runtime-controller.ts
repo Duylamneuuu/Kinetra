@@ -11,6 +11,7 @@ import {
   ThreeSceneRuntime,
   type AssetResolver,
   type BlendSpaceRuntimeResult,
+  type ModelIkState,
   type ModelMorphTargetsState,
   type MorphTargetDiagnostic,
 } from "@kinetra/renderer-three";
@@ -201,6 +202,7 @@ export interface PlayerRuntimeModelState {
   animation?: PlayerRuntimeModelAnimationState | undefined;
   nodes?: PlayerRuntimeModelNodeState[] | undefined;
   morphTargets?: ModelMorphTargetsState | undefined;
+  ik?: ModelIkState | undefined;
   instance?: PlayerRuntimeModelInstanceMetadata | undefined;
   resourceSharing?: PlayerRuntimeModelResourceSharingMetadata | undefined;
   assetFingerprint?: string | undefined;
@@ -2233,6 +2235,7 @@ export class PlayerRuntimeController {
                 ...(modelMeta.animation ? { animation: modelMeta.animation } : {}),
                 ...(modelMeta.nodes ? { nodes: modelMeta.nodes } : {}),
                 ...(modelMeta.morphTargets ? { morphTargets: modelMeta.morphTargets } : {}),
+                ...(modelMeta.ik ? { ik: modelMeta.ik } : {}),
                 ...(modelMeta.instance ? { instance: modelMeta.instance } : {}),
                 ...(modelMeta.resourceSharing ? { resourceSharing: modelMeta.resourceSharing } : {}),
                 ...(modelMeta.assetFingerprint ? { assetFingerprint: modelMeta.assetFingerprint } : {}),

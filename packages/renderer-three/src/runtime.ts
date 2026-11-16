@@ -585,6 +585,7 @@ export class ThreeSceneRuntime {
       delete metadata.animation;
       delete metadata.nodes;
       delete metadata.morphTargets;
+      delete metadata.ik;
       delete metadata.bounds;
       delete metadata.instance;
       delete metadata.resourceSharing;
@@ -764,6 +765,7 @@ export class ThreeSceneRuntime {
           const dropped = oldIk.observe().map((o) => o.chainId);
           if (dropped.length > 0) droppedIkChains[entityId] = dropped;
         }
+        this.#refreshIkMetadata(entityId);
       }
 
       // 6. If entity had an animation graph before, re-initialize it cleanly with the new clips/mixer
@@ -899,6 +901,7 @@ export class ThreeSceneRuntime {
     this.#ikControllers.get(entityId)?.clearTarget();
     const controller = new IkController(scene, chains);
     this.#ikControllers.set(entityId, controller);
+    this.#refreshIkMetadata(entityId);
     return controller;
   }
 
@@ -913,11 +916,14 @@ export class ThreeSceneRuntime {
       };
       return { success: false, diagnostics: [d], error: `[${d.code}] ${d.message}` };
     }
-    return controller.setTarget(chainId, target, options);
+    const result = controller.setTarget(chainId, target, options);
+    if (result.success) this.#refreshIkMetadata(entityId);
+    return result;
   }
 
   clearIkTarget(entityId: string, chainId?: string): void {
     this.#ikControllers.get(entityId)?.clearTarget(chainId);
+    this.#refreshIkMetadata(entityId);
   }
 
   getIkController(entityId: string): IkController | undefined {
@@ -954,6 +960,15 @@ export class ThreeSceneRuntime {
       );
     }
     return { controller };
+  }
+
+  /** Publishes the entity's IK chains and per-target solver outcome (or drops the field when none). */
+  #refreshIkMetadata(entityId: string): void {
+    const metadata = this.#models.get(entityId);
+    if (!metadata) return;
+    const ik = this.#ikControllers.get(entityId);
+    if (ik) metadata.ik = { chains: [...ik.chainIds], targets: ik.observe() };
+    else delete metadata.ik;
   }
 
   #refreshMorphMetadata(entityId: string): void {
@@ -2296,7 +2311,11 @@ export class ThreeSceneRuntime {
       }
 
       // IK corrections sit on top of the animated pose.
-      this.#ikControllers.get(entityId)?.apply();
+      const ikController = this.#ikControllers.get(entityId);
+      if (ikController) {
+        ikController.apply();
+        this.#refreshIkMetadata(entityId);
+      }
 
       const morph = this.#morphControllers.get(entityId);
       if (morph) {
@@ -2329,6 +2348,7 @@ export class ThreeSceneRuntime {
     for (const [entityId, ik] of this.#ikControllers) {
       if (this.#animatorSessions.has(entityId)) continue;
       ik.apply();
+      this.#refreshIkMetadata(entityId);
       // Keep the observable node state in step with the IK pose, as the session loop does.
       const metadata = this.#models.get(entityId);
       const modelScene = this.#modelScenes.get(entityId);

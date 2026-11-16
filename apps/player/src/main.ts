@@ -11,6 +11,7 @@ import { PlayerRuntimeController } from "./runtime-controller.js";
 import { createFrameLoop } from "./frame-loop.js";
 import { GameShellController } from "./shell.js";
 import { parseNavObstacle, parseObstacleId } from "./nav-obstacle.js";
+import { ikTargetOptions } from "./ik-target-options.js";
 import { parseRuntimeStepParams } from "./step-params.js";
 import { parseRaycastParams, parseShapeCastParams } from "./physics-query.js";
 import "./style.css";
@@ -276,10 +277,7 @@ async function handleRuntimeCommand(request: {
 
     case "animation.ik.setTarget": {
       const entityId = requireString(params.entityId, "entityId");
-      const result = runtime.setIkTarget(entityId, params.chainId, params.target, {
-        ...(params.pole !== undefined ? { pole: params.pole as never } : {}),
-        ...(typeof params.weight === "number" ? { weight: params.weight } : {}),
-      });
+      const result = runtime.setIkTarget(entityId, params.chainId, params.target, ikTargetOptions(params));
       return { ...result, ...runtime.query() };
     }
 

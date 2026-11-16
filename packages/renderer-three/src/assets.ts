@@ -1,3 +1,5 @@
+import type { IkChainObservation } from "./ik.js";
+
 export interface AssetResolver {
   resolve(
     assetId: string,
@@ -96,6 +98,16 @@ export interface ModelMorphTargetsState {
   overrides: Record<string, number>;
 }
 
+export interface ModelIkState {
+  /** Ids of the chains the controller accepted (rejected chains are not listed). */
+  chains: string[];
+  /**
+   * One entry per chain with an active target, sorted by chain id. `error` is NaN (null over JSON)
+   * until the first frame solved the target.
+   */
+  targets: IkChainObservation[];
+}
+
 export interface ModelNodeState {
   name: string;
   position: [number, number, number];
@@ -128,6 +140,8 @@ export interface ModelMetadata {
   animation?: ModelAnimationState | undefined;
   nodes?: ModelNodeState[] | undefined;
   morphTargets?: ModelMorphTargetsState | undefined;
+  /** Registered IK chains and the last solver outcome per active target; absent when no chains are set. */
+  ik?: ModelIkState | undefined;
   instance?: ModelInstanceMetadata | undefined;
   resourceSharing?: ModelResourceSharingMetadata | undefined;
   assetFingerprint?: string | undefined;
