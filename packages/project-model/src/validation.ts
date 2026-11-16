@@ -32,8 +32,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
-  const prototype = Object.getPrototypeOf(value) as unknown;
-  return prototype === Object.prototype || prototype === null;
+  // Compare against the realm-independent shape of a plain-object prototype instead of this realm's
+  // Object.prototype, so objects that crossed a realm boundary (node:vm, iframe, structuredClone
+  // in a host) are still accepted. A class instance's prototype chain is never rooted this way.
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype === null || prototype === Object.prototype) return true;
+  return Object.getPrototypeOf(prototype) === null && Object.prototype.hasOwnProperty.call(prototype, "hasOwnProperty");
 }
 
 function isNonEmptyString(value: unknown): value is string {
